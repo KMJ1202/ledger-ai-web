@@ -134,10 +134,18 @@ function setUsage(u){usage=u;const el=document.getElementById("usage");
 async function refreshUsage(){try{setUsage(await api("/ledger-ai",{action:"usage"}))}catch{}}
 async function billingCheck(){
   try{const s=await api("/stripe-billing/status",{});
-    if(s.subscription_status==="canceled"){const a=document.getElementById("alertbar");
+    const a=document.getElementById("alertbar");
+    const subscribeLink=(label)=>{const b=document.createElement("u");b.style.cursor="pointer";b.textContent=label;
+      b.onclick=async()=>{try{const c=await api("/stripe-billing/checkout",{});location.href=c.url}catch(e){alert(e.message)}};a.appendChild(b)};
+    if(s.subscription_status==="canceled"){
       a.textContent="Subscription inactive — renew to keep your copilot."; a.style.display="block";
-      if(s.billing_ready){const b=document.createElement("u");b.style.cursor="pointer";b.textContent=" Renew now";
-        b.onclick=async()=>{try{const c=await api("/stripe-billing/checkout",{});location.href=c.url}catch(e){alert(e.message)}};a.appendChild(b)}}
+      if(s.billing_ready)subscribeLink(" Renew now");
+    } else if(s.subscription_status==="trialing"&&s.trial_days_left!==null){
+      a.style.background="rgba(251,191,36,.12)";a.style.color="var(--gold)";
+      a.textContent=s.trial_days_left>0?("\ud83c\udf81 Free trial \u2014 "+s.trial_days_left+" day"+(s.trial_days_left===1?"":"s")+" left."):"\u23f0 Your free trial has ended.";
+      if(s.billing_ready)subscribeLink(" Subscribe now");
+      a.style.display="block";
+    }
   }catch{}}
 
 async function send(){
@@ -195,7 +203,33 @@ function menu(){
   else if(pick.startsWith("out")){supa.auth.signOut().then(()=>location.reload())}
 }
 
-const {data:{session}} = await supa.auth.getSession();
-if(session) appView(); else loginView(false);
-supa.auth.onAuthStateChange((event,s)=>{if(event==="SIGNED_IN"&&s&&!document.getElementById("chat"))appView()});
+function setupView(){
+  root.innerHTML=`<div class="login"><div class="mark">L</div><h2>Welcome to Ledger AI</h2>
+  <p>Let's set up your business. Your 14-day free trial starts now \u2014 no card needed.</p>
+  <input id="bizname" placeholder="Business name" maxlength="160" autocomplete="organization">
+  <select id="bizcur" style="width:100%;background:var(--card);border:1px solid var(--line);border-radius:13px;color:var(--text);font-size:16px;padding:14px;margin-bottom:11px">
+    <option value="CAD">\ud83c\udde8\ud83c\udde6 Canadian dollars (CAD)</option><option value="USD">\ud83c\uddfa\ud83c\uddf8 US dollars (USD)</option></select>
+  <button class="btn" id="bizgo">Start my free trial \u2192</button></div>`;
+  document.getElementById("bizgo").onclick=async()=>{
+    const name=document.getElementById("bizname").value.trim();
+    if(name.length<2){alert("Enter your business name");return}
+    try{
+      const tz=Intl.DateTimeFormat().resolvedOptions().timeZone||"America/Edmonton";
+      await api("/workspace-profile",{action:"bootstrap",name,currency:document.getElementById("bizcur").value,timezone:tz});
+      appView();
+      sys("\ud83c\udf89 "+name+" is set up \u2014 your 14-day free trial is live. Ask me anything, and connect QuickBooks to bring your books in.");
+    }catch(e){alert(e.message)}
+  };
+}
+
+async function boot(){
+  const {data:{session}} = await supa.auth.getSession();
+  if(!session){loginView(false);return}
+  try{
+    const b=await api("/workspace-profile",{action:"bootstrap"});
+    if(b.needs_setup)setupView(); else appView();
+  }catch(e){appView()}
+}
+boot();
+supa.auth.onAuthStateChange((event,s)=>{if(event==="SIGNED_IN"&&s&&!document.getElementById("chat")&&!document.getElementById("bizname"))boot()});
 </script></body></html>
