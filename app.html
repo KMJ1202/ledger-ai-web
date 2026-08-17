@@ -162,6 +162,7 @@ async function send(){
     (d.invoice_drafts||[]).forEach(x=>draftCard(x,"INVOICE DRAFT","/quickbooks-invoice/confirm","/quickbooks-invoice/cancel"));
     (d.estimate_drafts||[]).forEach(x=>draftCard(x,"ESTIMATE DRAFT","/quickbooks-invoice/estimate-confirm","/quickbooks-invoice/estimate-cancel"));
     (d.booking_drafts||[]).forEach(bookingCard);
+    (d.reminder_drafts||[]).forEach(reminderCard);
   }catch(e){t.remove();bubble("msg ai",esc(e.message))}
   document.getElementById("send").disabled=false;
 }
@@ -180,6 +181,21 @@ function draftCard(d,label,confirmPath,cancelPath){
     }catch(e){ev.target.disabled=false;alert(e.message)}};
   card.querySelector(".cancel").onclick=async(ev)=>{ev.target.disabled=true;
     try{await api(cancelPath,{draft_id:d.draft_id});done("Draft cancelled")}catch(e){ev.target.disabled=false;alert(e.message)}};
+}
+
+function reminderCard(d){
+  const rows=(d.invoices||[]).map(i=>`<tr><td>#${esc(i.doc_number)} · due ${esc(i.due_date)}</td><td>${money(i.balance)}</td></tr>`).join("");
+  const card=bubble("card",`<h3>PAYMENT REMINDER</h3><div class="cust">${esc(d.customer)}</div>
+    <table>${rows}<tr><td class="total">Total due</td><td class="total">${money(d.total_due)}</td></tr></table>
+    <div class="emailrow">QuickBooks will email these invoices with a pay link to ${esc(d.customer_email)}</div>
+    <div class="row"><button class="btn cancel">Cancel</button><button class="btn confirm">Send reminder</button></div>`);
+  const done=(msg)=>{card.querySelector(".row").remove();const s=document.createElement("div");s.className="emailrow";s.textContent=msg;card.appendChild(s);scroll()};
+  card.querySelector(".confirm").onclick=async(ev)=>{ev.target.disabled=true;
+    try{const r=await api("/quickbooks-invoice/reminder-confirm",{draft_id:d.draft_id});
+      done("✅ Reminder emailed to "+(r.emailed_to||d.customer_email)+((r.failed||[]).length?" · couldn't send: "+r.failed.join(", "):""));
+    }catch(e){ev.target.disabled=false;alert(e.message)}};
+  card.querySelector(".cancel").onclick=async(ev)=>{ev.target.disabled=true;
+    try{await api("/quickbooks-invoice/reminder-cancel",{draft_id:d.draft_id});done("Cancelled — nothing was sent")}catch(e){ev.target.disabled=false;alert(e.message)}};
 }
 
 function bookingCard(d){
