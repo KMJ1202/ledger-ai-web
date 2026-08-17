@@ -21,6 +21,14 @@ h1{font-size:17px;margin:0;flex:1}
 #usage{font-size:11px;color:var(--dim);padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.04)}
 #banner{display:none;background:rgba(52,211,153,.1);color:var(--emerald);font-size:12px;padding:7px 16px}
 #alertbar{display:none;background:rgba(251,146,60,.12);color:var(--orange);font-size:12px;padding:7px 16px}
+#powerup .pu-back{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:40}
+#powerup .pu-sheet{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:430px;background:var(--card);border:1px solid var(--line);border-radius:22px 22px 0 0;padding:20px 18px calc(env(safe-area-inset-bottom) + 18px);z-index:41}
+#powerup h3{margin:0 0 4px}#powerup p{color:var(--dim);font-size:13px;margin:0 0 14px}
+.pu-card{display:flex;align-items:center;gap:12px;width:100%;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:15px;padding:13px;margin-bottom:9px;color:var(--text);font-size:15px;cursor:pointer}
+.pu-card.hot{border-color:var(--cyan);background:rgba(34,211,238,.08);box-shadow:0 0 18px rgba(34,211,238,.15)}
+.pu-emoji{font-size:22px}.pu-info{flex:1;text-align:left;display:flex;flex-direction:column}.pu-info small{color:var(--dim);font-size:12px}
+.pu-price{font-weight:800;color:var(--cyan);font-size:16px}
+.pu-close{width:100%;background:none;border:none;color:var(--dim);padding:10px;font-size:14px;cursor:pointer}
 main{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
 .msg{max-width:86%;padding:11px 14px;border-radius:16px;white-space:pre-wrap;word-wrap:break-word;line-height:1.45;font-size:15px}
 .me{align-self:flex-end;background:linear-gradient(135deg,#0e7490,#155e75);color:#fff;border-bottom-right-radius:5px}
@@ -130,8 +138,31 @@ function bubble(cls,html){const d=document.createElement("div");d.className=cls;
 function sys(t){bubble("sys",esc(t))}
 
 function setUsage(u){usage=u;const el=document.getElementById("usage");
-  if(el&&u&&u.budget_usd>0){el.textContent=Math.round(u.spent_usd/u.budget_usd*100)+"% AI used"}}
+  if(el&&u&&u.budget_usd>0){const pct=Math.round(u.spent_usd/u.budget_usd*100);
+    el.textContent=pct+"% AI used"+(pct>=80?" · ⚡ top up":"");
+    el.style.color=pct>=80?"var(--orange)":"";el.style.cursor="pointer";el.onclick=powerUpSheet}}
 async function refreshUsage(){try{setUsage(await api("/ledger-ai",{action:"usage"}))}catch{}}
+
+async function powerUpSheet(){
+  let pkgs=[{key:"boost",emoji:"⚡",label:"Boost",price:25,credit:25},{key:"power",emoji:"🔥",label:"Power Pack",price:50,credit:55},{key:"heavy",emoji:"🚀",label:"Heavy Hitter",price:100,credit:120}];
+  try{const s=await api("/stripe-billing/status",{});if(s.topup_packages&&s.topup_packages.length)pkgs=s.topup_packages}catch{}
+  const old=document.getElementById("powerup");if(old)old.remove();
+  const wrap=document.createElement("div");wrap.id="powerup";
+  wrap.innerHTML=`<div class="pu-back"></div><div class="pu-sheet"><h3>⚡ Power-Ups</h3>
+    <p>Add to this month's AI allowance — credited the second the payment clears.</p>
+    ${pkgs.map(p=>`<button class="pu-card${p.key==="power"?" hot":""}" data-k="${p.key}">
+      <span class="pu-emoji">${p.emoji}</span>
+      <span class="pu-info"><b>${p.label}</b><small>+$${p.credit} AI allowance${p.credit>p.price?` · $${p.credit-p.price} bonus`:""}</small></span>
+      <span class="pu-price">$${p.price}</span></button>`).join("")}
+    <button class="pu-close">Not now</button></div>`;
+  document.body.appendChild(wrap);
+  wrap.querySelector(".pu-back").onclick=wrap.querySelector(".pu-close").onclick=()=>wrap.remove();
+  wrap.querySelectorAll(".pu-card").forEach(b=>b.onclick=async()=>{
+    b.disabled=true;
+    try{const c=await api("/stripe-billing/topup",{package:b.dataset.k});location.href=c.url}
+    catch(e){alert(e.message);b.disabled=false}
+  });
+}
 async function billingCheck(){
   try{const s=await api("/stripe-billing/status",{});
     const a=document.getElementById("alertbar");
@@ -163,7 +194,7 @@ async function send(){
     (d.estimate_drafts||[]).forEach(x=>draftCard(x,"ESTIMATE DRAFT","/quickbooks-invoice/estimate-confirm","/quickbooks-invoice/estimate-cancel"));
     (d.booking_drafts||[]).forEach(bookingCard);
     (d.reminder_drafts||[]).forEach(reminderCard);
-  }catch(e){t.remove();bubble("msg ai",esc(e.message))}
+  }catch(e){t.remove();bubble("msg ai",esc(e.message));if(/allowance|power-up/i.test(e.message))powerUpSheet()}
   document.getElementById("send").disabled=false;
 }
 
