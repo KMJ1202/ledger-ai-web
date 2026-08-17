@@ -238,14 +238,32 @@ function setupView(){
   };
 }
 
+function joinView(businessName){
+  root.innerHTML=`<div class="login"><div class="mark">L</div><h2>You're invited ✨</h2>
+  <p><b>${businessName}</b> invited you to their Ledger AI team. Enter the 6-digit join code the owner gave you.</p>
+  <input id="joincode" placeholder="6-digit code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="text-align:center;letter-spacing:8px;font-size:22px;font-weight:800">
+  <button class="btn" id="joingo">Join the team →</button>
+  <p style="font-size:12px;color:var(--dim)">No code? Ask the owner — it's on their Team screen in the app.</p></div>`;
+  document.getElementById("joingo").onclick=async()=>{
+    const code=document.getElementById("joincode").value.replace(/\D/g,"");
+    if(code.length!==6){alert("The join code is 6 digits");return}
+    try{
+      const r=await api("/team",{action:"accept",code});
+      appView();
+      sys("🎉 Welcome aboard — you're now part of "+(r.businessName||businessName)+". Ask me anything about the business.");
+    }catch(e){alert(e.message)}
+  };
+}
+
 async function boot(){
   const {data:{session}} = await supa.auth.getSession();
   if(!session){loginView(false);return}
   try{
     const b=await api("/workspace-profile",{action:"bootstrap"});
-    if(b.needs_setup)setupView(); else appView();
+    if(b.invite_pending)joinView(b.invited_business||"A business");
+    else if(b.needs_setup)setupView(); else appView();
   }catch(e){appView()}
 }
 boot();
-supa.auth.onAuthStateChange((event,s)=>{if(event==="SIGNED_IN"&&s&&!document.getElementById("chat")&&!document.getElementById("bizname"))boot()});
+supa.auth.onAuthStateChange((event,s)=>{if(event==="SIGNED_IN"&&s&&!document.getElementById("chat")&&!document.getElementById("bizname")&&!document.getElementById("joincode"))boot()});
 </script></body></html>
