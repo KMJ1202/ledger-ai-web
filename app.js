@@ -87,13 +87,36 @@ function sheet(html, wire) {
 function closeSheet() { const w = $("sheetwrap"); if (w) w.remove(); }
 
 /* ---------------- app shell ---------------- */
+// Tab glyphs are inline SVG so the web bar reads like the iOS SF Symbols bar
+// instead of a row of emoji.
+const ICONS = {
+  ledger: `<svg viewBox="0 0 24 24"><path d="M12 2.6l1.9 4.4 4.4 1.9-4.4 1.9L12 15.2l-1.9-4.4L5.7 8.9l4.4-1.9L12 2.6zm6.4 11.1l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1zm-12 1.2l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7L4 18l1.7-.7.7-1.7z"/></svg>`,
+  finance: `<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm.9 15.4v1.2h-1.6v-1.2c-1.6-.2-2.8-1.1-3-2.7h1.8c.1.8.8 1.3 2 1.3 1.1 0 1.8-.5 1.8-1.2 0-.7-.5-1-2-1.4-2.1-.5-3.3-1.2-3.3-2.9 0-1.5 1.1-2.5 2.7-2.7V6.6h1.6v1.2c1.6.3 2.6 1.3 2.7 2.7h-1.8c-.1-.8-.7-1.3-1.7-1.3-1 0-1.7.5-1.7 1.1 0 .7.6 1 2 1.3 2.2.5 3.3 1.3 3.3 3 0 1.5-1.1 2.6-2.8 2.8z"/></svg>`,
+  calendar: `<svg viewBox="0 0 24 24"><path d="M7 2v2H5.5A2.5 2.5 0 003 6.5v13A2.5 2.5 0 005.5 22h13a2.5 2.5 0 002.5-2.5v-13A2.5 2.5 0 0018.5 4H17V2h-2v2H9V2H7zm12 8v9.2c0 .4-.3.8-.8.8H5.8a.8.8 0 01-.8-.8V10h14zM7.5 12a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zM7.5 16a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2z"/></svg>`,
+  receipts: `<svg viewBox="0 0 24 24"><path d="M9.4 3l-1.2 2H5.5A2.5 2.5 0 003 7.5v11A2.5 2.5 0 005.5 21h13a2.5 2.5 0 002.5-2.5v-11A2.5 2.5 0 0018.5 5h-2.7l-1.2-2H9.4zM12 8.2a4.8 4.8 0 110 9.6 4.8 4.8 0 010-9.6zm0 2a2.8 2.8 0 100 5.6 2.8 2.8 0 000-5.6z"/></svg>`,
+  customers: `<svg viewBox="0 0 24 24"><path d="M9 4.5a3.4 3.4 0 110 6.8 3.4 3.4 0 010-6.8zm7.6 1a2.7 2.7 0 110 5.4 2.7 2.7 0 010-5.4zM9 13c3.1 0 6 1.5 6 3.4V19H3v-2.6C3 14.5 5.9 13 9 13zm7.6.6c2.6 0 4.4 1.2 4.4 2.7V19h-4.6v-2.6c0-1.1-.5-2-1.3-2.7h1.5z"/></svg>`,
+};
 const TABS = [
-  { key: "home", icon: "🏠", label: "Ledger" },
-  { key: "finance", icon: "💵", label: "Finance" },
-  { key: "calendar", icon: "📅", label: "Calendar" },
-  { key: "receipts", icon: "🧾", label: "Receipts" },
-  { key: "customers", icon: "👥", label: "People" },
+  { key: "home", icon: ICONS.ledger, label: "Ledger" },
+  { key: "finance", icon: ICONS.finance, label: "Finance" },
+  { key: "calendar", icon: ICONS.calendar, label: "Calendar" },
+  { key: "receipts", icon: ICONS.receipts, label: "Receipts" },
+  { key: "customers", icon: ICONS.customers, label: "Customers" },
 ];
+
+// Every screen opens with the same two-line masthead as iOS:
+// a mono OS code strip, then a chrome-gradient screen title over a cyan rule.
+const MAG = `<svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 015.9 12.1l4.3 4.3-1.4 1.4-4.3-4.3A7.5 7.5 0 1110.5 3zm0 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>`;
+
+function osHead(code, title) {
+  return `<div>
+    <div class="oshead"><span class="dash"></span>
+      <span class="code">LEDGER OS // ${esc(code)}</span>
+      <span class="eq"><i></i><i></i><i></i></span></div>
+    <h2 class="ostitle">${esc(title)}</h2>
+    <div class="osrule"></div>
+  </div>`;
+}
 
 function appView() {
   const logo = S.profile?.business?.logo_url;
@@ -102,14 +125,14 @@ function appView() {
     <div class="mark">${logo ? `<img src="${esc(logo)}" alt="">` : "L"}</div>
     <h1 id="bizname">${esc(S.profile?.business?.name || "Ledger AI")}</h1>
     <span id="usage"></span>
-    <button class="pill" id="more" title="Menu">⋯</button>
+    <button class="avatar" id="more" title="Your business">&#9679;</button>
   </header>
   <div id="banner">💡 Advisor Mode — business guidance beyond your books, on your AI allowance</div>
   <div id="alertbar"></div>
   <main id="view"></main>
-  <button class="fab" id="fab" title="Ask Ledger">💬</button>
+  <button class="fab" id="fab" title="Ask Ledger">&#9679;</button>
   <nav id="tabs">${TABS.map((t) => `<button data-tab="${t.key}" class="${S.tab === t.key ? "on" : ""}">
-      <span class="ic">${t.icon}</span>${t.label}</button>`).join("")}</nav>
+      ${t.icon}${t.label}</button>`).join("")}</nav>
   <div id="chatwrap">
     <header>
       <button class="pill" id="chatback">‹ Back</button>
@@ -193,28 +216,54 @@ function wireConnect(scope) {
 }
 
 /* ---------------- HOME ---------------- */
-const ASK_CHIPS = ["Create an invoice", "Sales this week", "Create an estimate", "Last month & YOY"];
+const ASK_CHIPS = [
+  { icon: "&#128196;", label: "Create an invoice" },
+  { icon: "&#128200;", label: "Sales this week" },
+  { icon: "&#128221;", label: "Create an estimate" },
+  { icon: "&#128202;", label: "Last month & YOY" },
+];
 
 async function renderHome() {
-  const hour = new Date().getHours();
-  const greet = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const name = S.profile?.business?.name || "your business";
+  const logo = S.profile?.business?.logo_url;
   view().innerHTML = `
     <div class="sect">
-      <div>
-        <div class="eyebrow">${greet.toUpperCase()}</div>
-        <h2 style="margin:6px 0 0;font-size:24px;letter-spacing:-.5px">${esc(name)}</h2>
+      ${osHead("CORE.01 · COMMAND", "Ledger")}
+      <div class="brandcard">
+        <div class="tile">${logo ? `<img src="${esc(logo)}" alt="">` : "L"}</div>
+        <div class="who"><b>Ledger AI</b><span>Intelligence.<br>Accuracy. Control.</span></div>
+        <span class="status"><i></i>READY</span>
       </div>
+
+      <div class="console">
+        <div class="chead">
+          <b>Ask Ledger</b>
+          <span class="core">AI CORE // ONLINE</span>
+          <button class="livepill" id="livebtn"><span class="wv"><i></i><i></i><i></i><i></i></span>LIVE</button>
+        </div>
+        <div class="askfield">
+          <span class="sparkicon">&#10022;</span>
+          <input id="askbox" placeholder="Tell Ledger what to do…" autocomplete="off">
+          <button class="iconbtn" id="askcam" title="Capture a receipt">&#9673;</button>
+          <button class="gobtn" id="askgo" title="Send">&#8593;</button>
+        </div>
+        <div class="askgrid">${ASK_CHIPS.map((c, i) =>
+          `<button class="askchip c${i}" data-ask="${esc(c.label)}"><em>${c.icon}</em>${esc(c.label)}</button>`).join("")}</div>
+      </div>
+
       <div id="homekpis"><div class="skel"></div></div>
-      <div class="panel">
-        <h3>Ask Ledger</h3>
-        <p class="sub">Your books, your calendar, your inbox — in one question.</p>
-        <div class="chips" style="margin-top:12px">${ASK_CHIPS.map((c) => `<button class="chip" data-ask="${esc(c)}">${esc(c)}</button>`).join("")}</div>
-        <button class="btn ghost wide" style="margin-top:11px" id="openchat">Ask something else…</button>
-      </div>
       <div id="homemail"></div>
     </div>`;
-  $("openchat").onclick = () => openChat();
+  const box = $("askbox");
+  const fire = () => {
+    const q = box.value.trim();
+    openChat();
+    if (q) { $("box").value = q; box.value = ""; send(); }
+  };
+  $("askgo").onclick = fire;
+  box.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); fire(); } });
+  // Ledger Live (realtime voice) is an iPhone capability — say so rather than fake an orb.
+  $("livebtn").onclick = () => toast("Ledger Live voice runs in the iPhone app");
+  $("askcam").onclick = () => setTab("receipts");
   on("[data-ask]", "click", (e) => { openChat(); $("box").value = e.currentTarget.dataset.ask; send(); });
   loadHomeKpis();
   loadHomeMail();
@@ -225,12 +274,11 @@ async function loadHomeKpis() {
   try {
     if (!S.qbo) S.qbo = await get("/quickbooks-data");
     const k = S.qbo?.qbo?.kpis || {};
-    slot.innerHTML = `<div class="kpis">
+    slot.innerHTML = `<div class="eyebrow" style="margin-bottom:-3px">LIVE BOOKS</div><div class="kpis">
       <div class="kpi cyan"><small>Today's sales</small><b>${money0(k.today_sales)}</b></div>
-      <div class="kpi"><small>This month</small><b>${money0(k.month_sales)}</b></div>
-      <div class="kpi gold"><small>Outstanding</small><b>${money0(k.outstanding)}</b></div>
-      <div class="kpi"><small>Open invoices</small><b>${k.open_count ?? 0}</b></div>
-      <div class="kpi wide"><small>Year to date</small><b>${money0(k.ytd_sales)}</b></div>
+      <div class="kpi em"><small>This month</small><b>${money0(k.month_sales)}</b></div>
+      <div class="kpi gold"><small>Outstanding</small><b>${money0(k.outstanding)}</b><i>${k.open_count ?? 0} open invoice${(k.open_count ?? 0) === 1 ? "" : "s"}</i></div>
+      <div class="kpi purple"><small>Year to date</small><b>${money0(k.ytd_sales)}</b></div>
     </div>`;
   } catch (e) {
     slot.innerHTML = /not connected/i.test(e.message) ? connectPanel("qbo")
@@ -245,15 +293,17 @@ async function loadHomeMail() {
     const d = await get("/gmail/inbox?limit=10");
     S.emails = d.emails || [];
     if (!S.emails.length) { slot.innerHTML = ""; return; }
-    slot.innerHTML = `<div class="eyebrow">LATEST EMAILS</div><div class="list">${S.emails.map((m, i) => `
-      <button class="item" data-mail="${i}">
-        <div class="main">
-          <div class="ttl">${m.unread ? '<span style="color:var(--cyan)">● </span>' : ""}${esc(m.subject || "(no subject)")}</div>
-          <div class="sub">${esc(m.from_name || m.from || "")}</div>
-        </div>
-        <div class="amt" style="font-size:11px;color:var(--dim);font-weight:600">${esc(dateShort(m.date || m.received_at))}</div>
+    slot.innerHTML = `<div class="maillane">
+      <div class="mhead"><b>Latest Emails</b><button id="mailrefresh" title="Refresh">&#8635;</button></div>
+      ${S.emails.map((m, i) => `
+      <button class="mailrow" data-mail="${i}">
+        <span class="dot ${m.unread ? "" : "read"}"></span>
+        <span class="m"><b>${esc(m.from_name || m.from || "(unknown sender)")}</b>
+          <span>${esc(m.subject || "(no subject)")}</span></span>
+        <span class="chev">&#8250;</span>
       </button>`).join("")}</div>`;
     on("[data-mail]", "click", (e) => emailSheet(S.emails[Number(e.currentTarget.dataset.mail)]), slot);
+    slot.querySelector("#mailrefresh").onclick = (e) => { e.stopPropagation(); loadHomeMail(); };
   } catch { slot.innerHTML = ""; }
 }
 
@@ -277,10 +327,12 @@ async function emailSheet(m) {
 
 /* ---------------- FINANCE ---------------- */
 async function renderFinance() {
+  const profit = S.financeLane === "profit";
   view().innerHTML = `<div class="sect">
-    <div class="chips">
-      <button class="chip ${S.financeLane !== "profit" ? "on" : ""}" data-fl="invoices">Invoices</button>
-      <button class="chip ${S.financeLane === "profit" ? "on" : ""}" data-fl="profit">Profit &amp; Loss</button>
+    ${osHead(profit ? "FIN.02 · PROFIT & LOSS" : "FIN.02 · REVENUE GRID", profit ? "Profit" : "Finance")}
+    <div class="seg">
+      <button class="${profit ? "" : "on"}" data-fl="invoices">Invoices</button>
+      <button class="${profit ? "on" : ""}" data-fl="profit">Profit &amp; Loss</button>
     </div>
     <div id="finbody"><div class="skel"></div><div class="skel"></div></div>
   </div>`;
@@ -297,11 +349,13 @@ async function loadInvoices() {
     const filtered = all.filter((i) => S.invoiceFilter === "all" || i.status === S.invoiceFilter)
       .filter((i) => !S.invoiceSearch || (i.customer + " " + i.doc).toLowerCase().includes(S.invoiceSearch));
     slot.innerHTML = `
-      <div class="kpis">
-        <div class="kpi gold"><small>Outstanding</small><b>${money0(k.outstanding)}</b></div>
-        <div class="kpi"><small>Next invoice #</small><b>${esc(k.next_invoice ?? "—")}</b></div>
-      </div>
-      <input id="invsearch" placeholder="Search customer or invoice #" value="${esc(S.invoiceSearch || "")}">
+      ${salesIntel(all, k)}
+      <button class="cta" id="newinv">
+        <span class="ic">&#43;</span>
+        <span><b>Create Invoice</b><span>Draft, review, post to QuickBooks</span></span>
+      </button>
+      <div class="searchwrap"><span class="mag">${MAG}</span>
+        <input id="invsearch" placeholder="Search customer or invoice #" value="${esc(S.invoiceSearch || "")}"></div>
       <div class="chips">
         ${[["all", "All"], ["open", "Open"], ["paid", "Paid"]].map(([k2, l]) =>
           `<button class="chip ${S.invoiceFilter === k2 ? "on" : ""}" data-if="${k2}">${l}</button>`).join("")}
@@ -316,6 +370,7 @@ async function loadInvoices() {
             <small><span class="tag ${i.status}">${i.status}</span></small></div>
         </button>`).join("")}</div>`
         : `<div class="empty">No invoices match.</div>`}`;
+    $("newinv").onclick = () => { openChat(); $("box").value = "Create an invoice"; send(); };
     const search = $("invsearch");
     search.addEventListener("input", () => {
       S.invoiceSearch = search.value.trim().toLowerCase();
@@ -327,6 +382,46 @@ async function loadInvoices() {
     slot.innerHTML = /not connected/i.test(e.message) ? connectPanel("qbo") : `<div class="empty">${esc(e.message)}</div>`;
     wireConnect(slot);
   }
+}
+
+// SALES INTELLIGENCE panel. Every figure comes from the live QBO invoice rows:
+// the month total, a 14-day daily spark, the real average sale, and a straight
+// elapsed-days run rate. No modelled or back-filled numbers.
+function salesIntel(invoices, k) {
+  const now = new Date();
+  const ym = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+  const month = invoices.filter((i) => (i.date || "").slice(0, 7) === ym);
+  const monthTotal = k.month_sales ?? month.reduce((t, i) => t + (Number(i.total) || 0), 0);
+  const avg = month.length ? monthTotal / month.length : 0;
+  const elapsed = now.getDate();
+  const inMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const forecast = elapsed ? monthTotal / elapsed * inMonth : 0;
+
+  const days = [];
+  for (let d = 13; d >= 0; d--) {
+    const t = new Date(now); t.setDate(now.getDate() - d);
+    const key = t.toISOString().slice(0, 10);
+    days.push({ key, total: invoices.filter((i) => (i.date || "").slice(0, 10) === key)
+      .reduce((sum, i) => sum + (Number(i.total) || 0), 0) });
+  }
+  const max = Math.max(1, ...days.map((d) => d.total));
+
+  return `<div class="intel">
+    <div class="ihead"><b>&#9651; Sales Intelligence</b><span class="live"><i></i>LIVE QBO</span></div>
+    <p class="cap">This month</p>
+    <div class="big">${money(monthTotal)}</div>
+    <div class="sub">Live sales performance</div>
+    <div class="spark">${days.map((d, i) =>
+      `<div class="b ${i === days.length - 1 ? "hot" : ""}" style="height:${Math.max(Math.round(d.total / max * 100), 3)}%" title="${d.key}: ${money0(d.total)}"></div>`).join("")}</div>
+    <div class="sparkends"><span>14 days ago</span><span>Today</span></div>
+    <div class="kpis" style="margin-top:15px">
+      <div class="kpi cyan"><small>Avg sale</small><b>${money(avg)}</b><i>${month.length} invoice${month.length === 1 ? "" : "s"} this month</i></div>
+      <div class="kpi orange"><small>Forecast</small><b>${money(forecast)}</b><i>month-end run rate</i></div>
+      <div class="kpi gold"><small>Outstanding</small><b>${money0(k.outstanding)}</b><i>${k.open_count ?? 0} open</i></div>
+      <div class="kpi purple"><small>Next invoice #</small><b>${esc(k.next_invoice ?? "—")}</b></div>
+    </div>
+    <p class="infoline"><em>&#9432;</em>Run rate projects this month's pace across the full month — it is not a promise.</p>
+  </div>`;
 }
 
 function invoiceSheet(inv) {
@@ -396,26 +491,43 @@ function drawProfit() {
   const today = p.today || {};
   const unposted = (S.receipts || []).filter((r) => !r.qbo_purchase_id && r.category !== "Personal").length;
   const max = Math.max(1, ...series.map((s) => Math.abs(s.net_profit || 0)));
+  const income = today.total_income || 0, costs = today.total_expenses || 0;
+  const margin = income > 0 ? Math.round((today.net_profit || 0) / income * 100) : 0;
+  const total = series.reduce((t, x) => t + (x.net_profit || 0), 0);
+  const best = series.reduce((b, x) => (!b || (x.net_profit || 0) > (b.net_profit || 0) ? x : b), null);
   slot.innerHTML = `
-    ${unposted ? `<div class="panel" style="border-color:rgba(251,146,60,.4)"><p class="sub" style="color:var(--orange)">
-      ${unposted} receipt${unposted === 1 ? " isn't" : "s aren't"} posted — they won't count in tonight's sweep.</p></div>` : ""}
     <div class="hero">
-      <div class="eyebrow">TODAY'S PROFIT</div>
-      <div class="big" style="color:${(today.net_profit || 0) >= 0 ? "var(--emerald)" : "var(--red)"}">${money0(today.net_profit)}</div>
-      <div class="note" style="margin-top:6px">Income ${money0(today.total_income)} · Costs ${money0(today.total_expenses)}</div>
+      <div class="headline"><span class="eyebrow">Today's profit</span>
+        <span class="when">${esc(today.date || new Date().toISOString().slice(0, 10))}</span></div>
+      <div class="big" style="color:${(today.net_profit || 0) >= 0 ? "var(--emerald)" : "var(--red)"}">${money(today.net_profit)}</div>
+      <div class="trio">
+        <div><small>Income</small><b style="color:var(--cyan)">${money0(income)}</b></div>
+        <div><small>Expenses</small><b style="color:var(--orange)">${money0(costs)}</b></div>
+        <div><small>Margin</small><b style="color:var(--magenta)">${margin}%</b></div>
+      </div>
     </div>
-    <div class="chips">${[["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"]].map(([k, l]) =>
-      `<button class="chip ${S.profitRange === k ? "on" : ""}" data-pr="${k}">${l}</button>`).join("")}</div>
+    ${unposted ? `<div class="warnstrip"><em>&#9888;</em><span>${unposted} receipt${unposted === 1 ? " isn't" : "s aren't"} posted to QuickBooks yet — ${unposted === 1 ? "it won't" : "they won't"} count in tonight's sweep.</span></div>` : ""}
     <div class="panel">
+      <div class="eyebrow" style="margin-bottom:12px">Profit trend</div>
+      <div class="seg">${[["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"]].map(([k, l]) =>
+        `<button class="${S.profitRange === k ? "on" : ""}" data-pr="${k}">${l}</button>`).join("")}</div>
       ${series.length ? `<div class="bars">${series.map((s) => {
         const h = Math.round(Math.abs(s.net_profit || 0) / max * 100);
         return `<div class="b ${(s.net_profit || 0) < 0 ? "neg" : ""}" style="height:${Math.max(h, 2)}%" title="${esc(s.label || s.date)}: ${money0(s.net_profit)}"></div>`;
       }).join("")}</div>
-      <div class="barlabels">${series.map((s) => `<span>${esc((s.label || s.date || "").slice(-5))}</span>`).join("")}</div>`
+      <div class="barlabels">${series.map((s, i) => `<span>${i % 2 === 0 ? esc((s.label || s.date || "").slice(-5)) : ""}</span>`).join("")}</div>
+      <p class="note" style="margin-top:11px">Total ${money(total)}${best ? " · best " + esc((best.label || best.date || "").slice(-5)) + ": " + money(best.net_profit) : ""}</p>`
       : `<div class="empty">No snapshots yet — run a sweep to fill the board.</div>`}
     </div>
-    <button class="btn ghost wide" id="sweep">Run sweep now</button>
-    <p class="note">${p.last_sweep_at ? "Last swept " + esc(new Date(p.last_sweep_at).toLocaleString()) : "Never swept"} · ${p.snapshot_count || 0} days on file</p>`;
+    <div class="panel">
+      <div style="display:flex;align-items:center;gap:9px">
+        <span class="eyebrow" style="color:var(--emerald)">Daily sweep</span>
+        <span class="note" style="margin-left:auto;font-family:var(--mono);font-size:10.5px;letter-spacing:1.1px">DAILY AT ${String(p.sweep_hour ?? 18).padStart(2, "0")}:30</span>
+      </div>
+      <p class="sub" style="margin-top:9px">Receipts and invoices land all day — the evening sweep pulls the day's Profit &amp; Loss from QuickBooks and locks it into the chart.</p>
+      <p class="note" style="margin-top:8px">${p.last_sweep_at ? "Last sweep " + esc(new Date(p.last_sweep_at).toLocaleString()) : "Never swept"} · ${p.snapshot_count || 0} days on file</p>
+      <button class="btn em wide" style="margin-top:13px" id="sweep">&#8635;&nbsp; Run sweep now</button>
+    </div>`;
   on("[data-pr]", "click", (e) => { S.profitRange = e.currentTarget.dataset.pr; drawProfit(); }, slot);
   $("sweep").onclick = async (e) => {
     e.currentTarget.disabled = true; e.currentTarget.textContent = "Sweeping…";
@@ -437,10 +549,31 @@ async function renderCalendar() {
       const g = groups.find((x) => x.key === key);
       (g ? g.items : (groups.push({ key, items: [] }), groups[groups.length - 1].items)).push(e);
     });
+    const now = new Date();
+    const sameDay = (iso) => (iso || "").slice(0, 10) === now.toISOString().slice(0, 10);
+    const within = (iso, days) => {
+      const t = new Date(iso); const end = new Date(now); end.setDate(now.getDate() + days);
+      return t >= now && t <= end;
+    };
+    const todayCount = up.filter((e) => sameDay(e.start)).length;
+    const weekCount = up.filter((e) => within(e.start, 7)).length;
+    const monthCount = up.filter((e) => (e.start || "").slice(0, 7) === now.toISOString().slice(0, 7)).length;
+    const next = up[0];
+    const mins = next ? Math.round((new Date(next.start) - now) / 60000) : 0;
+    const soon = mins <= 0 ? "now" : mins < 60 ? `in ${mins} min` : mins < 1440 ? `in ${Math.round(mins / 60)} h` : dayLabel(next.start);
     view().innerHTML = `<div class="sect">
-      <div class="hero"><div class="eyebrow">YOUR WEEK</div>
-        <div class="big">${up.length}</div>
-        <div class="note" style="margin-top:4px">appointment${up.length === 1 ? "" : "s"} ahead</div></div>
+      ${osHead("CAL.03 · SCHEDULE", "Calendar")}
+      <div class="calstats">
+        <div class="calstat"><i style="background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></i><b>${todayCount}</b><small>Today</small></div>
+        <div class="calstat"><i style="background:var(--emerald);box-shadow:0 0 8px var(--emerald)"></i><b>${weekCount}</b><small>This week</small></div>
+        <div class="calstat"><i style="background:var(--magenta);box-shadow:0 0 8px var(--magenta)"></i><b>${monthCount}</b><small>This month</small></div>
+      </div>
+      ${next ? `<div class="nextup">
+        <div class="ic">&#9203;</div>
+        <div class="m"><small>&#9679; Next up · ${esc(soon)}</small><b>${esc(next.title)}</b>
+          <span>${esc(timeLabel(next.start))}${next.location ? " · " + esc(next.location) : ""}</span></div>
+        <div class="go">&#8594;</div>
+      </div>` : ""}
       ${groups.length ? groups.map((g) => `<div><div class="eyebrow">${esc(g.key.toUpperCase())}</div>
         <div class="list" style="margin-top:8px">${g.items.map((e) => `<div class="item" style="cursor:default">
           <div class="main"><div class="ttl">${esc(e.title)}</div>
@@ -472,9 +605,18 @@ async function renderReceipts() {
     const d = await get("/gmail/receipts");
     S.receipts = d.receipts || [];
     const ready = S.receipts.filter((r) => !r.qbo_purchase_id && r.category && r.category !== "Personal" && r.total);
+    const queueTotal = ready.reduce((t, r) => t + (Number(r.total) || 0), 0);
     view().innerHTML = `<div class="sect">
+      ${osHead("EXP.04 · EXPENSE INTAKE", "Receipts")}
+      <div class="queue">
+        <div class="ic">&#128229;</div>
+        <div class="m"><small>QuickBooks batch queue</small>
+          <b>${ready.length} queued · ${money(queueTotal)}</b>
+          <span>Categorised receipts waiting to post as expenses.</span></div>
+        <div class="chev">&#8250;</div>
+      </div>
       <div class="panel">
-        <h3>📥 Email Receipt Radar</h3>
+        <h3>&#128231; Email Receipt Radar</h3>
         <p class="sub">Ledger reads supplier receipts out of your inbox and turns them into expenses. Scans daily at ${d.scan_hour ?? 18}:00.</p>
         <div class="rowbtns" style="margin-top:12px">
           <button class="btn ghost" id="scannow">Scan now</button>
@@ -583,11 +725,14 @@ function receiptSheet(r) {
 /* ---------------- CUSTOMERS · LEADS · TO-DO ---------------- */
 const LEAD_STATUSES = ["new", "contacted", "quoted", "won", "lost"];
 
+const LANE_CODE = { directory: "CRM.05 · RELATIONSHIPS", leads: "CRM.05 · PIPELINE", todos: "CRM.05 · MISSION CONTROL" };
+
 async function renderCustomers() {
   view().innerHTML = `<div class="sect">
-    <div class="chips">
+    ${osHead(LANE_CODE[S.lane] || LANE_CODE.directory, S.lane === "todos" ? "To-Do" : S.lane === "leads" ? "Leads" : "Customers")}
+    <div class="seg">
       ${[["directory", "Directory"], ["leads", "Leads"], ["todos", "To-Do"]].map(([k, l]) =>
-        `<button class="chip ${S.lane === k ? "on" : ""}" data-lane="${k}">${l}</button>`).join("")}
+        `<button class="${S.lane === k ? "on" : ""}" data-lane="${k}">${l}</button>`).join("")}
     </div>
     <div id="lanebody"><div class="skel"></div><div class="skel"></div></div>
   </div>`;
@@ -603,17 +748,34 @@ async function loadDirectory() {
     const all = (S.qbo?.qbo?.customers || []).filter((c) => c.active !== false);
     const q = (S.custSearch || "").toLowerCase();
     const list = all.filter((c) => !q || (c.name + " " + (c.email || "") + " " + (c.phone || "")).toLowerCase().includes(q));
-    slot.innerHTML = `<input id="csearch" placeholder="Search customers" value="${esc(S.custSearch || "")}">
+    slot.innerHTML = `<div class="searchwrap"><span class="mag">${MAG}</span>
+        <input id="csearch" placeholder="Search customers" value="${esc(S.custSearch || "")}"></div>
       <p class="note">${all.length} customer${all.length === 1 ? "" : "s"}</p>
-      ${list.length ? `<div class="list">${list.slice(0, 200).map((c) => `
-        <button class="item" data-cust="${esc(c.id)}">
-          <div class="main"><div class="ttl">${esc(c.name)}</div>
-            <div class="sub">${esc(c.email || c.phone || c.address || "")}</div></div>
-          ${c.balance > 0 ? `<div class="amt" style="color:var(--orange)">${money(c.balance)}<small>owing</small></div>` : ""}
-        </button>`).join("")}</div>` : `<div class="empty">No matches.</div>`}`;
+      ${list.length ? list.slice(0, 120).map((c) => {
+        const contact = [c.email, c.phone].filter(Boolean).join(" · ");
+        const initial = (c.name || "?").trim().charAt(0).toUpperCase();
+        return `<div class="ccard">
+          <div class="top">
+            <div class="ava">${esc(initial)}</div>
+            <div class="who"><b>${esc(c.name)}</b>
+              ${contact ? `<span>${esc(contact)}</span>` : ""}
+              <i>QBO #${esc(c.id)} · ${c.balance > 0 ? `<span style="color:var(--orange)">${money(c.balance)} owing</span>` : "Active"}</i></div>
+          </div>
+          <div class="acts">
+            <button class="actbtn" data-cust="${esc(c.id)}">&#128100;&nbsp; Full Profile</button>
+            <button class="actbtn p" data-review="${esc(c.id)}">&#11088;&nbsp; Ask for Review</button>
+          </div>
+        </div>`;
+      }).join("") : `<div class="empty">No matches.</div>`}`;
     const s = $("csearch");
     s.addEventListener("input", () => { S.custSearch = s.value; clearTimeout(S._c); S._c = setTimeout(loadDirectory, 220); });
     on("[data-cust]", "click", (e) => customerSheet(all.find((c) => c.id === e.currentTarget.dataset.cust)), slot);
+    on("[data-review]", "click", (e) => {
+      const c = all.find((x) => x.id === e.currentTarget.dataset.review);
+      openChat();
+      $("box").value = `Draft a short, friendly review request email to ${c.name}${c.email ? " at " + c.email : ""}.`;
+      send();
+    }, slot);
   } catch (e) {
     slot.innerHTML = /not connected/i.test(e.message) ? connectPanel("qbo") : `<div class="empty">${esc(e.message)}</div>`;
     wireConnect(slot);
@@ -810,8 +972,8 @@ function toggleAdvisor() {
 
 function setUsage(u) {
   S.usage = u; const el = $("usage");
-  if (el && u && u.budget_usd > 0) {
-    const pct = Math.round(u.spent_usd / u.budget_usd * 100);
+  if (el && u && u.budget_usd > 0 && Number.isFinite(Number(u.spent_usd))) {
+    const pct = Math.round(Number(u.spent_usd) / u.budget_usd * 100);
     el.textContent = pct + "% AI";
     el.style.color = pct >= 80 ? "var(--orange)" : "";
     el.style.cursor = "pointer"; el.onclick = powerUpSheet;
