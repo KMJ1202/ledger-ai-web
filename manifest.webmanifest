@@ -1,1 +1,26 @@
-{"name":"Ledger AI","short_name":"Ledger AI","description":"Your business copilot — live books, calendar, and an AI that knows your numbers.","start_url":"./app.html","scope":".","display":"standalone","background_color":"#0b0f14","theme_color":"#0b0f14","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}
+{
+  "id": "/ledger-ai-web/app",
+  "name": "Ledger AI",
+  "short_name": "Ledger AI",
+  "description": "Your business copilot — live books, calendar, and an AI that knows your numbers.",
+  "start_url": "./app.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#0b0f14",
+  "theme_color": "#0b0f14",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    {"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}
+  ],
+  "shortcuts": [
+    {"name": "Ask Ledger", "short_name": "Ask", "url": "./app.html?go=chat", "icons": [{"src": "icon-192.png", "sizes": "192x192"}]},
+    {"name": "Create an invoice", "short_name": "Invoice", "url": "./app.html?ask=Create%20an%20invoice"},
+    {"name": "Today's numbers", "short_name": "Numbers", "url": "./app.html?go=home"}
+  ]
+}
