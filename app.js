@@ -677,7 +677,9 @@ function itemPicker(items, onPick) {
   paint();
 }
 
-function invoiceSheet(inv) {
+// `back` is optional: when the invoice was opened from inside another sheet
+// (a customer profile), render a return button so Close isn't the only exit.
+function invoiceSheet(inv, back) {
   if (!inv) return;
   const lines = (inv.lines || []).map((l) => `<div class="kv"><span>${esc(l.description || l.item || "Item")}${l.quantity ? " × " + l.quantity : ""}</span><span>${money(l.amount)}</span></div>`).join("");
   sheet(`<h2>#${esc(inv.doc)} · ${esc(inv.customer)}</h2>
@@ -692,7 +694,9 @@ function invoiceSheet(inv) {
       <button class="btn ghost" id="sharepdf">Share PDF</button>
       <button class="btn primary" id="printpdf">Print</button>
     </div>
+    ${back ? `<button class="btn ghost" id="invback" style="margin-top:9px;width:100%">&#8592; Back to ${esc(inv.customer || "customer")}</button>` : ""}
     <div class="note" id="pdfnote" style="margin-top:9px"></div>`, (sh) => {
+    if (back) sh.querySelector("#invback").onclick = () => back();
     sh.querySelector("#printpdf").onclick = () => withPdf(inv, sh, (url) => {
       const frame = document.createElement("iframe");
       frame.style.cssText = "position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0";
@@ -1578,23 +1582,36 @@ function newCustomerSheet() {
 
 function customerSheet(c) {
   if (!c) return;
-  const invoices = (S.qbo?.qbo?.invoices || []).filter((i) => i.customer_id === c.id).slice(0, 8);
+  // iOS CustomerDetailView shows the complete invoice history, newest first, and
+  // every row pushes into the invoice. The web list was capped at 8, unsorted,
+  // and inert — same data, no way in. Match iOS.
+  const invoices = (S.qbo?.qbo?.invoices || []).filter((i) => i.customer_id === c.id)
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   sheet(`<h2>${esc(c.name)}</h2>
     <p class="sh-sub">${esc(c.company || "")}</p>
     ${c.phone ? `<div class="kv"><span>Phone</span><span><a href="tel:${esc(c.phone)}">${esc(c.phone)}</a></span></div>` : ""}
     ${c.email ? `<div class="kv"><span>Email</span><span><a href="mailto:${esc(c.email)}">${esc(c.email)}</a></span></div>` : ""}
     ${c.address ? `<div class="kv"><span>Address</span><span>${esc(c.address)}</span></div>` : ""}
     <div class="kv tot"><span>Balance</span><span style="${c.balance > 0 ? "color:var(--orange)" : ""}">${money(c.balance)}</span></div>
-    ${invoices.length ? `<div class="eyebrow" style="margin-top:14px">RECENT INVOICES</div>
-      <div class="list" style="margin-top:8px">${invoices.map((i) => `<div class="item" style="cursor:default">
+    ${invoices.length ? `<div class="lanehead" style="margin-top:14px">
+        <span class="eyebrow" style="color:var(--dim)">INVOICE HISTORY</span>
+        <span class="note">${invoices.length}</span></div>
+      <div class="list" style="margin-top:8px">${invoices.map((i) => `<button class="item" data-cinv="${esc(i.id)}">
         <div class="main"><div class="ttl">#${esc(i.doc)}</div><div class="sub">${esc(dateShort(i.date))}</div></div>
-        <div class="amt">${money(i.total)}<small><span class="tag ${i.status}">${i.status}</span></small></div></div>`).join("")}</div>` : ""}
+        <div class="amt">${money(i.total)}<small><span class="tag ${i.status}">${i.status}</span></small></div></button>`).join("")}</div>`
+      : `<div class="note" style="margin-top:14px">No invoices in the loaded QuickBooks history.</div>`}
     <div class="rowbtns" style="margin-top:14px">
       <button class="btn ghost" id="cask">Ask Ledger</button>
       <button class="btn primary" id="cinv">New invoice</button>
     </div>`, (sh) => {
     sh.querySelector("#cask").onclick = () => { closeSheet(); openChat(); $("box").value = `Tell me about ${c.name} — what have they bought and do they owe anything?`; send(); };
     sh.querySelector("#cinv").onclick = () => { closeSheet(); openChat(); $("box").value = `Create an invoice for ${c.name}`; send(); };
+    // sheet() replaces whatever is open, so hand invoiceSheet a way back to this
+    // customer — otherwise Close drops the user out of the profile entirely.
+    on("[data-cinv]", "click", (e) => {
+      const inv = invoices.find((x) => String(x.id) === e.currentTarget.dataset.cinv);
+      if (inv) invoiceSheet(inv, () => customerSheet(c));
+    }, sh);
   });
 }
 
