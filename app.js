@@ -4,7 +4,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPA_URL = "https://lbzkyyehmgudlxmfpzzh.supabase.co";
-const supa = createClient(SUPA_URL, "sb_publishable_I0BQ5Rkc2GCxKOlobtzCNg_GxAtNuPu");
+const SUPA_KEY = "sb_publishable_I0BQ5Rkc2GCxKOlobtzCNg_GxAtNuPu";
+const supa = createClient(SUPA_URL, SUPA_KEY);
 const FN = SUPA_URL + "/functions/v1";
 const root = document.getElementById("root");
 
@@ -217,10 +218,10 @@ function wireConnect(scope) {
 
 /* ---------------- HOME ---------------- */
 const ASK_CHIPS = [
-  { icon: "&#128196;", label: "Create an invoice" },
-  { icon: "&#128200;", label: "Sales this week" },
-  { icon: "&#128221;", label: "Create an estimate" },
-  { icon: "&#128202;", label: "Last month & YOY" },
+  { icon: "&#128196;", label: "Create an invoice", prompt: "Create me an invoice — let's draft one now." },
+  { icon: "&#128200;", label: "Sales this week", prompt: "Report my sales for this week." },
+  { icon: "&#128221;", label: "Create an estimate", prompt: "Create me an estimate — let's draft one." },
+  { icon: "&#128202;", label: "Last month & YOY", prompt: "Report my sales for last month, and compare them year over year." },
 ];
 
 async function renderHome() {
@@ -247,11 +248,14 @@ async function renderHome() {
           <button class="gobtn" id="askgo" title="Send">&#8593;</button>
         </div>
         <div class="askgrid">${ASK_CHIPS.map((c, i) =>
-          `<button class="askchip c${i}" data-ask="${esc(c.label)}"><em>${c.icon}</em>${esc(c.label)}</button>`).join("")}</div>
+          `<button class="askchip c${i}" data-ask="${esc(c.prompt)}"><em>${c.icon}</em>${esc(c.label)}</button>`).join("")}</div>
       </div>
 
       <div id="homekpis"><div class="skel"></div></div>
       <div id="homemail"></div>
+      <div id="homenext"></div>
+      <div id="homeattn"></div>
+      <div class="safety"><span class="ic">&#128737;</span>Ledger is available from every tab and still follows all confirmation and safety rules.</div>
     </div>`;
   const box = $("askbox");
   const fire = () => {
@@ -267,6 +271,8 @@ async function renderHome() {
   on("[data-ask]", "click", (e) => { openChat(); $("box").value = e.currentTarget.dataset.ask; send(); });
   loadHomeKpis();
   loadHomeMail();
+  loadHomeNext();
+  loadHomeAttention();
 }
 
 async function loadHomeKpis() {
@@ -285,6 +291,54 @@ async function loadHomeKpis() {
       : `<div class="panel"><p class="sub">Couldn't reach QuickBooks: ${esc(e.message)}</p></div>`;
     wireConnect(slot);
   }
+}
+
+// Mirrors the iOS "LEDGER'S NEXT MOVE" card: one prioritised suggestion driven by open AR.
+async function loadHomeNext() {
+  const slot = $("homenext"); if (!slot) return;
+  try {
+    if (!S.qbo) S.qbo = await get("/quickbooks-data");
+    const k = S.qbo?.qbo?.kpis || {};
+    const outstanding = Number(k.outstanding) || 0;
+    const openCount = Number(k.open_count) || 0;
+    const owed = outstanding > 0;
+    const headline = owed
+      ? `${money(outstanding)} is sitting in ${openCount} unpaid invoice${openCount === 1 ? "" : "s"}.`
+      : "Books are clean — dig into this month's momentum.";
+    const cta = owed ? "Ask Ledger who owes the most →" : "Ask Ledger for the month in review →";
+    const prompt = owed ? "Who owes me the most right now?" : "Give me this month in review.";
+    slot.innerHTML = `<button class="nextmove" id="nextmove">
+      <span class="ic">&#10022;</span>
+      <span class="m"><small>Ledger's next move</small><b>${esc(headline)}</b><span>${esc(cta)}</span></span>
+    </button>`;
+    $("nextmove").onclick = () => { openChat(); $("box").value = prompt; };
+  } catch { slot.innerHTML = ""; }
+}
+
+// Mirrors the iOS "NEEDS ATTENTION" queue: profit exceptions, receipt review, schedule.
+async function loadHomeAttention() {
+  const slot = $("homeattn"); if (!slot) return;
+  const k = S.qbo?.qbo?.kpis || {};
+  const costs = Number(k.missing_cost_count) || 0;
+  let receipts = 0, appts = 0;
+  try {
+    if (!S.receipts) { const d = await get("/gmail/receipts"); S.receipts = d.receipts || []; }
+    receipts = S.receipts.filter((r) => !r.qbo_purchase_id && r.category !== "Personal").length;
+  } catch { /* Gmail not connected — the row still reads 0, exactly like iOS. */ }
+  try {
+    if (!S.cal) S.cal = await get("/google-calendar/events");
+    appts = (S.cal?.calendar?.upcoming || []).length;
+  } catch { /* Calendar not connected. */ }
+  const row = (tint, tab, icon, title, detail) => `<button class="attnrow ${tint}" data-attn="${tab}">
+      <span class="ic">${icon}</span>
+      <span class="m"><b>${esc(title)}</b><span>${esc(detail)}</span></span>
+      <span class="chev">&#8250;</span></button>`;
+  slot.innerHTML = `<div class="attn"><div class="eyebrow">Needs attention</div>
+    ${row("orange", "finance", "&#128269;", "Profit exceptions", `${costs} cost${costs === 1 ? "" : "s"} require verification`)}
+    ${row("cyan", "receipts", "&#128247;", "Receipt review", `${receipts} receipt draft${receipts === 1 ? "" : "s"} waiting`)}
+    ${row("purple", "calendar", "&#128197;", "Schedule", `${appts} upcoming appointment${appts === 1 ? "" : "s"}`)}
+  </div>`;
+  on("[data-attn]", "click", (e) => setTab(e.currentTarget.dataset.attn), slot);
 }
 
 async function loadHomeMail() {
@@ -347,7 +401,10 @@ async function loadInvoices() {
     const all = S.qbo?.qbo?.invoices || [];
     const k = S.qbo?.qbo?.kpis || {};
     const filtered = all.filter((i) => S.invoiceFilter === "all" || i.status === S.invoiceFilter)
-      .filter((i) => !S.invoiceSearch || (i.customer + " " + i.doc).toLowerCase().includes(S.invoiceSearch));
+      .filter((i) => !S.invoiceSearch || (i.customer + " " + i.doc + " " + (i.email || "")).toLowerCase().includes(S.invoiceSearch));
+    // iOS searches customers alongside invoices and lists the matches above them.
+    const custHits = !S.invoiceSearch ? [] : (S.qbo?.qbo?.customers || []).filter((c) =>
+      (c.name + " " + (c.email || "") + " " + (c.phone || "") + " " + c.id).toLowerCase().includes(S.invoiceSearch)).slice(0, 20);
     slot.innerHTML = `
       ${salesIntel(all, k)}
       <button class="cta" id="newinv">
@@ -355,11 +412,32 @@ async function loadInvoices() {
         <span><b>Create Invoice</b><span>Draft, review, post to QuickBooks</span></span>
       </button>
       <div class="searchwrap"><span class="mag">${MAG}</span>
-        <input id="invsearch" placeholder="Search customer or invoice #" value="${esc(S.invoiceSearch || "")}"></div>
+        <input id="invsearch" placeholder="Customer, invoice, email or phone" value="${esc(S.invoiceSearch || "")}"></div>
       <div class="chips">
         ${[["all", "All"], ["open", "Open"], ["paid", "Paid"]].map(([k2, l]) =>
           `<button class="chip ${S.invoiceFilter === k2 ? "on" : ""}" data-if="${k2}">${l}</button>`).join("")}
       </div>
+      <div class="lanehead"><span class="eyebrow">${S.invoiceSearch ? "Search results" : "Operations"}</span>
+        ${S.invoiceSearch ? `<button class="linkbtn" id="clrsearch">Clear</button>` : ""}</div>
+      ${!S.invoiceSearch ? `<div class="opsgrid">
+        <button class="opcard purple" data-op="profit"><span class="ic">&#9650;</span><b>Profit &amp; Loss</b>
+          <span>Daily sweep &amp; trends</span><em>OPEN &#8599;</em></button>
+        <button class="opcard em" data-op="receipts"><span class="ic">&#128229;</span><b>Receipt Queue</b>
+          <span>Review &amp; batch</span><em>OPEN &#8599;</em></button>
+      </div>` : ""}
+      ${custHits.length ? `<div class="lanehead"><span class="eyebrow" style="color:var(--dim)">Customers</span>
+        <span class="note">${custHits.length} shown</span></div>
+        <div class="list">${custHits.map((c) => `
+        <button class="item" data-fcust="${esc(c.id)}">
+          <div class="main"><div class="ttl">${esc(c.name)}</div>
+            <div class="sub">${esc([c.email, c.phone].filter(Boolean).join(" · ") || ("QBO #" + c.id))}</div></div>
+          <div class="amt">${Number(c.balance) > 0 ? `<span style="color:var(--orange)">${money(c.balance)}</span>` : ""}
+            <small>QBO #${esc(c.id)}</small></div>
+        </button>`).join("")}</div>` : ""}
+      ${S.invoiceSearch && !custHits.length && !filtered.length
+        ? `<div class="empty">No Finance matches.<br>Try a customer, invoice number, email or phone.</div>` : ""}
+      <div class="lanehead"><span class="eyebrow" style="color:var(--dim)">${S.invoiceSearch ? "Matching invoices" : "Recent invoices"}</span>
+        <span class="note">${S.invoiceSearch ? filtered.length : Math.min(filtered.length, 120)}</span></div>
       ${filtered.length ? `<div class="list">${filtered.slice(0, 120).map((i, idx) => `
         <button class="item" data-inv="${esc(i.id)}">
           <div class="main">
@@ -369,8 +447,17 @@ async function loadInvoices() {
           <div class="amt">${money(i.total)}
             <small><span class="tag ${i.status}">${i.status}</span></small></div>
         </button>`).join("")}</div>`
-        : `<div class="empty">No invoices match.</div>`}`;
-    $("newinv").onclick = () => { openChat(); $("box").value = "Create an invoice"; send(); };
+        : (S.invoiceSearch ? "" : `<div class="empty">No invoices yet.</div>`)}`;
+    $("newinv").onclick = () => composerSheet();
+    if ($("clrsearch")) $("clrsearch").onclick = () => { S.invoiceSearch = ""; loadInvoices(); };
+    on("[data-op]", "click", (e) => {
+      const op = e.currentTarget.dataset.op;
+      if (op === "profit") { S.financeLane = "profit"; renderFinance(); } else setTab("receipts");
+    }, slot);
+    on("[data-fcust]", "click", (e) => {
+      const c = (S.qbo?.qbo?.customers || []).find((x) => x.id === e.currentTarget.dataset.fcust);
+      if (c) customerSheet(c);
+    }, slot);
     const search = $("invsearch");
     search.addEventListener("input", () => {
       S.invoiceSearch = search.value.trim().toLowerCase();
@@ -415,13 +502,179 @@ function salesIntel(invoices, k) {
       `<div class="b ${i === days.length - 1 ? "hot" : ""}" style="height:${Math.max(Math.round(d.total / max * 100), 3)}%" title="${d.key}: ${money0(d.total)}"></div>`).join("")}</div>
     <div class="sparkends"><span>14 days ago</span><span>Today</span></div>
     <div class="kpis" style="margin-top:15px">
+      <div class="kpi cyan"><small>Today</small><b>${money0(k.today_sales)}</b></div>
+      <div class="kpi em"><small>Year to date</small><b>${money0(k.ytd_sales)}</b></div>
+      <div class="kpi gold"><small>Outstanding</small><b>${money0(k.outstanding)}</b><i>${k.open_count ?? 0} open</i></div>
+      <div class="kpi purple"><small>Open invoices</small><b>${k.open_count ?? 0}</b><i>Next #${esc(k.next_invoice ?? "—")}</i></div>
       <div class="kpi cyan"><small>Avg sale</small><b>${money(avg)}</b><i>${month.length} invoice${month.length === 1 ? "" : "s"} this month</i></div>
       <div class="kpi orange"><small>Forecast</small><b>${money(forecast)}</b><i>month-end run rate</i></div>
-      <div class="kpi gold"><small>Outstanding</small><b>${money0(k.outstanding)}</b><i>${k.open_count ?? 0} open</i></div>
-      <div class="kpi purple"><small>Next invoice #</small><b>${esc(k.next_invoice ?? "—")}</b></div>
     </div>
     <p class="infoline"><em>&#9432;</em>Run rate projects this month's pace across the full month — it is not a promise.</p>
   </div>`;
+}
+
+// Manual invoice composer — the web twin of iOS InvoiceComposerSheet.
+// Same single write path as chat: build → /quickbooks-invoice/draft → Confirm → /confirm.
+// The AI has no posting tool here either; the Confirm tap is the only thing that posts.
+async function composerSheet() {
+  const C = { customer: null, lines: [], memo: "", items: [], itemsError: "", query: "", draft: null, busy: false, error: "" };
+  const wrap = sheet(`<h2>New Invoice</h2><div id="cmpbody"><div class="skel"></div><div class="skel"></div></div>`);
+  const body = () => wrap.querySelector("#cmpbody");
+  const money2 = (n) => "$" + (Number(n) || 0).toFixed(2);
+  const subtotal = () => C.lines.reduce((t, l) => t + Math.round(l.quantity * l.rate * 100) / 100, 0);
+
+  try {
+    if (!S.qbo) S.qbo = await get("/quickbooks-data");
+    C.items = (await get("/quickbooks-invoice/items")).items || [];
+  } catch (e) { C.itemsError = e.message; }
+
+  function customerBlock() {
+    if (C.customer) {
+      return `<div class="cmpsel"><span class="av">${esc(C.customer.name.slice(0, 1).toUpperCase())}</span>
+        <span class="m"><b>${esc(C.customer.name)}</b>${C.customer.email ? `<span>${esc(C.customer.email)}</span>` : ""}</span>
+        <button class="x" id="cmpclear">&#10005;</button></div>`;
+    }
+    const all = S.qbo?.qbo?.customers || [];
+    const hits = C.query
+      ? all.filter((c) => (c.name + " " + (c.email || "") + " " + (c.phone || "")).toLowerCase().includes(C.query.toLowerCase())).slice(0, 12)
+      : all.slice(0, 8);
+    return `<input id="cmpq" class="cmpinput" placeholder="Search customers…" value="${esc(C.query)}" autocomplete="off">
+      ${hits.map((c) => `<button class="cmprow" data-pick="${esc(c.id)}">
+        <span class="av sm">${esc(c.name.slice(0, 1).toUpperCase())}</span>
+        <span class="m"><b>${esc(c.name)}</b>${c.email ? `<span>${esc(c.email)}</span>` : ""}</span>
+        <span class="plus">+</span></button>`).join("") || `<p class="note">No customers match.</p>`}`;
+  }
+
+  function linesBlock() {
+    if (C.itemsError) return `<p class="note err">${esc(C.itemsError)}</p>`;
+    if (!C.items.length) return `<p class="note">Loading QuickBooks items…</p>`;
+    if (!C.lines.length) return `<p class="note">Add the products or services being billed.</p>`;
+    return C.lines.map((l, i) => `<div class="cmpline">
+      <div class="t"><b>${esc(l.name)}</b><span class="amt">${money2(l.quantity * l.rate)}</span>
+        <button class="del" data-del="${i}">&#128465;</button></div>
+      <div class="f"><label>Qty<input type="number" min="1" step="1" data-qty="${i}" value="${l.quantity}"></label>
+        <label>Rate<input type="number" min="0" step="0.01" data-rate="${i}" value="${l.rate}"></label></div>
+      <input class="cmpinput sm" data-desc="${i}" placeholder="Description shown to customer (optional)" value="${esc(l.detail || "")}">
+    </div>`).join("");
+  }
+
+  function draw() {
+    if (C.draft) { drawDraft(); return; }
+    const ready = C.customer && C.lines.length && !C.busy;
+    body().innerHTML = `
+      <div class="eyebrow">Customer</div>
+      <div class="cmpsect">${customerBlock()}</div>
+      <div class="lanehead"><span class="eyebrow">Line items</span>
+        <button class="linkbtn" id="cmpadd" ${C.items.length ? "" : "disabled"}>+ Add line</button></div>
+      <div class="cmpsect">${linesBlock()}</div>
+      <div class="eyebrow">Memo (customer-visible)</div>
+      <textarea id="cmpmemo" class="cmpinput" rows="2" placeholder="Optional note that prints on the invoice">${esc(C.memo)}</textarea>
+      <div class="cmptotal"><span>Subtotal (before tax)</span><b>${money2(subtotal())}</b></div>
+      ${C.error ? `<p class="note err">${esc(C.error)}</p>` : ""}
+      <button class="btn primary wide" id="cmpgo" ${ready ? "" : "disabled"}>${C.busy ? "Building draft…" : "Review Draft"}</button>`;
+    wire();
+  }
+
+  function drawDraft() {
+    const d = C.draft;
+    body().innerHTML = `<div class="card" style="margin:0">
+      <h3>INVOICE DRAFT</h3><div class="cust">${esc(d.customer)}</div>
+      <table>${(d.lines || []).map((l) => `<tr><td>${esc(l.description || l.item_name)} × ${l.quantity}</td><td>${money(l.amount)}</td></tr>`).join("")}
+        <tr><td class="total">Subtotal</td><td class="total">${money(d.subtotal)}</td></tr></table>
+      ${d.customer_email ? `<label class="emailrow"><input type="checkbox" id="cmpem" checked> Email to ${esc(d.customer_email)}</label>` : ""}
+      <label class="emailrow"><input type="checkbox" id="cmppr" ${localStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
+      <div class="row"><button class="btn cancel" id="cmpcancel">Cancel</button><button class="btn confirm" id="cmpconfirm">Confirm</button></div>
+      <div class="note" id="cmpnote" style="margin-top:9px"></div></div>`;
+    const note = body().querySelector("#cmpnote");
+    body().querySelector("#cmppr").onchange = (e) => localStorage.setItem("ledger.printAfterPosting", e.target.checked ? "1" : "0");
+    body().querySelector("#cmpconfirm").onclick = async (ev) => {
+      ev.currentTarget.disabled = true;
+      const sendEmail = body().querySelector("#cmpem")?.checked ?? false;
+      const wantPrint = body().querySelector("#cmppr")?.checked ?? false;
+      try {
+        const r = await api("/quickbooks-invoice/confirm", { draft_id: d.draft_id, send_email: sendEmail });
+        note.className = "note ok";
+        note.textContent = "✅ Posted" + (r.doc_number ? " — #" + r.doc_number : "") + (r.emailed ? " · emailed " + (r.emailed_to || "") : "");
+        body().querySelector(".row").remove();
+        if (wantPrint && (r.qbo_invoice_id || r.id)) printPdfById(r.qbo_invoice_id || r.id, r.doc_number, "invoice");
+        S.qbo = null;
+        setTimeout(() => { closeSheet(); loadInvoices(); }, 1400);
+      } catch (e) { ev.currentTarget.disabled = false; note.className = "note err"; note.textContent = e.message; }
+    };
+    body().querySelector("#cmpcancel").onclick = async (ev) => {
+      ev.currentTarget.disabled = true;
+      try { await api("/quickbooks-invoice/cancel", { draft_id: d.draft_id }); } catch {}
+      C.draft = null; draw();
+    };
+  }
+
+  function wire() {
+    const q = body().querySelector("#cmpq");
+    if (q) {
+      q.oninput = () => { C.query = q.value; const at = q.selectionStart; draw();
+        const n = body().querySelector("#cmpq"); if (n) { n.focus(); n.setSelectionRange(at, at); } };
+    }
+    on("[data-pick]", "click", (e) => {
+      C.customer = (S.qbo?.qbo?.customers || []).find((c) => c.id === e.currentTarget.dataset.pick) || null; draw();
+    }, body());
+    const clear = body().querySelector("#cmpclear");
+    if (clear) clear.onclick = () => { C.customer = null; C.query = ""; draw(); };
+    const add = body().querySelector("#cmpadd");
+    if (add) add.onclick = () => itemPicker(C.items, (it) => {
+      C.lines.push({ item_id: it.id, name: it.name, quantity: 1, rate: Number(it.unit_price) || 0, detail: "" });
+      draw();
+    });
+    on("[data-del]", "click", (e) => { C.lines.splice(Number(e.currentTarget.dataset.del), 1); draw(); }, body());
+    on("[data-qty]", "change", (e) => { C.lines[Number(e.currentTarget.dataset.qty)].quantity = Math.max(1, Number(e.currentTarget.value) || 1); draw(); }, body());
+    on("[data-rate]", "change", (e) => { C.lines[Number(e.currentTarget.dataset.rate)].rate = Math.max(0, Number(e.currentTarget.value) || 0); draw(); }, body());
+    on("[data-desc]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.desc)].detail = e.currentTarget.value; }, body());
+    const memo = body().querySelector("#cmpmemo");
+    if (memo) memo.oninput = () => { C.memo = memo.value; };
+    const go = body().querySelector("#cmpgo");
+    if (go) go.onclick = async () => {
+      if (!C.customer || !C.lines.length) return;
+      C.busy = true; C.error = ""; draw();
+      try {
+        const payload = { customer_id: C.customer.id, lines: C.lines.map((l) => {
+          const e = { item_id: l.item_id, quantity: l.quantity, rate: l.rate };
+          if (l.detail) e.description = l.detail;
+          return e;
+        }) };
+        if (C.memo) payload.memo = C.memo;
+        C.draft = (await api("/quickbooks-invoice/draft", payload)).draft;
+      } catch (e) { C.error = e.message; }
+      C.busy = false; draw();
+    };
+  }
+
+  draw();
+}
+
+// Billable-item picker — the web twin of iOS ItemPickerSheet. Stacks over the composer.
+function itemPicker(items, onPick) {
+  let q = "";
+  const wrap = document.createElement("div");
+  wrap.id = "pickwrap";
+  wrap.innerHTML = `<div class="sheet-back"></div><div class="sheet"><div class="grab"></div>
+    <h2>Billable Items</h2>
+    <input id="pickq" class="cmpinput" placeholder="Search items" autocomplete="off">
+    <div id="picklist" class="cmpsect"></div>
+    <button class="sheet-close" id="pickclose">Close</button></div>`;
+  document.body.appendChild(wrap);
+  const close = () => wrap.remove();
+  wrap.querySelector(".sheet-back").onclick = close;
+  wrap.querySelector("#pickclose").onclick = close;
+  const list = wrap.querySelector("#picklist");
+  const paint = () => {
+    const hits = q ? items.filter((i) => (i.name + " " + (i.description || "")).toLowerCase().includes(q)) : items;
+    list.innerHTML = hits.length ? hits.map((i, n) => `<button class="cmprow" data-item="${n}">
+        <span class="m"><b>${esc(i.name)}</b>${i.description ? `<span>${esc(i.description)}</span>` : ""}</span>
+        <span class="rate">$${(Number(i.unit_price) || 0).toFixed(2)}</span></button>`).join("")
+      : `<p class="note">No items match.</p>`;
+    on("[data-item]", "click", (e) => { onPick(hits[Number(e.currentTarget.dataset.item)]); close(); }, list);
+  };
+  wrap.querySelector("#pickq").oninput = (e) => { q = e.target.value.trim().toLowerCase(); paint(); };
+  paint();
 }
 
 function invoiceSheet(inv) {
@@ -537,58 +790,249 @@ function drawProfit() {
 }
 
 /* ---------------- CALENDAR ---------------- */
+// CALENDAR — mirrors iOS AppointmentCommandView: day search, three schedule stats,
+// a Next Up card, a real month booking grid, a Book button, and the selected DAY SCHEDULE.
+const CAL = { sel: null, month: null, q: "" };
+const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const evDayKey = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : dayKey(d); };
+
 async function renderCalendar() {
   skeleton(4);
   try {
     if (!S.cal) S.cal = await get("/google-calendar/events");
-    const up = S.cal?.calendar?.upcoming || [];
-    const past = (S.cal?.calendar?.past || []).slice(0, 20);
-    const groups = [];
-    up.forEach((e) => {
-      const key = dayLabel(e.start);
-      const g = groups.find((x) => x.key === key);
-      (g ? g.items : (groups.push({ key, items: [] }), groups[groups.length - 1].items)).push(e);
-    });
-    const now = new Date();
-    const sameDay = (iso) => (iso || "").slice(0, 10) === now.toISOString().slice(0, 10);
-    const within = (iso, days) => {
-      const t = new Date(iso); const end = new Date(now); end.setDate(now.getDate() + days);
-      return t >= now && t <= end;
-    };
-    const todayCount = up.filter((e) => sameDay(e.start)).length;
-    const weekCount = up.filter((e) => within(e.start, 7)).length;
-    const monthCount = up.filter((e) => (e.start || "").slice(0, 7) === now.toISOString().slice(0, 7)).length;
-    const next = up[0];
-    const mins = next ? Math.round((new Date(next.start) - now) / 60000) : 0;
-    const soon = mins <= 0 ? "now" : mins < 60 ? `in ${mins} min` : mins < 1440 ? `in ${Math.round(mins / 60)} h` : dayLabel(next.start);
-    view().innerHTML = `<div class="sect">
-      ${osHead("CAL.03 · SCHEDULE", "Calendar")}
-      <div class="calstats">
-        <div class="calstat"><i style="background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></i><b>${todayCount}</b><small>Today</small></div>
-        <div class="calstat"><i style="background:var(--emerald);box-shadow:0 0 8px var(--emerald)"></i><b>${weekCount}</b><small>This week</small></div>
-        <div class="calstat"><i style="background:var(--magenta);box-shadow:0 0 8px var(--magenta)"></i><b>${monthCount}</b><small>This month</small></div>
-      </div>
-      ${next ? `<div class="nextup">
-        <div class="ic">&#9203;</div>
-        <div class="m"><small>&#9679; Next up · ${esc(soon)}</small><b>${esc(next.title)}</b>
-          <span>${esc(timeLabel(next.start))}${next.location ? " · " + esc(next.location) : ""}</span></div>
-        <div class="go">&#8594;</div>
-      </div>` : ""}
-      ${groups.length ? groups.map((g) => `<div><div class="eyebrow">${esc(g.key.toUpperCase())}</div>
-        <div class="list" style="margin-top:8px">${g.items.map((e) => `<div class="item" style="cursor:default">
-          <div class="main"><div class="ttl">${esc(e.title)}</div>
-            <div class="sub">${esc(timeLabel(e.start))}${e.location ? " · " + esc(e.location) : ""}</div></div>
-        </div>`).join("")}</div></div>`).join("")
-        : `<div class="empty">Nothing booked ahead.<br>Ask Ledger to book something.</div>`}
-      ${past.length ? `<div><div class="eyebrow">RECENTLY DONE</div>
-        <div class="list" style="margin-top:8px">${past.map((e) => `<div class="item" style="cursor:default;opacity:.65">
-          <div class="main"><div class="ttl">${esc(e.title)}</div>
-          <div class="sub">${esc(dayLabel(e.start))} · ${esc(timeLabel(e.start))}</div></div></div>`).join("")}</div></div>` : ""}
-    </div>`;
+    const today = startOfDay(new Date());
+    if (!CAL.sel) CAL.sel = dayKey(today);
+    if (!CAL.month) CAL.month = { y: today.getFullYear(), m: today.getMonth() };
+    drawCalendar();
   } catch (e) {
     view().innerHTML = /not connected|Calendar/i.test(e.message) ? connectPanel("calendar") : `<div class="empty">${esc(e.message)}</div>`;
     wireConnect(view());
   }
+}
+
+function calEvents() {
+  const c = S.cal?.calendar || {};
+  return [...(c.past || []), ...(c.upcoming || [])];
+}
+
+function drawCalendar() {
+  const all = calEvents();
+  const now = new Date();
+  const today = startOfDay(now);
+  const todayKey = dayKey(today);
+
+  const countOn = (k) => all.filter((e) => evDayKey(e.start) === k).length;
+  const inRange = (iso, from, to) => { const t = new Date(iso); return t >= from && t < to; };
+  const weekFrom = new Date(today); weekFrom.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const weekTo = new Date(weekFrom); weekTo.setDate(weekFrom.getDate() + 7);
+  const monthFrom = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthTo = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+  const todayCount = countOn(todayKey);
+  const weekCount = all.filter((e) => inRange(e.start, weekFrom, weekTo)).length;
+  const monthCount = all.filter((e) => inRange(e.start, monthFrom, monthTo)).length;
+
+  const upcoming = all.filter((e) => new Date(e.start) > now).sort((a, b) => new Date(a.start) - new Date(b.start));
+  const next = upcoming[0];
+  const countdown = (iso) => {
+    const secs = (new Date(iso) - now) / 1000;
+    if (secs < 3600) return `IN ${Math.max(1, Math.round(secs / 60))} MIN`;
+    if (secs < 86400) return `IN ${Math.floor(secs / 3600)}H ${Math.round((secs % 3600) / 60)}M`;
+    return new Date(iso).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }).toUpperCase();
+  };
+
+  // month grid
+  const { y, m } = CAL.month;
+  const first = new Date(y, m, 1);
+  const lead = (first.getDay() + 6) % 7;               // Monday-first, same visual rhythm as iOS
+  const dim = new Date(y, m + 1, 0).getDate();
+  const cells = [...Array(lead).fill(null), ...Array.from({ length: dim }, (_, i) => new Date(y, m, i + 1))];
+  const grid = cells.map((d) => {
+    if (!d) return `<span class="cd empty"></span>`;
+    const k = dayKey(d);
+    const n = Math.min(countOn(k), 3);
+    const cls = [k === CAL.sel ? "on" : "", k === todayKey ? "now" : ""].filter(Boolean).join(" ");
+    return `<button class="cd ${cls}" data-day="${k}"><b>${d.getDate()}</b>
+      <i>${n ? Array.from({ length: n }, () => "<u></u>").join("") : ""}</i></button>`;
+  }).join("");
+
+  const selDate = new Date(CAL.sel + "T12:00:00");
+  const selCount = countOn(CAL.sel);
+  const relLabel = CAL.sel === todayKey ? "TODAY"
+    : CAL.sel === dayKey(new Date(today.getTime() + 86400000)) ? "TOMORROW"
+    : CAL.sel === dayKey(new Date(today.getTime() - 86400000)) ? "YESTERDAY"
+    : selDate.toLocaleDateString(undefined, { weekday: "long" }).toUpperCase();
+
+  const q = (CAL.q || "").toLowerCase();
+  const dayEvents = all
+    .filter((e) => evDayKey(e.start) === CAL.sel)
+    .filter((e) => !q || ((e.title || "") + " " + (e.description || "") + " " + (e.location || "")).toLowerCase().includes(q))
+    .sort((a, b) => new Date(a.start) - new Date(b.start));
+  const nextSelId = CAL.sel === todayKey ? (dayEvents.find((e) => new Date(e.start) > now) || {}).id : null;
+
+  view().innerHTML = `<div class="sect">
+    ${osHead("CAL.03 · SCHEDULE", "Calendar")}
+    <div class="searchwrap"><span class="mag">${MAG}</span>
+      <input id="calsearch" placeholder="Search selected day" value="${esc(CAL.q)}"></div>
+    <div class="calstats">
+      <div class="calstat"><i style="background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></i><b>${todayCount}</b><small>Today</small></div>
+      <div class="calstat"><i style="background:var(--emerald);box-shadow:0 0 8px var(--emerald)"></i><b>${weekCount}</b><small>This week</small></div>
+      <div class="calstat"><i style="background:var(--magenta);box-shadow:0 0 8px var(--magenta)"></i><b>${monthCount}</b><small>This month</small></div>
+    </div>
+    ${next ? `<button class="nextup" data-ev="${esc(next.id)}">
+      <div class="ic">&#9203;</div>
+      <div class="m"><small>&#9679; Next up · ${esc(countdown(next.start))}</small><b>${esc(next.title)}</b>
+        <span>${esc(timeLabel(next.start))}${next.location ? " · " + esc(next.location) : ""}</span></div>
+      <div class="go">&#8594;</div></button>` : ""}
+    <div class="bookcal">
+      <div class="bchead">
+        <div><span class="eyebrow">Booking calendar</span>
+          <b>${first.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</b></div>
+        <div class="nav"><button data-mo="-1">&#8249;</button><button data-mo="0">TODAY</button><button data-mo="1">&#8250;</button></div>
+      </div>
+      <div class="cgrid">
+        ${["M", "T", "W", "T", "F", "S", "S"].map((d) => `<span class="dow">${d}</span>`).join("")}
+        ${grid}
+      </div>
+      <div class="bcfoot"><span>&#128337; ${selCount} appointment${selCount === 1 ? "" : "s"}</span>
+        <span>${selDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</span></div>
+    </div>
+    <button class="bookbtn" id="bookday">
+      <span class="ic">&#128197;</span>
+      <span class="m"><b>BOOK ${selDate.toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()}</b>
+        <span>Live availability · verified Calendar write</span></span>
+      <span class="go">&#8599;</span></button>
+    <div class="dayhead">
+      <div><span class="eyebrow">Day schedule</span>
+        <b>${selDate.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</b></div>
+      <span class="rel">${esc(relLabel)}</span><span class="cnt">${dayEvents.length}</span>
+    </div>
+    ${dayEvents.length ? `<div class="list">${dayEvents.map((e) => {
+      const past = new Date(e.end || e.start) < now;
+      return `<button class="item${past ? " past" : ""}" data-ev="${esc(e.id)}">
+        <div class="main"><div class="ttl">${e.id === nextSelId ? '<span class="tag new">NEXT</span> ' : ""}${esc(e.title)}</div>
+          <div class="sub">${esc(timeLabel(e.start))}${e.location ? " · " + esc(e.location) : ""}</div></div>
+        <div class="amt"><small>${esc((e.status || "").toUpperCase())}</small></div></button>`;
+    }).join("")}</div>`
+      : `<button class="empty tapable" id="bookempty">This day is open.<br>Tap to create a verified appointment.</button>`}
+  </div>`;
+
+  const search = $("calsearch");
+  search.addEventListener("input", () => { CAL.q = search.value; const at = search.selectionStart; drawCalendar();
+    const n = $("calsearch"); if (n) { n.focus(); n.setSelectionRange(at, at); } });
+  on("[data-mo]", "click", (e) => {
+    const step = Number(e.currentTarget.dataset.mo);
+    if (step === 0) { CAL.month = { y: today.getFullYear(), m: today.getMonth() }; CAL.sel = todayKey; }
+    else { const d = new Date(CAL.month.y, CAL.month.m + step, 1); CAL.month = { y: d.getFullYear(), m: d.getMonth() }; CAL.sel = dayKey(d); }
+    drawCalendar();
+  });
+  on("[data-day]", "click", (e) => { CAL.sel = e.currentTarget.dataset.day; drawCalendar(); });
+  on("[data-ev]", "click", (e) => eventSheet(all.find((x) => x.id === e.currentTarget.dataset.ev)));
+  $("bookday").onclick = () => bookingSheet(CAL.sel);
+  if ($("bookempty")) $("bookempty").onclick = () => bookingSheet(CAL.sel);
+}
+
+// Appointment detail — the web twin of iOS CalendarDetailView (edit + delete).
+function eventSheet(e) {
+  if (!e) return;
+  sheet(`<h2>${esc(e.title)}</h2>
+    <p class="sh-sub">${esc(dayLabel(e.start))} · ${esc(timeLabel(e.start))}${e.end ? " – " + esc(timeLabel(e.end)) : ""}</p>
+    <div class="kv"><span>Status</span><span>${esc((e.status || "confirmed").replace(/^./, (c) => c.toUpperCase()))}</span></div>
+    ${e.location ? `<div class="kv"><span>Location</span><span>${esc(e.location)}</span></div>` : ""}
+    ${e.description ? `<p class="note" style="white-space:pre-wrap;margin-top:11px">${esc(e.description)}</p>` : ""}
+    <div class="rowbtns" style="margin-top:14px">
+      <button class="btn ghost" id="evdel">Delete</button>
+      <button class="btn primary" id="evedit" ${e.all_day ? "disabled" : ""}>Edit</button>
+    </div>
+    <div class="note" id="evnote" style="margin-top:9px"></div>`, (sh) => {
+    const note = sh.querySelector("#evnote");
+    sh.querySelector("#evedit").onclick = () => bookingSheet(evDayKey(e.start), e);
+    sh.querySelector("#evdel").onclick = async (ev) => {
+      if (!confirm(`Delete "${e.title}" from the calendar? This can't be undone.`)) return;
+      ev.currentTarget.disabled = true;
+      try {
+        await api("/google-calendar/event-delete", { event_id: e.id });
+        S.cal = null; closeSheet(); toast("Appointment deleted"); renderCalendar();
+      } catch (err) { ev.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
+    };
+  });
+}
+
+const BOOK_SOURCES = ["Phone", "Quo / OpenPhone", "Facebook", "Website", "Walk-in", "Kyle internal"];
+
+// New/edit appointment — the web twin of iOS AddBookingView / EditBookingSheet.
+function bookingSheet(dayISO, editing) {
+  const base = editing ? new Date(editing.start) : new Date(dayISO + "T09:00:00");
+  const now = new Date();
+  const startAt = !editing && base < now ? new Date(now.getTime() + 3600000) : base;
+  const localVal = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const mins = editing && editing.end ? Math.max(15, Math.round((new Date(editing.end) - new Date(editing.start)) / 60000)) : 60;
+
+  sheet(`<h2>${editing ? "Edit Appointment" : "New Appointment"}</h2>
+    ${editing ? `<label class="fld">TITLE</label><input id="bkTitle" class="cmpinput" value="${esc(editing.title)}">`
+      : `<div class="eyebrow">Customer</div>
+    <div class="cmpsect">
+      <input id="bkFirst" class="cmpinput" placeholder="First name">
+      <input id="bkLast" class="cmpinput" placeholder="Last name">
+      <input id="bkPhone" class="cmpinput" inputmode="tel" placeholder="Phone">
+      <input id="bkEmail" class="cmpinput" inputmode="email" placeholder="Email">
+    </div>
+    <div class="eyebrow">Appointment</div>
+    <div class="cmpsect">
+      <input id="bkService" class="cmpinput" placeholder="Service">
+      <input id="bkVehicle" class="cmpinput" placeholder="Vehicle — year, make, model, trim">
+      <input id="bkTire" class="cmpinput" placeholder="Tire size, if relevant">
+    </div>`}
+    <label class="fld">STARTS</label>
+    <input id="bkStart" class="cmpinput" type="datetime-local" value="${localVal(startAt)}">
+    <label class="fld">DURATION</label>
+    <select id="bkDur" class="cmpinput">${[30, 45, 60, 90, 120].map((n) =>
+      `<option value="${n}" ${n === mins ? "selected" : ""}>${n < 60 ? n + " minutes" : n === 60 ? "1 hour" : (n / 60) + " hours"}</option>`).join("")}</select>
+    ${editing ? `<label class="fld">LOCATION</label><input id="bkLoc" class="cmpinput" value="${esc(editing.location || "")}">
+      <label class="fld">DETAILS</label><textarea id="bkNotes" class="cmpinput" rows="4">${esc(editing.description || "")}</textarea>`
+      : `<div class="eyebrow" style="margin-top:13px">Source &amp; job details</div>
+    <div class="cmpsect">
+      <select id="bkSource" class="cmpinput">${BOOK_SOURCES.map((x) => `<option>${x}</option>`).join("")}</select>
+      <textarea id="bkNotes" class="cmpinput" rows="4" placeholder="Pricing, order status and job notes"></textarea>
+    </div>`}
+    <button class="btn primary wide" style="margin-top:13px" id="bkGo">${editing ? "Save changes" : "Review &amp; Add Booking"}</button>
+    <p class="note" style="margin-top:9px">The calendar is checked live for conflicts and booking hours before anything is created.</p>
+    <div class="note" id="bkNote" style="margin-top:6px"></div>`, (sh) => {
+    const note = sh.querySelector("#bkNote");
+    const val = (id) => (sh.querySelector("#" + id)?.value || "").trim();
+    sh.querySelector("#bkGo").onclick = async (ev) => {
+      const startVal = val("bkStart");
+      if (!startVal) { note.className = "note err"; note.textContent = "Pick a start time."; return; }
+      const start = new Date(startVal);
+      const end = new Date(start.getTime() + Number(val("bkDur") || 60) * 60000);
+      try {
+        if (editing) {
+          ev.currentTarget.disabled = true;
+          await api("/google-calendar/event-update", {
+            event_id: editing.id, title: val("bkTitle"), start: start.toISOString(), end: end.toISOString(),
+            location: val("bkLoc"), description: val("bkNotes"),
+          });
+          S.cal = null; closeSheet(); toast("Appointment updated"); renderCalendar();
+          return;
+        }
+        const required = ["bkFirst", "bkLast", "bkPhone", "bkEmail", "bkVehicle", "bkService"];
+        if (required.some((id) => !val(id))) { note.className = "note err"; note.textContent = "Fill in name, phone, email, vehicle and service."; return; }
+        if (!confirm(`Create this booking?\n\n${val("bkService")} for ${val("bkFirst")} ${val("bkLast")}\n${start.toLocaleString()}`)) return;
+        ev.currentTarget.disabled = true;
+        const details = [
+          `Phone: ${val("bkPhone")}`, `Email: ${val("bkEmail")}`, `Vehicle: ${val("bkVehicle")}`,
+          val("bkTire") ? `Tire size: ${val("bkTire")}` : null,
+          `Source: ${val("bkSource")}`, val("bkNotes") ? `Notes: ${val("bkNotes")}` : null,
+        ].filter(Boolean).join("\n");
+        await api("/google-calendar/bookings", {
+          title: `${val("bkFirst")} ${val("bkLast")} — ${val("bkService")}`,
+          description: details, email: val("bkEmail"),
+          start: start.toISOString(), end: end.toISOString(),
+        });
+        S.cal = null; closeSheet(); toast("Appointment booked"); renderCalendar();
+      } catch (e) { ev.currentTarget.disabled = false; note.className = "note err"; note.textContent = e.message; }
+    };
+  });
 }
 
 /* ---------------- RECEIPTS ---------------- */
@@ -606,25 +1050,36 @@ async function renderReceipts() {
     S.receipts = d.receipts || [];
     const ready = S.receipts.filter((r) => !r.qbo_purchase_id && r.category && r.category !== "Personal" && r.total);
     const queueTotal = ready.reduce((t, r) => t + (Number(r.total) || 0), 0);
+    const rq = (S.receiptSearch || "").toLowerCase();
+    const shown = !rq ? S.receipts : S.receipts.filter((r) =>
+      ((r.vendor || "") + " " + (r.category || "") + " " + (r.received_at || "") + " " + (r.subject || "") + " " + (r.summary || ""))
+        .toLowerCase().includes(rq));
     view().innerHTML = `<div class="sect">
       ${osHead("EXP.04 · EXPENSE INTAKE", "Receipts")}
-      <div class="queue">
+      <button class="queue" id="batchqueue">
         <div class="ic">&#128229;</div>
         <div class="m"><small>QuickBooks batch queue</small>
           <b>${ready.length} queued · ${money(queueTotal)}</b>
           <span>Categorised receipts waiting to post as expenses.</span></div>
         <div class="chev">&#8250;</div>
-      </div>
+      </button>
       <div class="panel">
         <h3>&#128231; Email Receipt Radar</h3>
-        <p class="sub">Ledger reads supplier receipts out of your inbox and turns them into expenses. Scans daily at ${d.scan_hour ?? 18}:00.</p>
-        <div class="rowbtns" style="margin-top:12px">
+        <p class="sub">Ledger reads supplier receipts out of your inbox and turns them into expenses.</p>
+        <div class="rowbtns" style="margin-top:12px;align-items:center">
+          <select id="scanhour" class="hourpick" title="Daily scan time">
+            ${Array.from({ length: 24 }, (_, h) => `<option value="${h}" ${h === (d.scan_hour ?? 18) ? "selected" : ""}>Daily at ${hourLabel(h)}</option>`).join("")}
+          </select>
           <button class="btn ghost" id="scannow">Scan now</button>
           ${ready.length >= 2 ? `<button class="btn em" id="batch">Post all ready (${ready.length})</button>` : ""}
         </div>
         <p class="note" style="margin-top:8px">${d.last_scan_at ? "Last scan " + esc(new Date(d.last_scan_at).toLocaleString()) : "Not scanned yet"}</p>
       </div>
-      ${S.receipts.length ? `<div class="list">${S.receipts.map((r) => `
+      <div class="lanehead"><span class="eyebrow">Logged receipts</span>
+        <span class="note">${S.receipts.length} saved</span></div>
+      <div class="searchwrap"><span class="mag">${MAG}</span>
+        <input id="rcptsearch" placeholder="Search vendor, category, date or notes" value="${esc(S.receiptSearch || "")}"></div>
+      ${shown.length ? `<div class="list">${shown.map((r) => `
         <button class="item" data-rcpt="${esc(r.id)}">
           <div class="main">
             <div class="ttl">${esc(r.vendor || r.from_name || "Unknown vendor")}</div>
@@ -635,7 +1090,7 @@ async function renderReceipts() {
               : r.category === "Personal" ? '<span class="tag grey">personal</span>'
               : r.category ? '<span class="tag new">ready</span>' : '<span class="tag open">needs category</span>'}</small></div>
         </button>`).join("")}</div>`
-        : `<div class="empty">No receipts found yet.<br>Run a scan, or forward one to your inbox.</div>`}
+        : `<div class="empty">${rq ? "No receipts match that search." : "No receipts found yet.<br>Run a scan, or forward one to your inbox."}</div>`}
     </div>`;
     $("scannow").onclick = async (e) => {
       e.currentTarget.disabled = true; e.currentTarget.textContent = "Scanning…";
@@ -643,11 +1098,59 @@ async function renderReceipts() {
       catch (err) { toast(err.message, "err"); renderReceipts(); }
     };
     if ($("batch")) $("batch").onclick = () => batchPost(ready);
+    $("batchqueue").onclick = () => batchQueueSheet(ready, queueTotal);
+    $("scanhour").onchange = async (e) => {
+      const hour = Number(e.target.value);
+      try { await api("/gmail/set-schedule", { hour }); toast("Daily scan set to " + hourLabel(hour)); }
+      catch (err) { toast(err.message, "err"); renderReceipts(); }
+    };
+    const rs = $("rcptsearch");
+    rs.addEventListener("input", () => {
+      S.receiptSearch = rs.value.trim();
+      clearTimeout(S._rt); S._rt = setTimeout(() => {
+        renderReceipts().then(() => { const n = $("rcptsearch"); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } });
+      }, 220);
+    });
     on("[data-rcpt]", "click", (e) => receiptSheet(S.receipts.find((r) => r.id === e.currentTarget.dataset.rcpt)));
   } catch (e) {
     view().innerHTML = /not connected|Gmail/i.test(e.message) ? connectPanel("gmail") : `<div class="empty">${esc(e.message)}</div>`;
     wireConnect(view());
   }
+}
+
+const hourLabel = (h) => (h % 12 === 0 ? 12 : h % 12) + (h < 12 ? " AM" : " PM");
+
+// iOS ReceiptExpenseCatalog.suggestedAccount — same mapping, so both apps name the account identically.
+function suggestedAccount(category) {
+  if (["Fuel", "Vehicle Repair", "Parking", "Tolls & Transit"].includes(category)) return "Vehicle expenses";
+  if (["Tires & Inventory", "Parts & Materials", "Shop Supplies", "Freight & Courier"].includes(category)) return "Cost of goods sold";
+  if (["Tools & Equipment", "Equipment Repair"].includes(category)) return "Tools & equipment";
+  if (category === "Advertising") return "Advertising & promotion";
+  if (["Software & Subscriptions", "Phone & Internet"].includes(category)) return "Software / communications";
+  if (["Rent & Lease", "Utilities", "Insurance", "Cleaning & Waste", "Security"].includes(category)) return "Occupancy & operations";
+  if (["Professional Fees", "Bank & Processing Fees", "Office Supplies", "Licences & Permits", "Training & Education"].includes(category)) return "General & administrative";
+  return "Needs accountant mapping";
+}
+
+// QuickBooks batch queue — the web twin of iOS ReceiptBatchQueueView.
+function batchQueueSheet(ready, total) {
+  sheet(`<h2>QuickBooks Batch Queue</h2>
+    <p class="sh-sub">${ready.length} categorised receipt${ready.length === 1 ? "" : "s"} · ${money(total)}</p>
+    ${ready.length ? `<div class="list">${ready.map((r) => `
+      <button class="item" data-bq="${esc(r.id)}">
+        <div class="main"><div class="ttl">${esc(r.vendor || r.from_name || "Unknown vendor")}</div>
+          <div class="sub">${esc(r.category)} · ${esc(suggestedAccount(r.category))}</div></div>
+        <div class="amt">${money(r.total)}<small><span class="tag new">ready</span></small></div>
+      </button>`).join("")}</div>
+      <button class="btn em wide" style="margin-top:13px" id="bqpost">Post all ready (${ready.length})</button>`
+      : `<div class="empty">Nothing queued.<br>Categorise a receipt and set its amount to queue it.</div>`}`, (sh) => {
+    on("[data-bq]", "click", (e) => {
+      const r = ready.find((x) => x.id === e.currentTarget.dataset.bq);
+      closeSheet(); receiptSheet(r);
+    }, sh);
+    const post = sh.querySelector("#bqpost");
+    if (post) post.onclick = () => { closeSheet(); batchPost(ready); };
+  });
 }
 
 async function batchPost(ready) {
@@ -676,6 +1179,7 @@ function receiptSheet(r) {
     <input id="ramt" inputmode="decimal" value="${r.total ?? ""}" placeholder="0.00">
     <label class="fld">CATEGORY</label>
     <select id="rcat"><option value="">Choose a category…</option><option ${r.category === "Personal" ? "selected" : ""}>Personal</option>${opts}</select>
+    <p class="note" id="racct" style="margin-top:7px">${r.category && r.category !== "Personal" ? "Suggested account · " + esc(suggestedAccount(r.category)) : ""}</p>
     <div class="rowbtns" style="margin-top:15px">
       <button class="btn ghost" id="rdismiss">Dismiss</button>
       <button class="btn primary" id="rsave">Save</button>
@@ -684,6 +1188,11 @@ function receiptSheet(r) {
       : `<button class="btn em wide" style="margin-top:9px" id="rpost">Post to QuickBooks</button>`}
     <div class="note" id="rnote" style="margin-top:9px"></div>`, (sh) => {
     const note = sh.querySelector("#rnote");
+    const acct = sh.querySelector("#racct");
+    sh.querySelector("#rcat").onchange = (e) => {
+      const c = e.target.value;
+      acct.textContent = c && c !== "Personal" ? "Suggested account · " + suggestedAccount(c) : "";
+    };
     const save = async () => {
       const amt = parseFloat(sh.querySelector("#ramt").value);
       const cat = sh.querySelector("#rcat").value;
@@ -727,30 +1236,109 @@ const LEAD_STATUSES = ["new", "contacted", "quoted", "won", "lost"];
 
 const LANE_CODE = { directory: "CRM.05 · RELATIONSHIPS", leads: "CRM.05 · PIPELINE", todos: "CRM.05 · MISSION CONTROL" };
 
+// Red badge counts on the lane switcher, same rule as iOS CustomerLaneSwitcher:
+// leads whose follow-up is due, and open to-dos due by end of today.
+function laneAlerts() {
+  const b = S.board || {};
+  const now = new Date();
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const leads = (b.leads || []).filter((l) =>
+    l.status !== "won" && l.status !== "lost" && l.followUpAt && new Date(l.followUpAt) <= now).length;
+  const todos = (b.todos || []).filter((t) =>
+    t.status === "open" && t.dueAt && new Date(t.dueAt) <= endOfToday).length;
+  return { leads, todos };
+}
+
 async function renderCustomers() {
   view().innerHTML = `<div class="sect">
     ${osHead(LANE_CODE[S.lane] || LANE_CODE.directory, S.lane === "todos" ? "To-Do" : S.lane === "leads" ? "Leads" : "Customers")}
     <div class="seg">
-      ${[["directory", "Directory"], ["leads", "Leads"], ["todos", "To-Do"]].map(([k, l]) =>
-        `<button class="${S.lane === k ? "on" : ""}" data-lane="${k}">${l}</button>`).join("")}
+      ${[["directory", "Directory", 0], ["leads", "Leads", laneAlerts().leads], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
+        `<button class="${S.lane === k ? "on" : ""}" data-lane="${k}">${l}${n ? `<i class="badge">${n}</i>` : ""}</button>`).join("")}
     </div>
     <div id="lanebody"><div class="skel"></div><div class="skel"></div></div>
   </div>`;
   on("[data-lane]", "click", (e) => { S.lane = e.currentTarget.dataset.lane; renderCustomers(); });
-  if (S.lane === "directory") loadDirectory();
-  else loadBoard();
+  if (S.lane === "directory") {
+    loadDirectory();
+    // iOS keeps the badges live from the same board; fetch it once so Directory shows them too.
+    if (!S.board) api("/leads", { action: "board" }).then((b) => { S.board = b; if (S.tab === "customers") renderCustomers(); }).catch(() => {});
+  } else loadBoard();
 }
+
+const reviewAsked = () => new Set((localStorage.getItem("kmj.reviewRequestedCustomerIDs") || "").split(",").filter(Boolean));
+const markReviewAsked = (id) => { const s = reviewAsked(); s.add(id); localStorage.setItem("kmj.reviewRequestedCustomerIDs", [...s].sort().join(",")); };
 
 async function loadDirectory() {
   const slot = $("lanebody"); if (!slot) return;
   try {
     if (!S.qbo) S.qbo = await get("/quickbooks-data");
     const all = (S.qbo?.qbo?.customers || []).filter((c) => c.active !== false);
+    const invoices = S.qbo?.qbo?.invoices || [];
+    const asked = reviewAsked();
     const q = (S.custSearch || "").toLowerCase();
-    const list = all.filter((c) => !q || (c.name + " " + (c.email || "") + " " + (c.phone || "")).toLowerCase().includes(q));
-    slot.innerHTML = `<div class="searchwrap"><span class="mag">${MAG}</span>
-        <input id="csearch" placeholder="Search customers" value="${esc(S.custSearch || "")}"></div>
-      <p class="note">${all.length} customer${all.length === 1 ? "" : "s"}</p>
+    const sort = S.custSort || "name";
+    const lastInvoice = {};
+    invoices.forEach((i) => { if (!lastInvoice[i.customer_id] || i.date > lastInvoice[i.customer_id]) lastInvoice[i.customer_id] = i.date; });
+    const lastPaid = {};
+    invoices.filter((i) => Number(i.balance) === 0).forEach((i) => {
+      if (!lastPaid[i.customer_id] || i.date > lastPaid[i.customer_id]) lastPaid[i.customer_id] = i.date;
+    });
+
+    // iOS CustomerIntelligenceHero figures
+    const reachable = all.filter((c) => c.phone || c.email).length;
+    const buyers = new Set(invoices.map((i) => i.customer_id)).size;
+    const lifetime = invoices.reduce((t, i) => t + (Number(i.total) || 0), 0);
+
+    // iOS ReviewOpportunityPanel queue: paid customers we can reach and haven't asked yet
+    const reviewQueue = all
+      .filter((c) => (c.phone || c.email) && !asked.has(c.id) && lastPaid[c.id])
+      .sort((a, b) => (lastPaid[b.id] || "").localeCompare(lastPaid[a.id] || ""));
+    const qHead = reviewQueue.slice(0, 5);
+
+    let list = all.filter((c) => !q || (c.name + " " + (c.email || "") + " " + (c.phone || "") + " " + c.id).toLowerCase().includes(q));
+    if (S.custBalancesOnly) list = list.filter((c) => Number(c.balance) > 0);
+    list = list.slice().sort((a, b) =>
+      sort === "owing" ? Number(b.balance) - Number(a.balance)
+      : sort === "recent" ? (lastInvoice[b.id] || "").localeCompare(lastInvoice[a.id] || "")
+      : a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+
+    slot.innerHTML = `
+      <div class="cihero">
+        <div class="t"><div><span class="eyebrow">Customer intelligence</span>
+          <b>Relationships, revenue &amp; reputation</b></div><span class="ic">&#128101;</span></div>
+        <div class="pulse">
+          <div class="pm cyan"><small>QBO</small><b>${all.length}</b></div>
+          <div class="pm em"><small>Reachable</small><b>${reachable}</b></div>
+          <div class="pm purple"><small>Buyers</small><b>${buyers}</b></div>
+        </div>
+        <div class="split"><div><small>Customer revenue</small><b>${money0(lifetime)}</b></div>
+          <div class="r"><small>Reviews asked</small><b class="em">${asked.size}</b></div></div>
+      </div>
+      <div class="revpanel">
+        <div class="t"><div><span class="eyebrow" style="color:var(--magenta)">Review opportunities</span>
+          <b>${qHead.length ? "Recent customers ready to ask" : "You\u2019re caught up"}</b></div>
+          <span class="cnt">${reviewQueue.length} READY</span></div>
+        ${qHead.length ? `<button class="asknext" data-review="${esc(qHead[0].id)}">
+            <span class="ic">&#11088;</span>
+            <span class="m"><small>Ask next</small><b>${esc(qHead[0].name)}</b>
+              <span>${esc(qHead[0].phone || qHead[0].email)}</span></span>
+            <span class="go">&#8594;</span></button>
+          ${qHead.length > 1 ? `<div class="askrow">${qHead.slice(1).map((c) =>
+            `<button class="askpill" data-review="${esc(c.id)}"><i>${esc(c.name.slice(0, 1).toUpperCase())}</i>${esc(c.name)} &#11088;</button>`).join("")}</div>` : ""}`
+          : `<p class="note">No eligible recent customers waiting for a review request.</p>`}
+      </div>
+      <div class="searchwrap"><span class="mag">${MAG}</span>
+        <input id="csearch" placeholder="Customer, invoice, email or phone" value="${esc(S.custSearch || "")}"></div>
+      <div class="dirbar">
+        <span class="eyebrow">Customer directory</span>
+        <button class="pillbtn em" id="cadd">+ Add</button>
+        <select class="pillbtn" id="csort">
+          ${[["name", "A–Z"], ["owing", "Owing"], ["recent", "Recent"]].map(([k, l]) =>
+            `<option value="${k}" ${sort === k ? "selected" : ""}>${l}</option>`).join("")}
+        </select>
+        <button class="pillbtn ${S.custBalancesOnly ? "hot" : ""}" id="cbal">${S.custBalancesOnly ? "Balances" : "All"}</button>
+      </div>
       ${list.length ? list.slice(0, 120).map((c) => {
         const contact = [c.email, c.phone].filter(Boolean).join(" · ");
         const initial = (c.name || "?").trim().charAt(0).toUpperCase();
@@ -763,23 +1351,147 @@ async function loadDirectory() {
           </div>
           <div class="acts">
             <button class="actbtn" data-cust="${esc(c.id)}">&#128100;&nbsp; Full Profile</button>
-            <button class="actbtn p" data-review="${esc(c.id)}">&#11088;&nbsp; Ask for Review</button>
+            <button class="actbtn p" data-review="${esc(c.id)}">${asked.has(c.id) ? "&#10003;&nbsp; Review Asked" : "&#11088;&nbsp; Ask for Review"}</button>
           </div>
         </div>`;
-      }).join("") : `<div class="empty">No matches.</div>`}`;
-    const s = $("csearch");
-    s.addEventListener("input", () => { S.custSearch = s.value; clearTimeout(S._c); S._c = setTimeout(loadDirectory, 220); });
+      }).join("") : `<div class="empty">No customers found.<br>Try a different name, email, phone or QBO ID.</div>`}`;
+    const sb = $("csearch");
+    sb.addEventListener("input", () => { S.custSearch = sb.value; clearTimeout(S._c); S._c = setTimeout(loadDirectory, 220); });
+    $("csort").onchange = (e) => { S.custSort = e.target.value; loadDirectory(); };
+    $("cbal").onclick = () => { S.custBalancesOnly = !S.custBalancesOnly; loadDirectory(); };
+    $("cadd").onclick = () => newCustomerSheet();
     on("[data-cust]", "click", (e) => customerSheet(all.find((c) => c.id === e.currentTarget.dataset.cust)), slot);
     on("[data-review]", "click", (e) => {
       const c = all.find((x) => x.id === e.currentTarget.dataset.review);
-      openChat();
-      $("box").value = `Draft a short, friendly review request email to ${c.name}${c.email ? " at " + c.email : ""}.`;
-      send();
+      if (c) reviewSheet(c, asked.has(c.id));
     }, slot);
   } catch (e) {
     slot.innerHTML = /not connected/i.test(e.message) ? connectPanel("qbo") : `<div class="empty">${esc(e.message)}</div>`;
     wireConnect(slot);
   }
+}
+
+// Google Business review destination — same source as iOS: the connector row's
+// public_config.review_uri, falling back to the configured KMJ link.
+const FALLBACK_REVIEW_URL = "https://g.page/r/CbmEs1o9TuK3EBM/review";
+async function reviewTarget() {
+  if (S.reviewUrl !== undefined) return S.reviewUrl;
+  S.reviewUrl = { url: FALLBACK_REVIEW_URL, name: S.profile?.business?.name || "Your business" };
+  try {
+    const t = await token();
+    const r = await fetch(`${SUPA_URL}/rest/v1/connector_accounts?connector=eq.google_business_profile&select=status,display_name,public_config&order=updated_at.desc&limit=1`,
+      { headers: { apikey: SUPA_KEY, Authorization: "Bearer " + t } });
+    const rows = await r.json();
+    const row = Array.isArray(rows) ? rows[0] : null;
+    if (row) S.reviewUrl = {
+      url: row.public_config?.review_uri || FALLBACK_REVIEW_URL,
+      name: row.display_name || S.profile?.business?.name || "Your business",
+    };
+  } catch { /* keep the configured fallback */ }
+  return S.reviewUrl;
+}
+
+// Review request — the web twin of iOS ReviewRequestSheet. Nothing sends automatically:
+// the tap opens the user's own SMS or mail client with the message pre-filled.
+async function reviewSheet(c, already) {
+  const { url, name } = await reviewTarget();
+  const first = (c.name || "").split(" ")[0] || c.name;
+  const msg = `Hi ${first}! Thanks again for choosing ${name}. If you have a moment, would you mind sharing your experience? It really helps our local business: ${url}`;
+  const btn = (id, icon, title, detail, tint) => `<button class="revbtn ${tint}" id="${id}">
+      <span class="ic">${icon}</span><span class="m"><b>${esc(title)}</b><span>${esc(detail)}</span></span>
+      <span class="chev">&#8250;</span></button>`;
+  sheet(`<h2>${already ? "Review already requested" : "Ask " + esc(first) + " for a review?"}</h2>
+    <p class="sh-sub">The verified direct-review link for ${esc(name)} is ready.</p>
+    <div class="eyebrow">Message preview</div>
+    <p class="note" style="white-space:pre-wrap;margin-top:7px">${esc(msg)}</p>
+    <div class="cmpsect" style="margin-top:14px">
+      ${c.phone ? btn("rvsms", "&#128172;", "Open in Messages", c.phone, "em") : ""}
+      ${c.email ? btn("rvmail", "&#9993;", "Open in Mail", c.email, "cyan") : ""}
+      ${btn("rvcopy", "&#128279;", "Copy review link", name, "purple")}
+      ${btn("rvopen", "&#8599;", "Preview review page", "Opens Google Reviews", "gold")}
+    </div>
+    <p class="note">Nothing is sent automatically. You review the exact message in Messages or Mail before sending.</p>`, (sh) => {
+    const done = () => { markReviewAsked(c.id); closeSheet(); loadDirectory(); };
+    const sms = sh.querySelector("#rvsms");
+    if (sms) sms.onclick = () => { window.location.href = `sms:${c.phone}?&body=${encodeURIComponent(msg)}`; done(); };
+    const mail = sh.querySelector("#rvmail");
+    if (mail) mail.onclick = () => {
+      window.location.href = `mailto:${c.email}?subject=${encodeURIComponent("Thank you from " + name)}&body=${encodeURIComponent(msg)}`;
+      done();
+    };
+    sh.querySelector("#rvcopy").onclick = async () => {
+      try { await navigator.clipboard.writeText(url); toast("Review link copied"); } catch { toast("Copy failed", "err"); }
+    };
+    sh.querySelector("#rvopen").onclick = () => window.open(url, "_blank", "noopener");
+  });
+}
+
+// New QuickBooks customer — the web twin of iOS NewCustomerSheet, including the
+// duplicate-match guard: a 409 lists the existing matches before anything is created.
+function newCustomerSheet() {
+  const form = (force) => `<h2>New Customer</h2>
+    <div class="eyebrow">Customer</div>
+    <div class="cmpsect">
+      <input id="ncName" class="cmpinput" placeholder="Name (required)">
+      <input id="ncCompany" class="cmpinput" placeholder="Company (optional)">
+    </div>
+    <div class="eyebrow">Contact</div>
+    <div class="cmpsect">
+      <input id="ncEmail" class="cmpinput" inputmode="email" placeholder="Email">
+      <input id="ncPhone" class="cmpinput" inputmode="tel" placeholder="Phone">
+      <input id="ncMobile" class="cmpinput" inputmode="tel" placeholder="Mobile (optional)">
+    </div>
+    <div class="eyebrow">Billing address (optional)</div>
+    <div class="cmpsect">
+      <input id="ncLine1" class="cmpinput" placeholder="Street">
+      <input id="ncCity" class="cmpinput" placeholder="City">
+      <input id="ncRegion" class="cmpinput" placeholder="Province/State">
+      <input id="ncPostal" class="cmpinput" placeholder="Postal code">
+    </div>
+    <div class="eyebrow">Notes (optional)</div>
+    <textarea id="ncNotes" class="cmpinput" rows="2" placeholder="Internal notes"></textarea>
+    <button class="btn primary wide" style="margin-top:13px" id="ncGo">Create in QuickBooks</button>
+    <div id="ncDup"></div>
+    <div class="note" id="ncNote" style="margin-top:9px"></div>`;
+
+  sheet(form(false), (sh) => {
+    const note = sh.querySelector("#ncNote");
+    const dup = sh.querySelector("#ncDup");
+    const val = (id) => (sh.querySelector("#" + id)?.value || "").trim();
+    const submit = async (force, btn) => {
+      const name = val("ncName");
+      if (!name) { note.className = "note err"; note.textContent = "A name is required."; return; }
+      btn.disabled = true; note.className = "note"; note.textContent = "Creating…";
+      const payload = { display_name: name, force };
+      [["company", "ncCompany"], ["email", "ncEmail"], ["phone", "ncPhone"], ["mobile", "ncMobile"], ["notes", "ncNotes"]]
+        .forEach(([k, id]) => { const v = val(id); if (v) payload[k] = v; });
+      if (val("ncLine1") || val("ncCity")) {
+        payload.address = { line1: val("ncLine1"), city: val("ncCity"), region: val("ncRegion"), postal: val("ncPostal") };
+      }
+      try {
+        const r = await api("/quickbooks-invoice/customer-create", payload);
+        if (r.customer) {
+          dup.innerHTML = "";
+          note.className = "note ok";
+          note.textContent = `${r.customer.name} is now in QuickBooks ✅ — Ledger can invoice them immediately.`;
+          S.qbo = null; setTimeout(() => { closeSheet(); loadDirectory(); }, 1500);
+          return;
+        }
+        throw new Error(r.message || r.error || "Could not create the customer.");
+      } catch (e) {
+        btn.disabled = false;
+        // A duplicate check comes back as a 409 whose body carries the matches.
+        const matches = e.matches || [];
+        if (/already|duplicate|match/i.test(e.message) || matches.length) {
+          dup.innerHTML = `<div class="note err" style="margin-top:10px">${esc(e.message)}</div>
+            <button class="btn ghost wide" style="margin-top:8px" id="ncForce">Create anyway</button>`;
+          dup.querySelector("#ncForce").onclick = (ev) => submit(true, ev.currentTarget);
+          note.textContent = "";
+        } else { note.className = "note err"; note.textContent = e.message; }
+      }
+    };
+    sh.querySelector("#ncGo").onclick = (ev) => submit(false, ev.currentTarget);
+  });
 }
 
 function customerSheet(c) {
