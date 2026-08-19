@@ -1,5 +1,5 @@
-// Ledger AI service worker — app-shell cache, network-first for documents.
-const CACHE = "ledger-ai-v2";
+// Ledger AI service worker — app-shell cache, network-first for documents and assets.
+const CACHE = "ledger-ai-v3";
 const SHELL = ["./app.html", "./app.js", "./index.html", "./manifest.webmanifest", "./icon.svg",
                "./icon-192.png", "./icon-512.png", "./icon-maskable-192.png", "./icon-maskable-512.png"];
 
@@ -35,13 +35,18 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Network-first for same-origin assets too. app.js is part of the shell, so a
+  // cache-first rule here served a stale bundle against fresh HTML after every
+  // deploy until the cache name changed. Cache stays populated for offline.
   event.respondWith(
-    caches.match(request).then((hit) => hit || fetch(request).then((response) => {
-      if (response.ok) {
-        const copy = response.clone();
-        caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
-      }
-      return response;
-    }))
+    fetch(request)
+      .then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
+        }
+        return response;
+      })
+      .catch(() => caches.match(request))
   );
 });
