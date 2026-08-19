@@ -475,11 +475,49 @@ select.pillbtn{appearance:none;-webkit-appearance:none;text-align:center;padding
   display:flex;flex-direction:column;gap:12px;
 }
 .ccard .top{display:flex;align-items:flex-start;gap:13px}
+/* Ledger identity sigil. A circle with one letter in it is what every contacts
+   app does, and on "1150854 Alberta Ltd." it rendered a meaningless "1". This is
+   a chamfered HUD plate: 1px gradient edge, scanlines, circuit rail on the two
+   square corners, mono designator, status tick in the notch. Mirrors LedgerSigil
+   in CommandDashboardView.swift — keep the two in step. */
 .ccard .ava{
-  width:56px;height:56px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
-  font-size:21px;font-weight:900;color:#fff;
-  background:linear-gradient(140deg,rgba(59,130,246,.55),rgba(168,85,247,.45));border:1px solid rgba(255,255,255,.12);
+  --sig:58,200,245;
+  position:relative;width:56px;height:56px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  clip-path:polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px);
+  background:linear-gradient(180deg,rgba(var(--sig),.9),rgba(var(--sig),.2));
+  filter:drop-shadow(0 2px 7px rgba(var(--sig),.4));
 }
+.ccard .ava.ow{--sig:251,146,60}
+.ccard .ava.od{--sig:248,113,113}
+.ccard .ava::before{
+  content:"";position:absolute;inset:1px;
+  clip-path:polygon(15px 0,100% 0,100% calc(100% - 15px),calc(100% - 15px) 100%,0 100%,0 15px);
+  background:
+    repeating-linear-gradient(180deg,rgba(var(--sig),.16) 0 .5px,transparent .5px 3px),
+    linear-gradient(140deg,rgba(var(--sig),.34),rgba(0,0,0,.72) 55%,rgba(var(--sig),.12));
+}
+.ccard .ava::after{
+  content:"";position:absolute;top:3px;right:3px;width:32%;height:32%;
+  border-top:1.4px solid rgba(var(--sig),.95);border-right:1.4px solid rgba(var(--sig),.95);
+}
+.ccard .ava .rail{
+  position:absolute;bottom:3px;left:3px;width:32%;height:32%;
+  border-bottom:1.4px solid rgba(var(--sig),.95);border-left:1.4px solid rgba(var(--sig),.95);
+}
+/* The tick lives on the wrapper, not inside .ava — the chamfer clip-path on
+   .ava clips its own children, which swallowed the LED entirely. */
+.ccard .avaw{position:relative;flex-shrink:0;width:56px;height:56px}
+.ccard .avaw .tick{
+  position:absolute;bottom:3px;right:3px;width:9px;height:9px;background:var(--emerald);z-index:2;
+  box-shadow:0 0 6px var(--emerald);clip-path:polygon(2px 0,100% 0,100% calc(100% - 2px),calc(100% - 2px) 100%,0 100%,0 2px);
+}
+.ccard .avaw .tick.off{background:var(--dim);box-shadow:none}
+.ccard .ava b{
+  position:relative;z-index:1;font-family:var(--mono);font-weight:900;font-size:19px;color:#fff;
+  text-shadow:0 0 8px rgba(var(--sig),.85);
+}
+.ccard .ava svg{position:relative;z-index:1;width:22px;height:22px;fill:#fff;filter:drop-shadow(0 0 6px rgba(var(--sig),.85))}
 .ccard .who{flex:1;min-width:0;padding-top:2px}
 .ccard .who b{display:block;font-size:19px;font-weight:800;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ccard .who span{display:block;font-size:13.5px;color:var(--dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

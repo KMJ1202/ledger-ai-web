@@ -90,6 +90,28 @@ function closeSheet() { const w = $("sheetwrap"); if (w) w.remove(); }
 /* ---------------- app shell ---------------- */
 // Tab glyphs are inline SVG so the web bar reads like the iOS SF Symbols bar
 // instead of a row of emoji.
+// Mirror of SigilMark.read in CommandDashboardView.swift. Classify before
+// initialing: a leading 5+ digit token is an Alberta numbered company, a record
+// with no letters at all is a phone number filed as a name, and Ltd/Inc/Corp are
+// noise that would otherwise eat the second real initial.
+const SIGIL_GLYPH = {
+  building: `<svg viewBox="0 0 24 24"><path d="M4 21V5.5A1.5 1.5 0 015.5 4H12a1.5 1.5 0 011.5 1.5V9H19a1.5 1.5 0 011.5 1.5V21H4zm2-2h2v-2.5H6V19zm0-4.5h2V12H6v2.5zm0-4.5h2V7.5H6V10zm4 9h2v-2.5h-2V19zm0-4.5h2V12h-2v2.5zm0-4.5h2V7.5h-2V10zm5.5 9h3v-2.5h-3V19zm0-4.5h3V12h-3v2.5z"/></svg>`,
+  phone: `<svg viewBox="0 0 24 24"><path d="M6.6 3h2.9l1.6 4-2.1 1.5a12.4 12.4 0 006.5 6.5l1.5-2.1 4 1.6v2.9A2.6 2.6 0 0118.4 20 15.4 15.4 0 014 5.6 2.6 2.6 0 016.6 3z"/></svg>`,
+  hash: `<svg viewBox="0 0 24 24"><path d="M9.3 3l-.8 5H4.4l-.3 2h4.1l-.6 4H3.5l-.3 2h4.1L6.5 21h2l.8-5h4l-.8 5h2l.8-5h4.1l.3-2h-4.1l.6-4h4.1l.3-2h-4.1l.8-5h-2l-.8 5h-4l.8-5h-2zm.9 7h4l-.6 4h-4l.6-4z"/></svg>`,
+};
+function sigilMark(raw) {
+  const name = String(raw || "").trim();
+  if (!/[A-Za-z]/.test(name)) {
+    return SIGIL_GLYPH[(name.match(/\d/g) || []).length >= 7 ? "phone" : "hash"];
+  }
+  const words = name.split(/[^A-Za-z0-9]+/).filter(Boolean);
+  if (words[0] && words[0].length >= 5 && /^\d+$/.test(words[0])) return SIGIL_GLYPH.building;
+  const filler = new Set(["ltd", "inc", "corp", "llc", "co", "the", "and", "of"]);
+  const named = words.filter((w) => /[A-Za-z]/.test(w) && !filler.has(w.toLowerCase()));
+  const letters = (named.length ? named : words).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+  return `<b>${esc(letters || name.charAt(0).toUpperCase())}</b>`;
+}
+
 const ICONS = {
   ledger: `<svg viewBox="0 0 24 24"><path d="M12 2.6l1.9 4.4 4.4 1.9-4.4 1.9L12 15.2l-1.9-4.4L5.7 8.9l4.4-1.9L12 2.6zm6.4 11.1l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1zm-12 1.2l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7L4 18l1.7-.7.7-1.7z"/></svg>`,
   finance: `<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm.9 15.4v1.2h-1.6v-1.2c-1.6-.2-2.8-1.1-3-2.7h1.8c.1.8.8 1.3 2 1.3 1.1 0 1.8-.5 1.8-1.2 0-.7-.5-1-2-1.4-2.1-.5-3.3-1.2-3.3-2.9 0-1.5 1.1-2.5 2.7-2.7V6.6h1.6v1.2c1.6.3 2.6 1.3 2.7 2.7h-1.8c-.1-.8-.7-1.3-1.7-1.3-1 0-1.7.5-1.7 1.1 0 .7.6 1 2 1.3 2.2.5 3.3 1.3 3.3 3 0 1.5-1.1 2.6-2.8 2.8z"/></svg>`,
@@ -1439,11 +1461,10 @@ async function loadDirectory() {
       </div>
       ${list.length ? list.slice(0, S.custShowAll ? list.length : 120).map((c) => {
         const contact = [c.email, c.phone].filter(Boolean).join(" · ");
-        const initial = (c.name || "?").trim().charAt(0).toUpperCase();
         const od = overdueIds.has(c.id);
         return `<div class="ccard">
           <div class="top">
-            <div class="ava">${esc(initial)}</div>
+            <div class="avaw"><div class="ava ${od ? "od" : c.balance > 0 ? "ow" : ""}">${sigilMark(c.name)}<i class="rail"></i></div><i class="tick ${c.active === false ? "off" : ""}"></i></div>
             <div class="who"><b>${esc(c.name)}</b>
               ${contact ? `<span>${esc(contact)}</span>` : ""}
               <i>QBO #${esc(c.id)} · ${c.balance > 0
