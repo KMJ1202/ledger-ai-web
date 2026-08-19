@@ -1222,8 +1222,10 @@ async function captureReceipt(file) {
   try {
     const image = await downscaleReceipt(file);
     const d = await api("/gmail/photo-receipt", { image, media_type: "image/jpeg" });
-    if (note) { note.className = "note ok"; note.textContent = "Receipt read — check the details."; }
     await renderReceipts();
+    // renderReceipts rebuilds the panel, so the in-flight note is gone by now —
+    // a toast is what actually survives to be read.
+    toast("Receipt read — check the details");
     receiptSheet(d.receipt, d.suggested_category);
   } catch (err) {
     busy(false);
