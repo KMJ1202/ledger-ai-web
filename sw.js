@@ -1,6 +1,6 @@
 // Ledger AI service worker — app-shell cache, network-first for documents and assets.
-const CACHE = "ledger-ai-v7";
-const SHELL = ["./app.html", "./app.js", "./index.html", "./manifest.webmanifest", "./icon.svg",
+const CACHE = "ledger-ai-v8";
+const SHELL = ["./app.html", "./app.js?v=8", "./index.html", "./manifest.webmanifest", "./icon.svg",
                "./icon-192.png", "./icon-512.png", "./icon-maskable-192.png", "./icon-maskable-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -38,6 +38,10 @@ self.addEventListener("fetch", (event) => {
   // Network-first for same-origin assets too. app.js is part of the shell, so a
   // cache-first rule here served a stale bundle against fresh HTML after every
   // deploy until the cache name changed. Cache stays populated for offline.
+  // app.js also carries a ?v= stamp from app.html: a device still running an
+  // older cache-first worker never sees a network-first rule, and only a new
+  // URL forces it to refetch. Bump the stamp and CACHE together on any deploy
+  // that changes app.js.
   event.respondWith(
     fetch(request)
       .then((response) => {
