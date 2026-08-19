@@ -1064,6 +1064,17 @@ async function renderReceipts() {
         <div class="chev">&#8250;</div>
       </button>
       <div class="panel">
+        <h3>&#128247; Photograph a receipt</h3>
+        <p class="sub">Snap the paper. Ledger reads the vendor, date and total, then it queues like any other receipt.</p>
+        <div class="rowbtns" style="margin-top:12px">
+          <button class="btn primary" id="rcptshoot">Take photo</button>
+          <button class="btn ghost" id="rcptpick">Choose from library</button>
+        </div>
+        <input type="file" id="rcptcam" accept="image/*" capture="environment" hidden>
+        <input type="file" id="rcptlib" accept="image/*" hidden>
+        <p class="note" id="rcptcamnote" style="margin-top:8px"></p>
+      </div>
+      <div class="panel">
         <h3>&#128231; Email Receipt Radar</h3>
         <p class="sub">Ledger reads supplier receipts out of your inbox and turns them into expenses.</p>
         <div class="rowbtns" style="margin-top:12px;align-items:center">
@@ -1092,6 +1103,10 @@ async function renderReceipts() {
         </button>`).join("")}</div>`
         : `<div class="empty">${rq ? "No receipts match that search." : "No receipts found yet.<br>Run a scan, or forward one to your inbox."}</div>`}
     </div>`;
+    $("rcptshoot").onclick = () => $("rcptcam").click();
+    $("rcptpick").onclick = () => $("rcptlib").click();
+    $("rcptcam").onchange = (e) => captureReceipt(e.target.files?.[0]);
+    $("rcptlib").onchange = (e) => captureReceipt(e.target.files?.[0]);
     $("scannow").onclick = async (e) => {
       e.currentTarget.disabled = true; e.currentTarget.textContent = "Scanning…";
       try { await api("/gmail/scan", {}); toast("Scan complete"); renderReceipts(); }
@@ -1168,18 +1183,81 @@ async function batchPost(ready) {
   renderReceipts();
 }
 
-function receiptSheet(r) {
+// Camera lane. The phone shoots 4000px JPEGs; a receipt only needs enough
+// resolution to read the totals, and the edge function has to carry the image
+// as base64 — so downscale here rather than push megabytes over the wire.
+const RECEIPT_MAX_EDGE = 1600;
+
+function downscaleReceipt(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, RECEIPT_MAX_EDGE / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      const dataUrl = c.toDataURL("image/jpeg", 0.72);
+      const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+      base64 ? resolve(base64) : reject(new Error("Could not prepare that photo"));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That file isn't a readable image")); };
+    img.src = url;
+  });
+}
+
+async function captureReceipt(file) {
+  // Clear both inputs so re-picking the same photo still fires onchange.
+  const cam = $("rcptcam"), lib = $("rcptlib");
+  if (cam) cam.value = ""; if (lib) lib.value = "";
+  if (!file) return;
+  const note = $("rcptcamnote");
+  const shoot = $("rcptshoot"), pick = $("rcptpick");
+  const busy = (on) => { if (shoot) shoot.disabled = on; if (pick) pick.disabled = on; };
+  busy(true);
+  if (note) { note.className = "note"; note.textContent = "Reading the receipt…"; }
+  try {
+    const image = await downscaleReceipt(file);
+    const d = await api("/gmail/photo-receipt", { image, media_type: "image/jpeg" });
+    if (note) { note.className = "note ok"; note.textContent = "Receipt read — check the details."; }
+    await renderReceipts();
+    receiptSheet(d.receipt, d.suggested_category);
+  } catch (err) {
+    busy(false);
+    if (note) { note.className = "note err"; note.textContent = err.message; }
+    toast(err.message, "err");
+  }
+}
+
+async function receiptPhotoSheet(id) {
+  try {
+    const d = await get("/gmail/receipt-photo?id=" + encodeURIComponent(id));
+    sheet(`<h2>Receipt photo</h2>
+      <img src="${esc(d.url)}" alt="Photographed receipt"
+        style="width:100%;border-radius:14px;margin-top:10px;display:block">`);
+  } catch (err) { toast(err.message, "err"); }
+}
+
+function receiptSheet(r, suggestedCategory) {
   if (!r) return;
+  // A photo arrives uncategorised on purpose; pre-select Ledger's read so it is
+  // one tap to accept and still a deliberate choice, not an automatic one.
+  const picked = r.category || suggestedCategory || "";
   const opts = Object.entries(CATEGORIES).map(([group, items]) =>
-    `<optgroup label="${esc(group)}">${items.map((i) => `<option ${r.category === i ? "selected" : ""}>${esc(i)}</option>`).join("")}</optgroup>`).join("");
+    `<optgroup label="${esc(group)}">${items.map((i) => `<option ${picked === i ? "selected" : ""}>${esc(i)}</option>`).join("")}</optgroup>`).join("");
   sheet(`<h2>${esc(r.vendor || r.from_name || "Receipt")}</h2>
     <p class="sh-sub">${esc(r.subject || "")} · ${esc(dayLabel(r.received_at))}</p>
     ${r.summary ? `<p class="note">${esc(r.summary)}</p>` : ""}
+    ${r.image_path ? `<button class="btn ghost wide" style="margin-top:9px" id="rphoto">View photo</button>` : ""}
+    ${suggestedCategory && !r.category ? `<p class="note">Ledger read this as <b>${esc(suggestedCategory)}</b> — confirm or change it below.</p>` : ""}
     <label class="fld">AMOUNT</label>
     <input id="ramt" inputmode="decimal" value="${r.total ?? ""}" placeholder="0.00">
     <label class="fld">CATEGORY</label>
-    <select id="rcat"><option value="">Choose a category…</option><option ${r.category === "Personal" ? "selected" : ""}>Personal</option>${opts}</select>
-    <p class="note" id="racct" style="margin-top:7px">${r.category && r.category !== "Personal" ? "Suggested account · " + esc(suggestedAccount(r.category)) : ""}</p>
+    <select id="rcat"><option value="">Choose a category…</option><option ${picked === "Personal" ? "selected" : ""}>Personal</option>${opts}</select>
+    <p class="note" id="racct" style="margin-top:7px">${picked && picked !== "Personal" ? "Suggested account · " + esc(suggestedAccount(picked)) : ""}</p>
     <div class="rowbtns" style="margin-top:15px">
       <button class="btn ghost" id="rdismiss">Dismiss</button>
       <button class="btn primary" id="rsave">Save</button>
@@ -1189,6 +1267,8 @@ function receiptSheet(r) {
     <div class="note" id="rnote" style="margin-top:9px"></div>`, (sh) => {
     const note = sh.querySelector("#rnote");
     const acct = sh.querySelector("#racct");
+    const photo = sh.querySelector("#rphoto");
+    if (photo) photo.onclick = () => receiptPhotoSheet(r.id);
     sh.querySelector("#rcat").onchange = (e) => {
       const c = e.target.value;
       acct.textContent = c && c !== "Personal" ? "Suggested account · " + suggestedAccount(c) : "";
