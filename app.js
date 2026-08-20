@@ -337,11 +337,104 @@ async function loadHomeNext() {
   } catch { slot.innerHTML = ""; }
 }
 
-// Mirrors the iOS "NEEDS ATTENTION" queue: profit exceptions, receipt review, schedule.
+/* ---------------- cost review queue ----------------
+   One question per VENDOR, asked once — never a nightly roll-call of the day's
+   invoices. A vendor nobody has classified has its cost parked in 'other' and
+   left off the board; unanswered, that exclusion is silent and the profit
+   number reads high. Answering once reclassifies every invoice that supplier
+   has ever sent, so this queue burns down to nothing after the first week. */
+const COST_CLASS_LABELS = [
+  ["tires_parts", "Goods I resell", "Stock, parts, materials that go out the door on a job"],
+  ["shop_supplies", "Shop supplies", "Consumables used up doing the work"],
+  ["software", "Software", "Subscriptions and tools"],
+  ["advertising", "Advertising", "Marketing and job ads"],
+  ["other", "Something else", "Captured, but kept off the cost board"],
+];
+const EXCEPTION_LABELS = {
+  no_doc_number: "No invoice number found — can't be matched to the books",
+  no_amount: "No total could be read off this document",
+};
+
+async function openCostReview() {
+  let review = S.review;
+  const render = () => {
+    const vendor = (review.vendors || [])[0];
+    const exceptions = review.exceptions || [];
+    if (!vendor && !exceptions.length) {
+      sheet(`<h2>Nothing to review</h2>
+        <p class="sh-sub">Every supplier the app has seen is classified.</p>`);
+      return;
+    }
+
+    if (vendor) {
+      // Amount is shown but never pre-selects a class. A default here would be
+      // a guess wearing the costume of an answer, which is the exact thing this
+      // queue exists to remove.
+      sheet(`<h2>${esc(vendor.vendor)}</h2>
+        <p class="sh-sub">${vendor.invoice_count} invoice${vendor.invoice_count === 1 ? "" : "s"}
+          · latest ${money(vendor.recent_amount)} · first seen ${esc(vendor.first_seen)}</p>
+        <div class="note" style="margin-bottom:12px">${esc(vendor.sample_subject || vendor.sample_doc_number || "")}</div>
+        <p style="font-weight:600;margin:0 0 8px">What do you buy here?</p>
+        ${COST_CLASS_LABELS.map(([key, label, hint]) => `
+          <button class="attnrow" data-cc="${key}" style="width:100%;margin-bottom:8px">
+            <span class="m"><b>${esc(label)}</b><span>${esc(hint)}</span></span>
+            <span class="chev">&#8250;</span>
+          </button>`).join("")}
+        <label class="note" style="display:flex;gap:9px;align-items:center;margin-top:6px">
+          <input type="checkbox" id="onacct">
+          <span>I pay this vendor later on a statement (not at the till)</span>
+        </label>
+        <p class="sh-sub" style="margin-top:12px">${review.vendor_count} vendor${review.vendor_count === 1 ? "" : "s"} left
+          · answered once, applied to every invoice they've sent</p>`, (sh) => {
+        on("[data-cc]", "click", async (e) => {
+          const costClass = e.currentTarget.dataset.cc;
+          const onAccount = Boolean(sh.querySelector("#onacct")?.checked);
+          e.currentTarget.disabled = true;
+          try {
+            const d = await api("/profit/classify-vendor", {
+              vendor_key: vendor.vendor_key, cost_class: costClass, on_account: onAccount,
+            });
+            review = d.review; S.review = d.review; S.profit = null;
+            toast(`${vendor.vendor} classified — ${d.reclassified} invoice${d.reclassified === 1 ? "" : "s"} updated`);
+            render(); loadHomeAttention();
+          } catch (err) { toast(err.message, "err"); e.currentTarget.disabled = false; }
+        }, sh);
+      });
+      return;
+    }
+
+    sheet(`<h2>Flagged invoices</h2>
+      <p class="sh-sub">Costs the app could not file on its own. Dismiss what doesn't matter.</p>
+      ${exceptions.map((x) => `<div class="note" style="margin-bottom:9px">
+          <b>${esc(x.vendor || "(unknown vendor)")}</b> ${x.amount ? "· " + money(x.amount) : ""} ${x.date ? "· " + esc(x.date) : ""}
+          <div style="margin:4px 0 8px">${esc(EXCEPTION_LABELS[x.reason] || x.reason)}</div>
+          <div style="opacity:.7;font-size:12px">${esc(x.subject || "")}</div>
+          <button class="btn ghost" data-dis="${x.id}" style="margin-top:9px">Dismiss</button>
+        </div>`).join("")}`, (sh) => {
+      on("[data-dis]", "click", async (e) => {
+        e.currentTarget.disabled = true;
+        try {
+          const d = await api("/profit/dismiss-exception", { id: e.currentTarget.dataset.dis });
+          review = d.review; S.review = d.review; render(); loadHomeAttention();
+        } catch (err) { toast(err.message, "err"); e.currentTarget.disabled = false; }
+      }, sh);
+    });
+  };
+
+  try {
+    if (!review) { review = await get("/profit/review"); S.review = review; }
+    render();
+  } catch (e) { toast(e.message, "err"); }
+}
+
+// Mirrors the iOS "NEEDS ATTENTION" queue: cost review, profit exceptions, receipt review, schedule.
 async function loadHomeAttention() {
   const slot = $("homeattn"); if (!slot) return;
   const k = S.qbo?.qbo?.kpis || {};
   const costs = Number(k.missing_cost_count) || 0;
+  let review = S.review;
+  try { if (!review) { review = await get("/profit/review"); S.review = review; } }
+  catch { review = null; /* QuickBooks not connected — the row simply stays hidden. */ }
   let receipts = 0, appts = 0;
   try {
     if (!S.receipts) { const d = await get("/gmail/receipts"); S.receipts = d.receipts || []; }
@@ -355,12 +448,21 @@ async function loadHomeAttention() {
       <span class="ic">${icon}</span>
       <span class="m"><b>${esc(title)}</b><span>${esc(detail)}</span></span>
       <span class="chev">&#8250;</span></button>`;
+  // Only shown when there is something to answer: an empty queue is not a chore.
+  const reviewRow = review?.open_count
+    ? `<button class="attnrow amber" data-costreview="1">
+         <span class="ic">&#127991;</span>
+         <span class="m"><b>Cost review</b><span>${review.vendor_count} vendor${review.vendor_count === 1 ? "" : "s"} to classify${review.exception_count ? ` · ${review.exception_count} invoice${review.exception_count === 1 ? "" : "s"} flagged` : ""}</span></span>
+         <span class="chev">&#8250;</span></button>`
+    : "";
   slot.innerHTML = `<div class="attn"><div class="eyebrow">Needs attention</div>
+    ${reviewRow}
     ${row("orange", "finance", "&#128269;", "Profit exceptions", `${costs} cost${costs === 1 ? "" : "s"} require verification`)}
     ${row("cyan", "receipts", "&#128247;", "Receipt review", `${receipts} receipt draft${receipts === 1 ? "" : "s"} waiting`)}
     ${row("purple", "calendar", "&#128197;", "Schedule", `${appts} upcoming appointment${appts === 1 ? "" : "s"}`)}
   </div>`;
   on("[data-attn]", "click", (e) => setTab(e.currentTarget.dataset.attn), slot);
+  on("[data-costreview]", "click", () => openCostReview(), slot);
 }
 
 async function loadHomeMail() {
