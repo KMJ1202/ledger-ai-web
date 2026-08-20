@@ -434,7 +434,7 @@ async function loadHomeAttention() {
   const costs = Number(k.missing_cost_count) || 0;
   let review = S.review;
   try { if (!review) { review = await get("/profit/review"); S.review = review; } }
-  catch { review = null; /* QuickBooks not connected — the row simply stays hidden. */ }
+  catch { review = null; /* Signed out or offline — the row simply stays hidden. */ }
   let receipts = 0, appts = 0;
   try {
     if (!S.receipts) { const d = await get("/gmail/receipts"); S.receipts = d.receipts || []; }
