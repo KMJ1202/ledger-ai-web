@@ -1018,16 +1018,61 @@ async function openCostList(onlyFlagged) {
 
 /** Re-date one cost. The arrival date is kept visible the whole time: the
  *  question is which of two real days this belongs to, not free data entry. */
+/**
+ * The document behind a cost, rendered into the re-date sheet.
+ *
+ * The date question is really a question about the invoice — which job these
+ * tires were for — so the answer loads with the screen instead of one tap
+ * further in. Fetched after the sheet paints so the picker is never held up by
+ * a network call.
+ */
+async function fillCostReceipt(scope, costId) {
+  const slot = scope.querySelector("#cdReceipt");
+  if (!slot) return;
+  try {
+    const { receipt } = await get(`/profit/cost-receipt?id=${encodeURIComponent(costId)}`);
+    const doc = receipt.document;
+    if (!doc) {
+      slot.innerHTML = `<p class="note">${esc(receipt.note || "Typed in by hand — there is no invoice behind this one.")}</p>`;
+      return;
+    }
+    const bits = [];
+    if (doc.subject) bits.push(`<p style="font-weight:600;margin:0 0 4px">${esc(doc.subject)}</p>`);
+    if (doc.summary) bits.push(`<p class="note" style="margin:0 0 6px;white-space:pre-wrap">${esc(doc.summary)}</p>`);
+    const from = [doc.from_name, doc.from_email].filter(Boolean).join(" · ");
+    if (from) bits.push(`<p class="note" style="margin:0">From ${esc(from)}</p>`);
+    if (doc.received_at) bits.push(`<p class="note" style="margin:0">Landed ${esc(String(doc.received_at).slice(0, 10))}</p>`);
+    bits.push(`<p class="note" style="margin:6px 0 0">${money(receipt.subtotal)} counts as cost · ${money(receipt.gst)} GST · ${money(receipt.total)} invoice total</p>`);
+    if (doc.image_url) {
+      // The signed link expires in five minutes — a supplier invoice is a
+      // financial record, so the view dies with the sheet.
+      bits.push(`<img src="${esc(doc.image_url)}" alt="The receipt" style="width:100%;border-radius:11px;margin-top:9px">`);
+    }
+    if (doc.gmail_url) {
+      bits.push(`<p style="margin:9px 0 0"><a href="${esc(doc.gmail_url)}" target="_blank" rel="noopener">Open the original email</a></p>`);
+    }
+    slot.innerHTML = `<details${doc.image_url ? "" : " open"}>
+      <summary style="cursor:pointer;font-weight:600">View the full receipt</summary>
+      <div style="margin-top:8px">${bits.join("")}</div>
+    </details>`;
+  } catch (err) {
+    slot.innerHTML = `<p class="note">Couldn't open the receipt: ${esc(err.message)}</p>`;
+  }
+}
+
 function openCostDate(x, cameFromList) {
   const back = () => (cameFromList === undefined ? closeSheet() : openCostList(cameFromList));
   if (x.reconciled) {
     sheet(`<h2>${esc(x.vendor)}</h2>
       <p class="sh-sub">${money(x.amount)} · ${esc(x.doc_number)}</p>
-      <div class="note">This one is already posted in QuickBooks, so the books own its date now. Change it there and the board follows on the next sweep.</div>`);
+      <div class="note" id="cdReceipt">Opening the receipt…</div>
+      <div class="note" style="margin-top:9px">This one is already posted in QuickBooks, so the books own its date now. Change it there and the board follows on the next sweep.</div>`,
+      (sh) => fillCostReceipt(sh, x.id));
     return;
   }
   sheet(`<h2>${esc(x.vendor)}</h2>
     <p class="sh-sub">${money(x.amount)}${x.doc_number ? " · " + esc(x.doc_number) : ""} · arrived ${esc(x.received_date)}</p>
+    <div class="note" id="cdReceipt" style="margin-top:10px">Opening the receipt…</div>
     <p style="font-weight:600;margin:14px 0 4px">What day was this work actually for?</p>
     <p class="note" style="margin:0 0 8px">Counted on ${esc(x.date)} right now.</p>
     <input id="cdDate" class="cmpinput" type="date" value="${esc(x.date)}">
@@ -1036,6 +1081,7 @@ function openCostDate(x, cameFromList) {
     ${x.manual ? `<button class="btn ghost wide" style="margin-top:8px" id="cdDel">Delete this cost</button>` : ""}
     <p class="note" style="margin-top:9px">The board is recalculated for both days, so the profit on each one is right the moment you tap.</p>
     <div class="note" id="cdOut" style="margin-top:6px"></div>`, (sh) => {
+    fillCostReceipt(sh, x.id);
     const out = sh.querySelector("#cdOut");
     const send = async (button, body, done) => {
       button.disabled = true; out.className = "note"; out.textContent = "Updating the board…";
