@@ -1072,6 +1072,25 @@ async function openCostList(onlyFlagged) {
  * further in. Fetched after the sheet paints so the picker is never held up by
  * a network call.
  */
+// A signed receipt link is only good for five minutes, so a sheet left open on
+// the counter renders a broken frame with no explanation. Ask the server for a
+// fresh link on the failure itself, once — a second failure is a real problem.
+function remintOnExpiry(img, refetch) {
+  if (!img) return;
+  let retried = false;
+  img.onerror = async () => {
+    if (retried) {
+      const p = document.createElement("p");
+      p.className = "note err";
+      p.textContent = "Couldn't load the receipt image — close this and open it again.";
+      img.replaceWith(p);
+      return;
+    }
+    retried = true;
+    try { const fresh = await refetch(); if (fresh) img.src = fresh; } catch { /* the next error swaps in the message */ }
+  };
+}
+
 async function fillCostReceipt(scope, costId) {
   const slot = scope.querySelector("#cdReceipt");
   if (!slot) return;
@@ -1101,6 +1120,8 @@ async function fillCostReceipt(scope, costId) {
       <summary style="cursor:pointer;font-weight:600">View the full receipt</summary>
       <div style="margin-top:8px">${bits.join("")}</div>
     </details>`;
+    remintOnExpiry(slot.querySelector("img"), async () =>
+      (await get(`/profit/cost-receipt?id=${encodeURIComponent(costId)}`)).receipt?.document?.image_url);
   } catch (err) {
     slot.innerHTML = `<p class="note">Couldn't open the receipt: ${esc(err.message)}</p>`;
   }
@@ -1186,6 +1207,8 @@ function openAddCost() {
       if (!payload.vendor) { out.className = "note err"; out.textContent = "Who was it paid to?"; return; }
       if (!(payload.amount > 0)) { out.className = "note err"; out.textContent = "Enter an amount greater than zero."; return; }
       if (payload.date > localDay()) { out.className = "note err"; out.textContent = "That date hasn't happened yet — pick today or earlier."; return; }
+      if (payload.gst < 0) { out.className = "note err"; out.textContent = "GST can't be negative — enter the GST portion of what you paid, or leave it blank."; return; }
+      if (payload.gst > payload.amount) { out.className = "note err"; out.textContent = "GST can't be more than the total paid."; return; }
       e.currentTarget.disabled = true; out.className = "note"; out.textContent = "Saving…";
       try {
         applyBoard(await api("/profit/add-cost", payload));
@@ -1663,7 +1686,9 @@ async function receiptPhotoSheet(id) {
     const d = await get("/gmail/receipt-photo?id=" + encodeURIComponent(id));
     sheet(`<h2>Receipt photo</h2>
       <img src="${esc(d.url)}" alt="Photographed receipt"
-        style="width:100%;border-radius:14px;margin-top:10px;display:block">`);
+        style="width:100%;border-radius:14px;margin-top:10px;display:block">`, (sh) =>
+      remintOnExpiry(sh.querySelector("img"), async () =>
+        (await get("/gmail/receipt-photo?id=" + encodeURIComponent(id))).url));
   } catch (err) { toast(err.message, "err"); }
 }
 
@@ -2345,6 +2370,8 @@ function todoSheet(t) {
 /* ---------------- CHAT ---------------- */
 function openChat() {
   $("chatwrap").classList.add("open");
+  $("box").value = ""; // callers that seed a prompt assign it straight after this
+
   setTimeout(() => $("box").focus(), 60);
   restoreChatHistory();
 }
@@ -2441,8 +2468,18 @@ async function billingCheck() {
   } catch {}
 }
 
+// Matches MAX_MESSAGE_CHARS in the ledger-ai function — a long paste used to
+// travel all the way to the server just to come back rejected.
+const MAX_CHAT_CHARS = 4000;
+
 async function send() {
   const box = $("box"); const text = box.value.trim(); if (!text) return;
+  if (text.length > MAX_CHAT_CHARS) {
+    openChat();
+    box.value = text; // openChat clears the box — put the draft back so it can be trimmed, not retyped
+    toast(`That's ${text.length.toLocaleString()} characters — Ledger reads up to ${MAX_CHAT_CHARS.toLocaleString()}. Trim it or send it in two messages.`, "err");
+    return;
+  }
   box.value = ""; box.style.height = "auto";
   openChat();
   bubble("msg me", esc(text));
