@@ -34,6 +34,13 @@ const money0 = (n) => (Number(n) || 0).toLocaleString(undefined, { style: "curre
 const $ = (id) => document.getElementById(id);
 const on = (sel, ev, fn, scope) => (scope || document).querySelectorAll(sel).forEach((n) => n.addEventListener(ev, fn));
 
+// The business day the owner is standing in, not UTC's — every "today" fallback
+// and date-only guard in this file should read off this, never toISOString().
+function localDay(d) {
+  const dt = d instanceof Date ? d : new Date();
+  return dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
+}
+
 function dayLabel(iso) {
   if (!iso) return "";
   const d = new Date(iso.length === 10 ? iso + "T12:00:00" : iso);
@@ -1075,7 +1082,7 @@ function openCostDate(x, cameFromList) {
     <div class="note" id="cdReceipt" style="margin-top:10px">Opening the receipt…</div>
     <p style="font-weight:600;margin:14px 0 4px">What day was this work actually for?</p>
     <p class="note" style="margin:0 0 8px">Counted on ${esc(x.date)} right now.</p>
-    <input id="cdDate" class="cmpinput" type="date" value="${esc(x.date)}">
+    <input id="cdDate" class="cmpinput" type="date" value="${esc(x.date)}" max="${localDay()}">
     <button class="btn em wide" style="margin-top:11px" id="cdGo">Move it to that day</button>
     ${x.redated ? `<button class="btn ghost wide" style="margin-top:8px" id="cdReset">Put it back on ${esc(x.received_date)}</button>` : ""}
     ${x.manual ? `<button class="btn ghost wide" style="margin-top:8px" id="cdDel">Delete this cost</button>` : ""}
@@ -1091,6 +1098,7 @@ function openCostDate(x, cameFromList) {
     sh.querySelector("#cdGo").onclick = (e) => {
       const date = sh.querySelector("#cdDate").value;
       if (!date) { out.className = "note err"; out.textContent = "Pick a day first."; return; }
+      if (date > localDay()) { out.className = "note err"; out.textContent = "That date hasn't happened yet — pick today or earlier."; return; }
       send(e.currentTarget, { path: "/profit/set-cost-date", payload: { id: x.id, service_date: date } },
         `Moved to ${date}`);
     };
@@ -1105,7 +1113,7 @@ function openCostDate(x, cameFromList) {
 }
 
 function openAddCost() {
-  const today = S.profit?.today_date || new Date().toISOString().slice(0, 10);
+  const today = S.profit?.today_date || localDay();
   sheet(`<h2>Add a cost</h2>
     <p class="sh-sub">For spend that never arrives by email — fuel, meals, cash, personal card.</p>
     <label class="fld">PAID TO</label>
@@ -1137,6 +1145,7 @@ function openAddCost() {
       };
       if (!payload.vendor) { out.className = "note err"; out.textContent = "Who was it paid to?"; return; }
       if (!(payload.amount > 0)) { out.className = "note err"; out.textContent = "Enter an amount greater than zero."; return; }
+      if (payload.date > localDay()) { out.className = "note err"; out.textContent = "That date hasn't happened yet — pick today or earlier."; return; }
       e.currentTarget.disabled = true; out.className = "note"; out.textContent = "Saving…";
       try {
         applyBoard(await api("/profit/add-cost", payload));
