@@ -2825,7 +2825,8 @@ async function supportSheet() {
 function loginView(sent) {
   root.innerHTML = `<div class="login"><div class="mark">L</div><h2>Ledger AI</h2>
     <p>${sent ? "Check your email — tap the sign-in link and you'll land right back here." : "Your business copilot. Sign in with your work email."}</p>
-    ${sent ? "" : '<input id="email" type="email" placeholder="you@business.com" autocomplete="email"><button class="btn" id="go">Send sign-in link</button>'}</div>`;
+    ${sent ? "" : '<input id="email" type="email" placeholder="you@business.com" autocomplete="email"><button class="btn" id="go">Send sign-in link</button>'}
+    <p style="margin-top:18px;font-size:12.5px"><a href="privacy.html" style="color:var(--dim)">Privacy</a> &middot; <a href="support.html" style="color:var(--dim)">Support</a></p></div>`;
   if (sent) return;
   const go = async () => {
     const email = $("email").value.trim(); if (!email) return;
