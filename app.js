@@ -1407,7 +1407,7 @@ function bookingSheet(dayISO, editing) {
       <textarea id="bkNotes" class="cmpinput" rows="4" placeholder="Pricing, order status and job notes"></textarea>
     </div>`}
     <button class="btn primary wide" style="margin-top:13px" id="bkGo">${editing ? "Save changes" : "Review &amp; Add Booking"}</button>
-    <p class="note" style="margin-top:9px">The calendar is checked live for conflicts and booking hours before anything is created.</p>
+    <p class="note" style="margin-top:9px">The calendar is checked live for conflicts before anything is created.</p>
     <div class="note" id="bkNote" style="margin-top:6px"></div>`, (sh) => {
     const note = sh.querySelector("#bkNote");
     const val = (id) => (sh.querySelector("#" + id)?.value || "").trim();
@@ -2012,8 +2012,25 @@ function newCustomerSheet(prefill, onCreated) {
         // A duplicate check comes back as a 409 whose body carries the matches.
         const matches = e.matches || [];
         if (/already|duplicate|match/i.test(e.message) || matches.length) {
+          // Show who it collided with — name, email and QuickBooks id — so the
+          // choice is "that's them" vs "different person, same name", not a guess.
+          const rows = matches.map((m) => `<div class="duprow" data-use="${esc(m.id)}">
+              <div><b>${esc(m.name || "(no name)")}</b>${m.email ? `<br><small>${esc(m.email)}</small>` : ""}
+                <br><small>QuickBooks #${esc(m.id)}</small></div>
+              <button class="btn ghost" data-useid="${esc(m.id)}">Use existing</button>
+            </div>`).join("");
           dup.innerHTML = `<div class="note err" style="margin-top:10px">${esc(e.message)}</div>
+            ${rows}
             <button class="btn ghost wide" style="margin-top:8px" id="ncForce">Create anyway</button>`;
+          dup.querySelectorAll("[data-useid]").forEach((b) => {
+            b.onclick = async () => {
+              const m = matches.find((x) => String(x.id) === b.dataset.useid);
+              const known = (S.qbo?.qbo?.customers || []).find((c) => String(c.id) === b.dataset.useid);
+              const customer = known || { id: m.id, name: m.name, email: m.email };
+              if (onCreated) { await onCreated(customer); closeSheet(); }
+              else { closeSheet(); customerSheet(customer); }
+            };
+          });
           dup.querySelector("#ncForce").onclick = (ev) => submit(true, ev.currentTarget);
           note.textContent = "";
         } else { note.className = "note err"; note.textContent = e.message; }
