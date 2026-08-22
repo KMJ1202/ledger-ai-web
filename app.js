@@ -414,7 +414,8 @@ async function openCostReview() {
         on("[data-cc]", "click", async (e) => {
           const costClass = e.currentTarget.dataset.cc;
           const onAccount = Boolean(sh.querySelector("#onacct")?.checked);
-          e.currentTarget.disabled = true;
+          const group = sh.querySelectorAll("[data-cc]");
+          group.forEach((b) => b.disabled = true);
           try {
             const d = await api("/profit/classify-vendor", {
               vendor_key: vendor.vendor_key, cost_class: costClass, on_account: onAccount,
@@ -422,7 +423,7 @@ async function openCostReview() {
             review = d.review; S.review = d.review; S.profitStale = true;
             toast(`${vendor.vendor} classified — ${d.reclassified} invoice${d.reclassified === 1 ? "" : "s"} updated`);
             render(); loadHomeAttention();
-          } catch (err) { toast(err.message, "err"); e.currentTarget.disabled = false; }
+          } catch (err) { toast(err.message, "err"); group.forEach((b) => b.disabled = false); }
         }, sh);
       });
       return;
@@ -746,9 +747,10 @@ async function composerSheet() {
       <div class="row"><button class="btn cancel" id="cmpcancel">Cancel</button><button class="btn confirm" id="cmpconfirm">Confirm</button></div>
       <div class="note" id="cmpnote" style="margin-top:9px"></div></div>`;
     const note = body().querySelector("#cmpnote");
+    const draftBtns = () => [body().querySelector("#cmpconfirm"), body().querySelector("#cmpcancel")].filter(Boolean);
     body().querySelector("#cmppr").onchange = (e) => localStorage.setItem("ledger.printAfterPosting", e.target.checked ? "1" : "0");
-    body().querySelector("#cmpconfirm").onclick = async (ev) => {
-      ev.currentTarget.disabled = true;
+    body().querySelector("#cmpconfirm").onclick = async () => {
+      draftBtns().forEach((b) => b.disabled = true);
       const sendEmail = body().querySelector("#cmpem")?.checked ?? false;
       const wantPrint = body().querySelector("#cmppr")?.checked ?? false;
       try {
@@ -759,10 +761,10 @@ async function composerSheet() {
         if (wantPrint && (r.qbo_invoice_id || r.id)) printPdfById(r.qbo_invoice_id || r.id, r.doc_number, "invoice");
         S.qboStale = true;
         setTimeout(() => { closeSheet(); loadInvoices(); }, 1400);
-      } catch (e) { ev.currentTarget.disabled = false; note.className = "note err"; note.textContent = e.message; }
+      } catch (e) { draftBtns().forEach((b) => b.disabled = false); note.className = "note err"; note.textContent = postedMessage(e); }
     };
-    body().querySelector("#cmpcancel").onclick = async (ev) => {
-      ev.currentTarget.disabled = true;
+    body().querySelector("#cmpcancel").onclick = async () => {
+      draftBtns().forEach((b) => b.disabled = true);
       try { await api("/quickbooks-invoice/cancel", { draft_id: d.draft_id }); } catch {}
       C.draft = null; draw();
     };
@@ -1127,10 +1129,11 @@ function openCostDate(x, cameFromList) {
     <div class="note" id="cdOut" style="margin-top:6px"></div>`, (sh) => {
     fillCostReceipt(sh, x.id);
     const out = sh.querySelector("#cdOut");
+    const group = () => [sh.querySelector("#cdGo"), sh.querySelector("#cdReset"), sh.querySelector("#cdDel")].filter(Boolean);
     const send = async (button, body, done) => {
-      button.disabled = true; out.className = "note"; out.textContent = "Updating the board…";
+      group().forEach((b) => b.disabled = true); out.className = "note"; out.textContent = "Updating the board…";
       try { applyBoard(await api(body.path, body.payload)); toast(done); back(); }
-      catch (err) { out.className = "note err"; out.textContent = err.message; button.disabled = false; }
+      catch (err) { out.className = "note err"; out.textContent = err.message; group().forEach((b) => b.disabled = false); }
     };
     sh.querySelector("#cdGo").onclick = (e) => {
       const date = sh.querySelector("#cdDate").value;
@@ -2457,6 +2460,14 @@ function cardDone(card, msg) {
   card.appendChild(s); scrollChat();
 }
 
+// The idempotency backstop on invoice/estimate confirm returns the literal
+// string "already_posted" plus the doc_number it landed under — show that
+// number, not the raw server token.
+function postedMessage(e) {
+  const doc = e.data?.doc_number;
+  return doc && /already_posted/i.test(e.message || "") ? `Already posted as #${doc}.` : e.message;
+}
+
 function draftCard(d, label, confirmPath, cancelPath) {
   const lines = (d.lines || []).map((l) => `<tr><td>${esc(l.description || l.item_name)} × ${l.quantity}</td><td>${money(l.amount)}</td></tr>`).join("");
   const card = bubble("card", `<h3>${label}</h3><div class="cust">${esc(d.customer)}</div>
@@ -2464,9 +2475,10 @@ function draftCard(d, label, confirmPath, cancelPath) {
     ${d.customer_email ? `<label class="emailrow"><input type="checkbox" class="em" checked> Email to ${esc(d.customer_email)}</label>` : ""}
     <label class="emailrow"><input type="checkbox" class="pr" ${localStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
     <div class="row"><button class="btn cancel">Cancel</button><button class="btn confirm">Confirm</button></div>`);
+  const cardBtns = () => [card.querySelector(".confirm"), card.querySelector(".cancel")].filter(Boolean);
   card.querySelector(".pr").onchange = (e) => localStorage.setItem("ledger.printAfterPosting", e.target.checked ? "1" : "0");
-  card.querySelector(".confirm").onclick = async (ev) => {
-    ev.target.disabled = true;
+  card.querySelector(".confirm").onclick = async () => {
+    cardBtns().forEach((b) => b.disabled = true);
     try {
       const sendEmail = card.querySelector(".em")?.checked ?? false;
       const wantPrint = card.querySelector(".pr")?.checked ?? false;
@@ -2475,12 +2487,12 @@ function draftCard(d, label, confirmPath, cancelPath) {
       if (wantPrint && (r.qbo_invoice_id || r.id)) {
         printPdfById(r.qbo_invoice_id || r.id, r.doc_number, label.startsWith("ESTIMATE") ? "estimate" : "invoice");
       }
-    } catch (e) { ev.target.disabled = false; toast(e.message, "err"); }
+    } catch (e) { cardBtns().forEach((b) => b.disabled = false); toast(postedMessage(e), "err"); }
   };
-  card.querySelector(".cancel").onclick = async (ev) => {
-    ev.target.disabled = true;
+  card.querySelector(".cancel").onclick = async () => {
+    cardBtns().forEach((b) => b.disabled = true);
     try { await api(cancelPath, { draft_id: d.draft_id }); cardDone(card, "Draft cancelled"); }
-    catch (e) { ev.target.disabled = false; toast(e.message, "err"); }
+    catch (e) { cardBtns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
   };
 }
 
@@ -2490,17 +2502,18 @@ function reminderCard(d) {
     <table>${rows}<tr><td class="total">Total due</td><td class="total">${money(d.total_due)}</td></tr></table>
     <div class="emailrow">QuickBooks will email these invoices with a pay link to ${esc(d.customer_email)}</div>
     <div class="row"><button class="btn cancel">Cancel</button><button class="btn confirm">Send reminder</button></div>`);
-  card.querySelector(".confirm").onclick = async (ev) => {
-    ev.target.disabled = true;
+  const btns = () => [card.querySelector(".confirm"), card.querySelector(".cancel")].filter(Boolean);
+  card.querySelector(".confirm").onclick = async () => {
+    btns().forEach((b) => b.disabled = true);
     try {
       const r = await api("/quickbooks-invoice/reminder-confirm", { draft_id: d.draft_id });
       cardDone(card, "✅ Reminder emailed to " + (r.emailed_to || d.customer_email) + ((r.failed || []).length ? " · couldn't send: " + r.failed.join(", ") : ""));
-    } catch (e) { ev.target.disabled = false; toast(e.message, "err"); }
+    } catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
   };
-  card.querySelector(".cancel").onclick = async (ev) => {
-    ev.target.disabled = true;
+  card.querySelector(".cancel").onclick = async () => {
+    btns().forEach((b) => b.disabled = true);
     try { await api("/quickbooks-invoice/reminder-cancel", { draft_id: d.draft_id }); cardDone(card, "Cancelled — nothing was sent"); }
-    catch (e) { ev.target.disabled = false; toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
   };
 }
 
@@ -2510,15 +2523,16 @@ function bookingCard(d) {
     <tr><td>Ends</td><td>${esc(new Date(d.end).toLocaleString())}</td></tr>
     ${d.location ? `<tr><td>Where</td><td>${esc(d.location)}</td></tr>` : ""}</table>
     <div class="row"><button class="btn cancel">Cancel</button><button class="btn confirm">Book it</button></div>`);
-  card.querySelector(".confirm").onclick = async (ev) => {
-    ev.target.disabled = true;
+  const btns = () => [card.querySelector(".confirm"), card.querySelector(".cancel")].filter(Boolean);
+  card.querySelector(".confirm").onclick = async () => {
+    btns().forEach((b) => b.disabled = true);
     try { await api("/google-calendar/booking-confirm", { draft_id: d.draft_id }); cardDone(card, "✅ Booked"); S.cal = null; }
-    catch (e) { ev.target.disabled = false; toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
   };
-  card.querySelector(".cancel").onclick = async (ev) => {
-    ev.target.disabled = true;
+  card.querySelector(".cancel").onclick = async () => {
+    btns().forEach((b) => b.disabled = true);
     try { await api("/google-calendar/booking-cancel", { draft_id: d.draft_id }); cardDone(card, "Draft cancelled"); }
-    catch (e) { ev.target.disabled = false; toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
   };
 }
 
@@ -2527,15 +2541,16 @@ function emailDraftCard(d) {
     <table><tr><td>Subject</td><td>${esc(d.subject)}</td></tr></table>
     <div class="emailrow" style="display:block;white-space:pre-wrap;color:var(--text);max-height:190px;overflow:auto">${esc(d.body)}</div>
     <div class="row"><button class="btn cancel">Cancel</button><button class="btn confirm">Send</button></div>`);
-  card.querySelector(".confirm").onclick = async (ev) => {
-    ev.target.disabled = true;
+  const btns = () => [card.querySelector(".confirm"), card.querySelector(".cancel")].filter(Boolean);
+  card.querySelector(".confirm").onclick = async () => {
+    btns().forEach((b) => b.disabled = true);
     try { const r = await api("/gmail/email-send", { draft_id: d.draft_id }); cardDone(card, "✅ Sent to " + (r.to || d.to)); }
-    catch (e) { ev.target.disabled = false; toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
   };
-  card.querySelector(".cancel").onclick = async (ev) => {
-    ev.target.disabled = true;
+  card.querySelector(".cancel").onclick = async () => {
+    btns().forEach((b) => b.disabled = true);
     try { await api("/gmail/email-cancel", { draft_id: d.draft_id }); cardDone(card, "Draft cancelled — nothing was sent"); }
-    catch (e) { ev.target.disabled = false; toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
   };
 }
 
