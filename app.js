@@ -618,7 +618,7 @@ function salesIntel(invoices, k) {
   const days = [];
   for (let d = 13; d >= 0; d--) {
     const t = new Date(now); t.setDate(now.getDate() - d);
-    const key = t.toISOString().slice(0, 10);
+    const key = localDay(t);
     days.push({ key, total: invoices.filter((i) => (i.date || "").slice(0, 10) === key)
       .reduce((sum, i) => sum + (Number(i.total) || 0), 0) });
   }
@@ -886,7 +886,7 @@ function drawProfit() {
   slot.innerHTML = `
     <div class="hero">
       <div class="headline"><span class="eyebrow">Today's profit</span>
-        <span class="when">${esc(today.date || new Date().toISOString().slice(0, 10))}</span></div>
+        <span class="when">${esc(today.date || localDay())}</span></div>
       <div class="big" style="color:${(today.net_profit || 0) >= 0 ? "var(--emerald)" : "var(--red)"}">${money(today.net_profit)}</div>
       <div class="trio">
         <div><small>Income</small><b style="color:var(--cyan)">${money0(income)}</b></div>
@@ -1162,7 +1162,7 @@ function openAddCost() {
 const CAL = { sel: null, month: null, q: "" };
 const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-const evDayKey = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : dayKey(d); };
+const evDayKey = (iso) => { const d = new Date(iso && iso.length === 10 ? iso + "T12:00:00" : iso); return isNaN(d) ? "" : dayKey(d); };
 
 async function renderCalendar() {
   skeleton(4);
@@ -1741,7 +1741,7 @@ async function loadDirectory() {
       if (!lastPaid[i.customer_id] || i.date > lastPaid[i.customer_id]) lastPaid[i.customer_id] = i.date;
     });
     // iOS PremiumCustomerCard turns the balance red when any invoice is past its due date.
-    const todayISO = new Date().toISOString().slice(0, 10);
+    const todayISO = localDay();
     const overdueIds = new Set(invoices
       .filter((i) => Number(i.balance) > 0 && i.due_date && i.due_date < todayISO)
       .map((i) => i.customer_id));
@@ -1975,7 +1975,7 @@ function customerSheet(c) {
   if (!c) return;
   const all = (S.qbo?.qbo?.invoices || []).filter((i) => i.customer_id === c.id)
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   const open = all.filter((i) => Number(i.balance) > 0);
   const paid = all.filter((i) => Number(i.balance) === 0);
   const overdue = open.filter((i) => i.due_date && i.due_date < today);
