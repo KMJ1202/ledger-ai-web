@@ -900,6 +900,7 @@ function drawProfit() {
       <p class="note" style="margin-top:11px">Total ${money(total)}${best ? " · best " + esc((best.label || best.date || "").slice(-5)) + ": " + money(best.net_profit) : ""}</p>`
       : `<div class="empty">No snapshots yet — run a sweep to fill the board.</div>`}
     </div>
+    ${costPanel(p.cost_of_operations || {})}
     <div class="panel">
       <div style="display:flex;align-items:center;gap:9px">
         <span class="eyebrow" style="color:var(--emerald)">Daily sweep</span>
@@ -910,11 +911,194 @@ function drawProfit() {
       <button class="btn em wide" style="margin-top:13px" id="sweep">&#8635;&nbsp; Run sweep now</button>
     </div>`;
   on("[data-pr]", "click", (e) => { S.profitRange = e.currentTarget.dataset.pr; drawProfit(); }, slot);
+  wireCostPanel(slot);
   $("sweep").onclick = async (e) => {
     e.currentTarget.disabled = true; e.currentTarget.textContent = "Sweeping…";
     try { S.profit = (await api("/profit/sweep", {})).board || {}; drawProfit(); toast("Profit board updated"); }
     catch (err) { toast(err.message, "err"); drawProfit(); }
   };
+}
+
+
+/* ---------------- cost of operations ----------------
+   Two things the board could not do before: move a cost to the day the work
+   actually happened, and record a cost that never arrived by email.
+
+   Both are on-demand. The app volunteers the date question only in aggregate —
+   one amber line for costs sitting on days with no sales at all — and never as
+   a card per invoice. That restraint is the same rule the vendor review queue
+   follows: a queue that asks nightly gets tapped through, and a tapped-through
+   queue produces worse data than no queue. */
+const COST_CLASS_OPTIONS = [
+  ["fuel", "Fuel"],
+  ["meals", "Meals and coffee"],
+  ["vehicle", "Vehicle and equipment"],
+  ["shop_supplies", "Shop supplies"],
+  ["tires_parts", "Goods I resell"],
+  ["software", "Software"],
+  ["advertising", "Advertising"],
+  ["other", "Something else"],
+];
+const COST_CLASS_NAME = Object.fromEntries(COST_CLASS_OPTIONS);
+
+const costTags = (x) => [
+  x.redated ? "moved to this day" : null,
+  x.manual ? "added by hand" : null,
+  x.reconciled ? "in QuickBooks" : null,
+  COST_CLASS_NAME[x.cost_class] || null,
+].filter(Boolean).join(" · ");
+
+const costRow = (x) => `<button class="attnrow" data-cost="${esc(x.id)}" style="width:100%;margin-bottom:7px">
+    <span class="m"><b>${esc(x.vendor)} · ${money(x.amount)}</b>
+      <span>${esc(x.date)}${costTags(x) ? " · " + esc(costTags(x)) : ""}</span></span>
+    <span class="chev">&#8250;</span></button>`;
+
+function costPanel(c) {
+  const flagged = c.date_check || {};
+  const recent = c.recent || [];
+  return `<div class="panel">
+      <div style="display:flex;align-items:center;gap:9px">
+        <span class="eyebrow" style="color:var(--orange)">Cost of operations</span>
+        <span class="note" style="margin-left:auto">${c.invoice_count || 0} this month</span>
+      </div>
+      <div class="trio" style="margin-top:11px">
+        <div><small>Today</small><b style="color:var(--orange)">${money0(c.today_cost)}</b></div>
+        <div><small>Month</small><b>${money0(c.month_cost)}</b></div>
+        <div><small>Not in books</small><b style="color:var(--dim)">${money0(c.unposted_amount)}</b></div>
+      </div>
+      ${flagged.count ? `<button class="attnrow amber" data-datecheck="1" style="width:100%;margin-top:12px">
+          <span class="ic">&#128197;</span>
+          <span class="m"><b>${flagged.count} cost${flagged.count === 1 ? "" : "s"} on a day with no sales</b>
+            <span>${money(flagged.amount)} — usually a delivery that landed before the job. Set the day the work happened.</span></span>
+          <span class="chev">&#8250;</span></button>` : ""}
+      ${recent.length
+        ? `<div style="margin-top:12px">${recent.slice(0, 6).map(costRow).join("")}</div>
+           <button class="btn ghost wide" style="margin-top:4px" data-allcosts="1">See every cost</button>`
+        : `<p class="note" style="margin-top:11px">No costs captured this month yet.</p>`}
+      <button class="btn em wide" style="margin-top:9px" data-addcost="1">&#43;&nbsp; Add a cost</button>
+      <p class="note" style="margin-top:8px">Fuel, meals and anything paid in cash never arrives by email. Add it here and it lands on the day you spent it.</p>
+    </div>`;
+}
+
+function wireCostPanel(scope) {
+  const recent = (S.profit?.cost_of_operations?.recent) || [];
+  on("[data-cost]", "click", (e) => {
+    const found = recent.find((x) => x.id === e.currentTarget.dataset.cost);
+    if (found) openCostDate(found);
+  }, scope);
+  on("[data-addcost]", "click", () => openAddCost(), scope);
+  on("[data-allcosts]", "click", () => openCostList(false), scope);
+  on("[data-datecheck]", "click", () => openCostList(true), scope);
+}
+
+/** The board comes back with every write, so the screen and the number move
+ *  together — a correction that leaves the total unchanged reads as a no-op. */
+function applyBoard(d) {
+  if (d?.board) { S.profit = d.board; drawProfit(); }
+}
+
+async function openCostList(onlyFlagged) {
+  sheet(`<h2>${onlyFlagged ? "Costs on days with no sales" : "Every cost"}</h2>
+    <p class="sh-sub">Loading…</p>`);
+  try {
+    const d = await get(`/profit/costs${onlyFlagged ? "?only=date_check" : ""}`);
+    const costs = d.costs || [];
+    sheet(`<h2>${onlyFlagged ? "Costs on days with no sales" : "Every cost"}</h2>
+      <p class="sh-sub">${onlyFlagged
+        ? "Nothing was sold on these days, so the cost most likely belongs to another one. Tap to set the day the work happened."
+        : `${costs.length} cost${costs.length === 1 ? "" : "s"} on file, newest first. Tap any one to change its day.`}</p>
+      ${costs.length ? costs.map(costRow).join("") : `<div class="empty">Nothing here.</div>`}`, (sh) => {
+      on("[data-cost]", "click", (e) => {
+        const found = costs.find((x) => x.id === e.currentTarget.dataset.cost);
+        if (found) openCostDate(found, onlyFlagged);
+      }, sh);
+    });
+  } catch (e) { toast(e.message, "err"); closeSheet(); }
+}
+
+/** Re-date one cost. The arrival date is kept visible the whole time: the
+ *  question is which of two real days this belongs to, not free data entry. */
+function openCostDate(x, cameFromList) {
+  const back = () => (cameFromList === undefined ? closeSheet() : openCostList(cameFromList));
+  if (x.reconciled) {
+    sheet(`<h2>${esc(x.vendor)}</h2>
+      <p class="sh-sub">${money(x.amount)} · ${esc(x.doc_number)}</p>
+      <div class="note">This one is already posted in QuickBooks, so the books own its date now. Change it there and the board follows on the next sweep.</div>`);
+    return;
+  }
+  sheet(`<h2>${esc(x.vendor)}</h2>
+    <p class="sh-sub">${money(x.amount)}${x.doc_number ? " · " + esc(x.doc_number) : ""} · arrived ${esc(x.received_date)}</p>
+    <p style="font-weight:600;margin:14px 0 4px">What day was this work actually for?</p>
+    <p class="note" style="margin:0 0 8px">Counted on ${esc(x.date)} right now.</p>
+    <input id="cdDate" class="cmpinput" type="date" value="${esc(x.date)}">
+    <button class="btn em wide" style="margin-top:11px" id="cdGo">Move it to that day</button>
+    ${x.redated ? `<button class="btn ghost wide" style="margin-top:8px" id="cdReset">Put it back on ${esc(x.received_date)}</button>` : ""}
+    ${x.manual ? `<button class="btn ghost wide" style="margin-top:8px" id="cdDel">Delete this cost</button>` : ""}
+    <p class="note" style="margin-top:9px">The board is recalculated for both days, so the profit on each one is right the moment you tap.</p>
+    <div class="note" id="cdOut" style="margin-top:6px"></div>`, (sh) => {
+    const out = sh.querySelector("#cdOut");
+    const send = async (button, body, done) => {
+      button.disabled = true; out.className = "note"; out.textContent = "Updating the board…";
+      try { applyBoard(await api(body.path, body.payload)); toast(done); back(); }
+      catch (err) { out.className = "note err"; out.textContent = err.message; button.disabled = false; }
+    };
+    sh.querySelector("#cdGo").onclick = (e) => {
+      const date = sh.querySelector("#cdDate").value;
+      if (!date) { out.className = "note err"; out.textContent = "Pick a day first."; return; }
+      send(e.currentTarget, { path: "/profit/set-cost-date", payload: { id: x.id, service_date: date } },
+        `Moved to ${date}`);
+    };
+    sh.querySelector("#cdReset")?.addEventListener("click", (e) =>
+      send(e.currentTarget, { path: "/profit/set-cost-date", payload: { id: x.id, service_date: null } },
+        `Back on ${x.received_date}`));
+    sh.querySelector("#cdDel")?.addEventListener("click", (e) => {
+      if (!confirm(`Delete the ${money(x.amount)} cost from ${x.vendor}?`)) return;
+      send(e.currentTarget, { path: "/profit/delete-cost", payload: { id: x.id } }, "Cost deleted");
+    });
+  });
+}
+
+function openAddCost() {
+  const today = S.profit?.today_date || new Date().toISOString().slice(0, 10);
+  sheet(`<h2>Add a cost</h2>
+    <p class="sh-sub">For spend that never arrives by email — fuel, meals, cash, personal card.</p>
+    <label class="fld">PAID TO</label>
+    <input id="mcVendor" class="cmpinput" placeholder="Shell, Tim Hortons, Canadian Tire…">
+    <label class="fld">DAY THE MONEY WAS SPENT</label>
+    <input id="mcDate" class="cmpinput" type="date" value="${today}" max="${today}">
+    <label class="fld">TOTAL PAID</label>
+    <input id="mcAmount" class="cmpinput" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+    <label class="fld">GST INCLUDED &mdash; OPTIONAL</label>
+    <input id="mcGst" class="cmpinput" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+    <label class="fld">WHAT WAS IT</label>
+    <select id="mcClass" class="cmpinput">${COST_CLASS_OPTIONS.map(([k, l]) =>
+      `<option value="${k}">${esc(l)}</option>`).join("")}</select>
+    <label class="fld">NOTE &mdash; OPTIONAL</label>
+    <input id="mcNote" class="cmpinput" placeholder="Road call to Airdrie">
+    <button class="btn em wide" style="margin-top:13px" id="mcGo">Save cost</button>
+    <p class="note" style="margin-top:8px">GST is recorded for the audit trail but never counted as cost — it comes back as an input credit.</p>
+    <div class="note" id="mcOut" style="margin-top:6px"></div>`, (sh) => {
+    const out = sh.querySelector("#mcOut");
+    const val = (id) => (sh.querySelector("#" + id)?.value || "").trim();
+    sh.querySelector("#mcGo").onclick = async (e) => {
+      const payload = {
+        vendor: val("mcVendor"),
+        date: val("mcDate"),
+        amount: Number(val("mcAmount")),
+        gst: Number(val("mcGst")) || 0,
+        cost_class: val("mcClass"),
+        note: val("mcNote"),
+      };
+      if (!payload.vendor) { out.className = "note err"; out.textContent = "Who was it paid to?"; return; }
+      if (!(payload.amount > 0)) { out.className = "note err"; out.textContent = "Enter an amount greater than zero."; return; }
+      e.currentTarget.disabled = true; out.className = "note"; out.textContent = "Saving…";
+      try {
+        applyBoard(await api("/profit/add-cost", payload));
+        toast(`${payload.vendor} · ${money(payload.amount)} added`);
+        closeSheet();
+      } catch (err) { out.className = "note err"; out.textContent = err.message; e.currentTarget.disabled = false; }
+    };
+  });
 }
 
 /* ---------------- CALENDAR ---------------- */
