@@ -17,6 +17,7 @@ const S = {
   profile: null,
   currency: "CAD",
   qbo: null, cal: null, receipts: null, emails: null, board: null, profit: null, team: null,
+  qboStale: false, profitStale: false,
   lane: "directory",
   invoiceFilter: "all",
   profitRange: "daily",
@@ -66,7 +67,14 @@ async function api(path, body, method = "POST") {
     body: body ? JSON.stringify(body) : undefined,
   });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d.message || d.error || ("Request failed (" + r.status + ")"));
+  if (!r.ok) {
+    // Callers that need more than the message — a 409's match list, a 402's
+    // billing state, an "already posted" doc_number — read it off the error.
+    const err = new Error(d.message || d.error || ("Request failed (" + r.status + ")"));
+    err.status = r.status; err.data = d;
+    if (d.matches) err.matches = d.matches;
+    throw err;
+  }
   return d;
 }
 const get = (path) => api(path, null, "GET");
@@ -196,9 +204,9 @@ function appView() {
 
 function setTab(key) {
   if (S.tab === key) {
-    if (key === "home" || key === "finance" || key === "customers") S.qbo = null;
+    if (key === "home" || key === "finance" || key === "customers") S.qboStale = true;
     if (key === "calendar") S.cal = null;
-    if (key === "finance") S.profit = null;
+    if (key === "finance") S.profitStale = true;
     if (key === "receipts") S.receipts = null;
     if (key === "customers") S.board = null;
   }
@@ -304,21 +312,31 @@ async function renderHome() {
   loadHomeAttention();
 }
 
-async function loadHomeKpis() {
-  const slot = $("homekpis"); if (!slot) return;
-  try {
-    if (!S.qbo) S.qbo = await get("/quickbooks-data");
-    const k = S.qbo?.qbo?.kpis || {};
-    slot.innerHTML = `<div class="eyebrow" style="margin-bottom:-3px">LIVE BOOKS</div><div class="kpis">
+function kpiBlock(k) {
+  return `<div class="eyebrow" style="margin-bottom:-3px">LIVE BOOKS</div><div class="kpis">
       <div class="kpi cyan"><small>Today's sales</small><b>${money0(k.today_sales)}</b></div>
       <div class="kpi em"><small>This month</small><b>${money0(k.month_sales)}</b></div>
       <div class="kpi gold"><small>Outstanding</small><b>${money0(k.outstanding)}</b><i>${k.open_count ?? 0} open invoice${(k.open_count ?? 0) === 1 ? "" : "s"}</i></div>
       <div class="kpi purple"><small>Year to date</small><b>${money0(k.ytd_sales)}</b></div>
     </div>`;
+}
+
+async function loadHomeKpis() {
+  const slot = $("homekpis"); if (!slot) return;
+  try {
+    if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
+    slot.innerHTML = kpiBlock(S.qbo?.qbo?.kpis || {});
   } catch (e) {
-    slot.innerHTML = /not connected/i.test(e.message) ? connectPanel("qbo")
-      : `<div class="panel"><p class="sub">Couldn't reach QuickBooks: ${esc(e.message)}</p></div>`;
-    wireConnect(slot);
+    if (S.qbo) {
+      // A refresh failed, but we still have the last numbers Ledger pulled — show
+      // those instead of blanking a screen the owner is glancing at mid-shift.
+      slot.innerHTML = kpiBlock(S.qbo?.qbo?.kpis || {}) +
+        `<p class="note err" style="margin-top:8px">Couldn't refresh just now — showing the last numbers Ledger has. ${esc(e.message)}</p>`;
+    } else {
+      slot.innerHTML = /not connected/i.test(e.message) ? connectPanel("qbo")
+        : `<div class="panel"><p class="sub">Couldn't reach QuickBooks: ${esc(e.message)}</p></div>`;
+      wireConnect(slot);
+    }
   }
 }
 
@@ -326,7 +344,7 @@ async function loadHomeKpis() {
 async function loadHomeNext() {
   const slot = $("homenext"); if (!slot) return;
   try {
-    if (!S.qbo) S.qbo = await get("/quickbooks-data");
+    if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
     const k = S.qbo?.qbo?.kpis || {};
     const outstanding = Number(k.outstanding) || 0;
     const openCount = Number(k.open_count) || 0;
@@ -401,7 +419,7 @@ async function openCostReview() {
             const d = await api("/profit/classify-vendor", {
               vendor_key: vendor.vendor_key, cost_class: costClass, on_account: onAccount,
             });
-            review = d.review; S.review = d.review; S.profit = null;
+            review = d.review; S.review = d.review; S.profitStale = true;
             toast(`${vendor.vendor} classified — ${d.reclassified} invoice${d.reclassified === 1 ? "" : "s"} updated`);
             render(); loadHomeAttention();
           } catch (err) { toast(err.message, "err"); e.currentTarget.disabled = false; }
@@ -437,8 +455,11 @@ async function openCostReview() {
 // Mirrors the iOS "NEEDS ATTENTION" queue: cost review, profit exceptions, receipt review, schedule.
 async function loadHomeAttention() {
   const slot = $("homeattn"); if (!slot) return;
-  const k = S.qbo?.qbo?.kpis || {};
-  const costs = Number(k.missing_cost_count) || 0;
+  let costs = 0;
+  try {
+    if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
+    costs = Number(S.qbo?.qbo?.kpis?.missing_cost_count) || 0;
+  } catch { /* Books not connected yet — the row still reads 0, exactly like iOS. */ }
   let review = S.review;
   try { if (!review) { review = await get("/profit/review"); S.review = review; } }
   catch { review = null; /* Signed out or offline — the row simply stays hidden. */ }
@@ -527,8 +548,18 @@ async function renderFinance() {
 
 async function loadInvoices() {
   const slot = $("finbody"); if (!slot) return;
+  let refreshError = null;
   try {
-    if (!S.qbo) S.qbo = await get("/quickbooks-data");
+    if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
+  } catch (e) {
+    if (!S.qbo) {
+      slot.innerHTML = /not connected/i.test(e.message) ? connectPanel("qbo") : `<div class="empty">${esc(e.message)}</div>`;
+      wireConnect(slot);
+      return;
+    }
+    refreshError = e.message; // keep showing the last invoices Ledger loaded
+  }
+  {
     const all = S.qbo?.qbo?.invoices || [];
     const k = S.qbo?.qbo?.kpis || {};
     const filtered = all.filter((i) => S.invoiceFilter === "all" || i.status === S.invoiceFilter)
@@ -537,6 +568,7 @@ async function loadInvoices() {
     const custHits = !S.invoiceSearch ? [] : (S.qbo?.qbo?.customers || []).filter((c) =>
       (c.name + " " + (c.email || "") + " " + (c.phone || "") + " " + c.id).toLowerCase().includes(S.invoiceSearch)).slice(0, 20);
     slot.innerHTML = `
+      ${refreshError ? `<p class="note err">Couldn't refresh — showing the last invoices Ledger loaded. ${esc(refreshError)}</p>` : ""}
       ${salesIntel(all, k)}
       <button class="cta" id="newinv">
         <span class="ic">&#43;</span>
@@ -596,9 +628,6 @@ async function loadInvoices() {
     });
     on("[data-if]", "click", (e) => { S.invoiceFilter = e.currentTarget.dataset.if; loadInvoices(); }, slot);
     on("[data-inv]", "click", (e) => invoiceSheet(all.find((x) => x.id === e.currentTarget.dataset.inv)), slot);
-  } catch (e) {
-    slot.innerHTML = /not connected/i.test(e.message) ? connectPanel("qbo") : `<div class="empty">${esc(e.message)}</div>`;
-    wireConnect(slot);
   }
 }
 
@@ -655,7 +684,7 @@ async function composerSheet() {
   const subtotal = () => C.lines.reduce((t, l) => t + Math.round(l.quantity * l.rate * 100) / 100, 0);
 
   try {
-    if (!S.qbo) S.qbo = await get("/quickbooks-data");
+    if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
     C.items = (await get("/quickbooks-invoice/items")).items || [];
   } catch (e) { C.itemsError = e.message; }
 
@@ -728,7 +757,7 @@ async function composerSheet() {
         note.textContent = "✅ Posted" + (r.doc_number ? " — #" + r.doc_number : "") + (r.emailed ? " · emailed " + (r.emailed_to || "") : "");
         body().querySelector(".row").remove();
         if (wantPrint && (r.qbo_invoice_id || r.id)) printPdfById(r.qbo_invoice_id || r.id, r.doc_number, "invoice");
-        S.qbo = null;
+        S.qboStale = true;
         setTimeout(() => { closeSheet(); loadInvoices(); }, 1400);
       } catch (e) { ev.currentTarget.disabled = false; note.className = "note err"; note.textContent = e.message; }
     };
@@ -862,21 +891,27 @@ async function withPdf(inv, sh, fn) {
 /* ---------------- PROFIT ---------------- */
 async function loadProfit() {
   const slot = $("finbody"); if (!slot) return;
+  let refreshError = null;
   try {
-    if (!S.profit) S.profit = (await get("/profit/board")).board || {};
-    if (!S.receipts) { try { S.receipts = (await get("/gmail/receipts")).receipts || []; } catch { S.receipts = []; } }
-    drawProfit();
+    if (!S.profit || S.profitStale) { S.profit = (await get("/profit/board")).board || {}; S.profitStale = false; }
   } catch (e) {
-    slot.innerHTML = /not connected/i.test(e.message) ? connectPanel("qbo") : `<div class="empty">${esc(e.message)}</div>`;
-    wireConnect(slot);
+    if (!S.profit) {
+      slot.innerHTML = /not connected/i.test(e.message) ? connectPanel("qbo") : `<div class="empty">${esc(e.message)}</div>`;
+      wireConnect(slot);
+      return;
+    }
+    refreshError = e.message; // keep showing the last profit board Ledger loaded
   }
+  if (!S.receipts) { try { S.receipts = (await get("/gmail/receipts")).receipts || []; } catch { S.receipts = []; } }
+  drawProfit(refreshError);
 }
 
-function drawProfit() {
+function drawProfit(refreshError) {
   const slot = $("finbody"); if (!slot) return;
   const p = S.profit || {};
   const series = (p[S.profitRange] || []).slice(-14);
   const today = p.today || {};
+  const swept = today.date === localDay();
   const unposted = (S.receipts || []).filter((r) => !r.qbo_purchase_id && r.category !== "Personal").length;
   const max = Math.max(1, ...series.map((s) => Math.abs(s.net_profit || 0)));
   const income = today.total_income || 0, costs = today.total_expenses || 0;
@@ -884,15 +919,17 @@ function drawProfit() {
   const total = series.reduce((t, x) => t + (x.net_profit || 0), 0);
   const best = series.reduce((b, x) => (!b || (x.net_profit || 0) > (b.net_profit || 0) ? x : b), null);
   slot.innerHTML = `
+    ${refreshError ? `<p class="note err">Couldn't refresh the profit board — showing the last numbers Ledger has. ${esc(refreshError)}</p>` : ""}
     <div class="hero">
       <div class="headline"><span class="eyebrow">Today's profit</span>
         <span class="when">${esc(today.date || localDay())}</span></div>
-      <div class="big" style="color:${(today.net_profit || 0) >= 0 ? "var(--emerald)" : "var(--red)"}">${money(today.net_profit)}</div>
+      ${swept ? `<div class="big" style="color:${(today.net_profit || 0) >= 0 ? "var(--emerald)" : "var(--red)"}">${money(today.net_profit)}</div>
       <div class="trio">
         <div><small>Income</small><b style="color:var(--cyan)">${money0(income)}</b></div>
         <div><small>Expenses</small><b style="color:var(--orange)">${money0(costs)}</b></div>
         <div><small>Margin</small><b style="color:var(--magenta)">${margin}%</b></div>
-      </div>
+      </div>` : `<div class="big" style="color:var(--dim)">Not yet swept</div>
+      <p class="note" style="margin-top:6px">Today isn't counted yet — that's not a $0 day, it lands after the ${String(p.sweep_hour ?? 18).padStart(2, "0")}:30 sweep.</p>`}
     </div>
     ${unposted ? `<div class="warnstrip"><em>&#9888;</em><span>${unposted} receipt${unposted === 1 ? " isn't" : "s aren't"} posted to QuickBooks yet — ${unposted === 1 ? "it won't" : "they won't"} count in tonight's sweep.</span></div>` : ""}
     <div class="panel">
@@ -1539,10 +1576,23 @@ function batchQueueSheet(ready, total) {
   });
 }
 
+// Same vendor, same total, same day as another receipt already on file — the
+// one shape of duplicate a photo or a forwarded email both produce.
+function duplicateOf(r) {
+  const vendor = (r.vendor || r.from_name || "").trim().toLowerCase();
+  const day = (r.received_at || "").slice(0, 10);
+  if (!vendor || !r.total || !day) return null;
+  return (S.receipts || []).find((o) => o.id !== r.id
+    && (o.vendor || o.from_name || "").trim().toLowerCase() === vendor
+    && Number(o.total) === Number(r.total)
+    && (o.received_at || "").slice(0, 10) === day) || null;
+}
+
 async function batchPost(ready) {
   const b = $("batch"); b.disabled = true; b.textContent = "Posting…";
-  let posted = 0, skipped = 0;
+  let posted = 0, skipped = 0, duped = 0;
   for (const r of ready) {
+    if (duplicateOf(r)) { duped++; continue; } // held for a manual look, not silently posted twice
     try {
       const v = await api("/quickbooks-invoice/expense-vendors", { receipt_id: r.id });
       if (!v.suggestedId) { skipped++; continue; }
@@ -1550,7 +1600,7 @@ async function batchPost(ready) {
       posted++;
     } catch { skipped++; }
   }
-  toast(`${posted} posted${skipped ? ", " + skipped + " left for you" : ""}`);
+  toast(`${posted} posted${duped ? ", " + duped + " possible duplicate" + (duped === 1 ? "" : "s") + " held for review" : ""}${skipped ? ", " + skipped + " left for you" : ""}`);
   renderReceipts();
 }
 
@@ -1658,12 +1708,15 @@ function receiptSheet(r, suggestedCategory) {
       catch (err) { e.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
     };
     sh.querySelector("#rdismiss").onclick = async (e) => {
+      if (!confirm("Dismiss this receipt? There's no undo for this in the app.")) return;
       e.currentTarget.disabled = true;
       try { await api("/gmail/dismiss", { id: r.id }); closeSheet(); renderReceipts(); }
       catch (err) { e.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
     };
     const post = sh.querySelector("#rpost");
     if (post) post.onclick = async () => {
+      const dup = duplicateOf(r);
+      if (dup && !confirm(`Another receipt from ${dup.vendor || dup.from_name || "the same vendor"} for ${money(dup.total)} on the same day is already logged. Post this one too?`)) return;
       post.disabled = true; note.className = "note"; note.textContent = "Looking up vendors…";
       try {
         await save();
@@ -1728,7 +1781,7 @@ const markReviewAsked = (id) => { const s = reviewAsked(); s.add(id); localStora
 async function loadDirectory() {
   const slot = $("lanebody"); if (!slot) return;
   try {
-    if (!S.qbo) S.qbo = await get("/quickbooks-data");
+    if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
     const all = (S.qbo?.qbo?.customers || []).filter((c) => c.active !== false);
     const invoices = S.qbo?.qbo?.invoices || [];
     const asked = reviewAsked();
@@ -1945,7 +1998,7 @@ function newCustomerSheet(prefill, onCreated) {
           dup.innerHTML = "";
           note.className = "note ok";
           note.textContent = `${r.customer.name} is now in QuickBooks ✅ — Ledger can invoice them immediately.`;
-          S.qbo = null;
+          S.qboStale = true;
           if (onCreated) await onCreated(r.customer);
           setTimeout(() => { closeSheet(); if (!onCreated) loadDirectory(); }, 1500);
           return;
@@ -2270,11 +2323,33 @@ function todoSheet(t) {
 }
 
 /* ---------------- CHAT ---------------- */
-function openChat() { $("chatwrap").classList.add("open"); setTimeout(() => $("box").focus(), 60); }
-function closeChat() { $("chatwrap").classList.remove("open"); }
+function openChat() {
+  $("chatwrap").classList.add("open");
+  setTimeout(() => $("box").focus(), 60);
+  restoreChatHistory();
+}
+function closeChat() { $("chatwrap").classList.remove("open"); $("box").value = ""; }
 function newConversation() {
   S.conversationId = null; localStorage.removeItem("ledger.conv");
+  S.historyChecked = true; // an explicit fresh start is not a reload to recover from
   chatEl().innerHTML = ""; sys("Fresh conversation started.");
+}
+
+// A page reload rebuilds the chat pane from nothing but the welcome line — the
+// real transcript still lives server-side. Ask for it once per session, on the
+// first open, and only replace the local pane if nothing's been typed since.
+async function restoreChatHistory() {
+  if (S.historyChecked) return;
+  S.historyChecked = true;
+  try {
+    const d = await api("/ledger-ai", { action: "history", ...(S.conversationId ? { conversation_id: S.conversationId } : {}) });
+    if (chatEl().querySelector(".msg")) return; // a message was already sent while this was in flight
+    if ((d.messages || []).length) {
+      chatEl().innerHTML = "";
+      d.messages.forEach((m) => bubble(m.role === "user" ? "msg me" : "msg ai", m.role === "user" ? esc(m.content) : md(m.content)));
+    }
+    if (d.conversation_id) { S.conversationId = d.conversation_id; localStorage.setItem("ledger.conv", d.conversation_id); }
+  } catch { /* No history route yet, or signed out — keep the local welcome message. */ }
 }
 const chatEl = () => $("chat");
 function scrollChat() { const c = chatEl(); c.scrollTop = c.scrollHeight; }
@@ -2367,10 +2442,11 @@ async function send() {
     (d.reminder_drafts || []).forEach(reminderCard);
     (d.email_drafts || []).forEach(emailDraftCard);
     (d.print_jobs || []).forEach(printJobCard);
-    S.qbo = null; S.board = null; // books may have moved — refetch on next tab visit
+    S.qboStale = true; S.board = null; // books may have moved — refetch on next tab visit
   } catch (e) {
-    t.remove(); bubble("msg ai", esc(e.message));
-    if (/allowance|power-up/i.test(e.message)) powerUpSheet();
+    t.remove(); bubble("msg ai err", "⚠️ " + esc(e.message));
+    if (e.status === 402) { if (/subscription|trial|renew/i.test(e.message)) billingCheck(); else powerUpSheet(); }
+    else if (/allowance|power-up/i.test(e.message)) powerUpSheet();
   }
   $("send").disabled = false;
 }
