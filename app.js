@@ -2695,6 +2695,7 @@ async function businessSheet() {
       <button class="btn ghost wide" id="bbill">Manage subscription</button>
       <button class="btn ghost wide" id="bsupport">Contact support</button>
       <button class="btn ghost wide" id="bout" style="color:var(--red)">Sign out</button>
+      <button class="btn ghost wide" id="bdel" style="color:var(--red)">Delete account</button>
     </div>
     <p class="note" style="margin-top:12px;text-align:center">
       <a href="${FN}/legal/privacy" target="_blank" rel="noopener">Privacy Policy</a> ·
@@ -2734,6 +2735,21 @@ async function businessSheet() {
       catch (e) { toast(e.message, "err"); }
     };
     sh.querySelector("#bout").onclick = () => supa.auth.signOut().then(() => location.reload());
+    sh.querySelector("#bdel").onclick = async (e) => {
+      // App Store 5.1.1(v): a real, in-app, no-undo path — not a support-ticket request.
+      if (!confirm("Delete your account? This permanently deletes your account and cannot be undone — receipts, conversations and connections go with it. If you're the workspace owner, this also deletes the workspace and every teammate's account.")) return;
+      const typed = prompt('Type DELETE to confirm.');
+      if (typed !== "DELETE") { if (typed !== null) toast("Account not deleted — you didn't type DELETE.", "err"); return; }
+      e.currentTarget.disabled = true; e.currentTarget.textContent = "Deleting…";
+      try {
+        await api("/workspace-profile", { action: "delete-account", confirm: "DELETE" });
+        await supa.auth.signOut();
+        location.reload();
+      } catch (err) {
+        e.currentTarget.disabled = false; e.currentTarget.textContent = "Delete account";
+        toast(err.message, "err");
+      }
+    };
     const inst = sh.querySelector("#install");
     if (inst) inst.onclick = async () => { S.installPrompt.prompt(); await S.installPrompt.userChoice; S.installPrompt = null; closeSheet(); };
     sh.querySelector("#bsave").onclick = async (e) => {
