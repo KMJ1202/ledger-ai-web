@@ -3005,11 +3005,46 @@ function setupView() {
       const created = await api("/workspace-profile", { action: "bootstrap", name, currency: $("bizcur").value, timezone: tz });
       S.currency = $("bizcur").value;
       await loadProfile(created);
-      appView();
-      openChat();
-      sys("🎉 " + name + " is set up — your 14-day free trial is live. Ask me anything, and connect QuickBooks to bring your books in.");
+      onboardInterview(name);
     } catch (e) { toast(e.message, "err"); }
   };
+}
+
+// Four universal questions right after workspace creation. Answers become
+// owner-stated memory facts (confidence 0.95) so Ledger knows the business
+// from its very first message. Every question is skippable — onboarding is
+// where signups die, so the whole screen is one tap from gone.
+const ONBOARD_QUESTIONS = [
+  { id: "obq1", q: "What kind of work do you do?", ph: "e.g. mobile tire shop, plumbing, barbershop, towing", fact: "Business type", cat: "operations" },
+  { id: "obq2", q: "What are your main services or products?", ph: "e.g. tire installs, seasonal changeovers, flat repairs", fact: "Main services/products", cat: "operations" },
+  { id: "obq3", q: "Who's on the team, and who handles the books?", ph: "e.g. just me — I do everything; my wife does invoicing", fact: "Team", cat: "people" },
+  { id: "obq4", q: "What are your hours and service area?", ph: "e.g. Mon-Sat 9-6, Calgary and area", fact: "Hours and service area", cat: "operations" },
+];
+
+function onboardInterview(bizName) {
+  root.innerHTML = `<div class="login" style="max-width:440px"><div class="mark">L</div><h2>Tell Ledger about ${esc(bizName)}</h2>
+    <p>Answer what you like, skip what you don't — Ledger remembers all of it and starts day one already knowing your business.</p>
+    ${ONBOARD_QUESTIONS.map((o) => `<label class="fld" style="text-align:left;display:block;margin-top:12px">${esc(o.q).toUpperCase()}</label>
+      <input id="${o.id}" placeholder="${esc(o.ph)}" maxlength="400">`).join("")}
+    <button class="btn" id="obgo" style="margin-top:18px">Finish setup →</button>
+    <button class="btn ghost" id="obskip" style="margin-top:8px">Skip for now</button></div>`;
+  const finish = async (save) => {
+    const btn = $("obgo"); btn.disabled = true; btn.textContent = "Saving…";
+    let saved = 0;
+    if (save) {
+      for (const o of ONBOARD_QUESTIONS) {
+        const a = $(o.id).value.trim();
+        if (!a) continue;
+        try { await api("/ledger-ai", { action: "memory_add", fact: `${o.fact}: ${a}`, category: o.cat }); saved++; } catch {}
+      }
+    }
+    appView();
+    openChat();
+    sys("🎉 " + bizName + " is set up — your 14-day free trial is live." +
+      (saved ? " I've memorized what you told me about the business — ask me anything." : " Ask me anything, and connect QuickBooks to bring your books in."));
+  };
+  $("obgo").onclick = () => finish(true);
+  $("obskip").onclick = () => finish(false);
 }
 
 function joinView(businessName) {
