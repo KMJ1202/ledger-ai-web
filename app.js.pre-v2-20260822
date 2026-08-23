@@ -500,22 +500,17 @@ async function loadHomeMail() {
     const d = await get("/gmail/inbox?limit=10");
     S.emails = d.emails || [];
     if (!S.emails.length) { slot.innerHTML = ""; return; }
-    const unread = S.emails.filter((m) => m.unread).length;
-    const shown = S.mailExpanded ? S.emails : S.emails.slice(0, 3);
     slot.innerHTML = `<div class="maillane">
-      <div class="mhead"><b>Inbox</b>${unread ? `<span class="mchip">${unread} unread</span>` : `<span class="mchip zero">clear</span>`}<button id="mailrefresh" title="Refresh">&#8635;</button></div>
-      ${shown.map((m, i) => `
+      <div class="mhead"><b>Latest Emails</b><button id="mailrefresh" title="Refresh">&#8635;</button></div>
+      ${S.emails.map((m, i) => `
       <button class="mailrow" data-mail="${i}">
         <span class="dot ${m.unread ? "" : "read"}"></span>
         <span class="m"><b>${esc(m.from_name || m.from || "(unknown sender)")}</b>
           <span>${esc(m.subject || "(no subject)")}</span></span>
         <span class="chev">&#8250;</span>
-      </button>`).join("")}
-      ${S.emails.length > 3 ? `<button class="mmore" id="mailmore">${S.mailExpanded ? "Show less &#9650;" : `All mail (${S.emails.length}) &#9660;`}</button>` : ""}</div>`;
+      </button>`).join("")}</div>`;
     on("[data-mail]", "click", (e) => emailSheet(S.emails[Number(e.currentTarget.dataset.mail)]), slot);
     slot.querySelector("#mailrefresh").onclick = (e) => { e.stopPropagation(); loadHomeMail(); };
-    const more = slot.querySelector("#mailmore");
-    if (more) more.onclick = () => { S.mailExpanded = !S.mailExpanded; loadHomeMail(); };
   } catch { slot.innerHTML = ""; }
 }
 
@@ -2828,12 +2823,13 @@ async function supportSheet() {
   });
 }
 
-// Support chat — support-agent function, native-styled twin of the marketing
-// site's "Ask Ledger Support" widget (assets/support-widget.js). Authorization
-// is OPTIONAL: v2 (2026-08-22) attaches the signed-in session token, the same
-// idiom as api()/token() above, so a signed-in visitor unlocks three read-only
-// self-service tools (subscription, connectors, AI allowance) server-side. A
-// signed-out visitor sends no header and the chat behaves exactly as before.
+// Support chat — public, no-auth support-agent function, native-styled twin of
+// the marketing site's "Ask Ledger Support" widget (assets/support-widget.js).
+// Deliberately never attaches the session/JWT to the request — the endpoint
+// takes none, is stateless server-side, and never sees tenant data. The
+// signed-in email is only used to save the visitor retyping it into a ticket:
+// it rides along as a hidden context turn the agent reads silently, not as an
+// auth credential, and the chat behaves identically for a signed-out visitor.
 const SUPPORT_FN = "https://lbzkyyehmgudlxmfpzzh.supabase.co/functions/v1/support-agent";
 const SUPPORT_GREETING = "Hey — I'm the Ledger AI support agent. Ask me anything about how the product works, or tell me what's going wrong and I'll help or get you to a human.";
 
@@ -2850,7 +2846,7 @@ function supportChatSheet() {
       <textarea id="scInput" rows="1" placeholder="Type a message…" maxlength="4000"></textarea>
       <button class="supchat-send" id="scSend" aria-label="Send">&#8593;</button>
     </div>
-    <p class="note" style="margin-top:9px;text-align:center">${S.email ? "Signed in — I can check your subscription, connections, and AI allowance." : "Public support chat · no account data visible here"} · <a href="mailto:supportteam@heyledger.ai">email a human</a></p>`,
+    <p class="note" style="margin-top:9px;text-align:center">Public support chat · no account data visible here · <a href="mailto:supportteam@heyledger.ai">email a human</a></p>`,
   (root) => {
     const log = root.querySelector("#scLog");
     const typingEl = root.querySelector("#scTyping");
@@ -2887,10 +2883,7 @@ function supportChatSheet() {
       payload.push(...history, { role: "user", content: trimmed });
 
       try {
-        const headers = { "content-type": "application/json" };
-        const t = await token().catch(() => null);
-        if (t) headers.Authorization = "Bearer " + t;
-        const r = await fetch(SUPPORT_FN, { method: "POST", headers, body: JSON.stringify({ messages: payload }) });
+        const r = await fetch(SUPPORT_FN, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: payload }) });
         const d = await r.json().catch(() => ({}));
         typingEl.style.display = "none";
         if (!r.ok || d?.error) {

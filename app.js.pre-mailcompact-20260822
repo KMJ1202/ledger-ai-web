@@ -500,22 +500,17 @@ async function loadHomeMail() {
     const d = await get("/gmail/inbox?limit=10");
     S.emails = d.emails || [];
     if (!S.emails.length) { slot.innerHTML = ""; return; }
-    const unread = S.emails.filter((m) => m.unread).length;
-    const shown = S.mailExpanded ? S.emails : S.emails.slice(0, 3);
     slot.innerHTML = `<div class="maillane">
-      <div class="mhead"><b>Inbox</b>${unread ? `<span class="mchip">${unread} unread</span>` : `<span class="mchip zero">clear</span>`}<button id="mailrefresh" title="Refresh">&#8635;</button></div>
-      ${shown.map((m, i) => `
+      <div class="mhead"><b>Latest Emails</b><button id="mailrefresh" title="Refresh">&#8635;</button></div>
+      ${S.emails.map((m, i) => `
       <button class="mailrow" data-mail="${i}">
         <span class="dot ${m.unread ? "" : "read"}"></span>
         <span class="m"><b>${esc(m.from_name || m.from || "(unknown sender)")}</b>
           <span>${esc(m.subject || "(no subject)")}</span></span>
         <span class="chev">&#8250;</span>
-      </button>`).join("")}
-      ${S.emails.length > 3 ? `<button class="mmore" id="mailmore">${S.mailExpanded ? "Show less &#9650;" : `All mail (${S.emails.length}) &#9660;`}</button>` : ""}</div>`;
+      </button>`).join("")}</div>`;
     on("[data-mail]", "click", (e) => emailSheet(S.emails[Number(e.currentTarget.dataset.mail)]), slot);
     slot.querySelector("#mailrefresh").onclick = (e) => { e.stopPropagation(); loadHomeMail(); };
-    const more = slot.querySelector("#mailmore");
-    if (more) more.onclick = () => { S.mailExpanded = !S.mailExpanded; loadHomeMail(); };
   } catch { slot.innerHTML = ""; }
 }
 
