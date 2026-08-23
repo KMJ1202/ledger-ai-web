@@ -143,6 +143,7 @@ section.tight{padding:56px 0}
 .intcard .top{display:flex;align-items:center;gap:14px;position:relative}
 .intcard .ic{width:52px;height:52px;border-radius:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .intcard .ic img{width:26px;height:26px;display:block}
+.card .ic svg{width:24px;height:24px;display:block}
 .grid.two.intgrid{grid-template-columns:repeat(2,1fr)}
 @media (max-width:720px){.grid.two.intgrid{grid-template-columns:1fr}}
 nav.sitenav .links .menu img.mico{width:18px;height:18px;flex-shrink:0}
