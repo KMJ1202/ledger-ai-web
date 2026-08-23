@@ -11,10 +11,12 @@ document.addEventListener("click", () => {
   document.querySelectorAll("nav.sitenav .drop.open").forEach((d) => d.classList.remove("open"));
 });
 
-document.querySelectorAll("nav.sitenav .navburger").forEach((btn) => {
-  btn.addEventListener("click", (e) => {
+document.querySelectorAll("nav.sitenav .brand").forEach((brand) => {
+  brand.addEventListener("click", (e) => {
+    if (!window.matchMedia("(max-width:780px)").matches) return;
+    e.preventDefault();
     e.stopPropagation();
-    btn.closest("nav").classList.toggle("mopen");
+    brand.closest("nav").classList.toggle("mopen");
   });
 });
 document.addEventListener("click", () => {
