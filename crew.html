@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07090d">
+<meta name="robots" content="noindex">
+<title>Today's jobs</title>
+<style>
+:root{--bg:#07090d;--card:#10151c;--line:#1f2833;--text:#f3f5f7;--dim:#93a1af;--cyan:#22d3ee;--purple:#a855f7;--emerald:#34d399;--amber:#fbbf24;--red:#f87171}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;min-height:100dvh;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:-40%;background:
+  radial-gradient(42% 34% at 22% 12%, rgba(34,211,238,.13), transparent 60%),
+  radial-gradient(40% 34% at 82% 18%, rgba(168,85,247,.12), transparent 60%),
+  radial-gradient(50% 40% at 50% 96%, rgba(34,211,238,.06), transparent 65%);
+  animation:drift 26s ease-in-out infinite alternate;pointer-events:none;z-index:0}
+@keyframes drift{from{transform:translate3d(-1.5%,-1%,0) scale(1)}to{transform:translate3d(1.5%,1.5%,0) scale(1.05)}}
+.wrap{position:relative;z-index:1;width:100%;max-width:560px;padding:30px 18px calc(env(safe-area-inset-bottom) + 44px)}
+.hero{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:22px}
+.ring{width:64px;height:64px;border-radius:20px;padding:2px;background:linear-gradient(135deg,var(--cyan),var(--purple));box-shadow:0 0 42px rgba(34,211,238,.35),0 0 90px rgba(168,85,247,.18);animation:breathe 4.5s ease-in-out infinite}
+@keyframes breathe{0%,100%{box-shadow:0 0 34px rgba(34,211,238,.3),0 0 80px rgba(168,85,247,.15)}50%{box-shadow:0 0 52px rgba(34,211,238,.5),0 0 110px rgba(168,85,247,.28)}}
+.ring>.inner{width:100%;height:100%;border-radius:18px;background:var(--card);display:flex;align-items:center;justify-content:center}
+.ring .mono{font-weight:800;font-size:26px;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent}
+h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
+.tagline{margin:6px 0 0;color:var(--dim);font-size:14px}
+.badge{display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:6px 14px;border-radius:999px;border:1px solid rgba(34,211,238,.35);background:rgba(34,211,238,.08);color:var(--cyan);font-size:11.5px;font-weight:700;letter-spacing:.06em}
+.badge .dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(34,211,238,.5)}50%{box-shadow:0 0 0 6px rgba(34,211,238,0)}}
+.job{position:relative;border-radius:22px;padding:1px;margin-bottom:16px;background:linear-gradient(160deg,rgba(34,211,238,.4),rgba(168,85,247,.28) 45%,rgba(34,211,238,.1));box-shadow:0 24px 70px rgba(0,0,0,.5)}
+.job>.in{border-radius:21px;background:rgba(16,21,28,.92);backdrop-filter:blur(18px);padding:20px 18px 18px}
+.job-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px}
+.job-time{font-size:12px;font-weight:800;letter-spacing:.1em;color:var(--cyan);text-transform:uppercase}
+.job-title{font-size:18px;font-weight:800;margin:4px 0 0;letter-spacing:-.01em}
+.statuspill{flex-shrink:0;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;border-radius:999px;white-space:nowrap}
+.job-loc{display:flex;align-items:center;gap:7px;margin-top:10px;color:var(--dim);font-size:13.5px;text-decoration:none}
+.job-loc svg{flex-shrink:0}
+.job-loc span{text-decoration:underline;text-decoration-color:rgba(147,161,175,.35);text-underline-offset:3px}
+.job-details{margin-top:10px;color:var(--dim);font-size:13px;line-height:1.5;white-space:pre-wrap;padding:10px 12px;background:rgba(255,255,255,.035);border-radius:12px;border:1px solid var(--line)}
+.track{display:flex;align-items:center;gap:6px;margin-top:16px}
+.step{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+.step-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;border:1.5px solid var(--line);color:var(--dim);background:rgba(255,255,255,.03);transition:all .3s ease}
+.step-label{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--dim)}
+.step-line{flex-shrink:0;width:100%;height:2px;background:var(--line);margin:0 -8px;transform:translateY(-15px);z-index:-1}
+.step.done .step-dot{background:var(--emerald);border-color:var(--emerald);color:#03181d;box-shadow:0 0 16px rgba(52,211,153,.5)}
+.step.done .step-label{color:var(--emerald)}
+.step.current .step-dot{border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 0 4px rgba(34,211,238,.12)}
+.step.current .step-label{color:var(--cyan)}
+.actionbtn{width:100%;margin-top:16px;padding:15px;border:0;border-radius:14px;font-size:15px;font-weight:800;letter-spacing:.01em;color:#03181d;background:linear-gradient(135deg,var(--cyan),#7dd3fc 60%,var(--purple));background-size:200% 100%;cursor:pointer;transition:transform .15s,box-shadow .2s,background-position .4s;box-shadow:0 10px 34px rgba(34,211,238,.25)}
+.actionbtn:active{transform:translateY(1px) scale(.99)}
+.actionbtn:disabled{opacity:.5}
+.actionbtn.finished{background:linear-gradient(135deg,var(--emerald),#6ee7b7);box-shadow:0 10px 34px rgba(52,211,153,.25);cursor:default}
+.tick-burst{display:flex;align-items:center;justify-content:center;gap:8px;color:var(--emerald);font-weight:800;font-size:13px;letter-spacing:.05em;text-transform:uppercase;margin-top:16px;animation:rise .5s ease}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.empty{text-align:center;padding:14vh 20px;color:var(--dim)}
+.empty h2{color:var(--text);font-size:19px;margin:14px 0 6px}
+.foot{position:relative;z-index:1;margin-top:auto;padding:20px;color:#556270;font-size:12px;letter-spacing:.04em}
+.foot a{color:var(--dim);text-decoration:none}
+#loading{position:relative;z-index:1;color:var(--dim);padding-top:16vh;text-align:center}
+.expired{display:none;text-align:center;padding-top:14vh;animation:rise .5s ease}
+.expired .icon{width:88px;height:88px;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.35);box-shadow:0 0 60px rgba(248,113,113,.15)}
+.expired h2{font-size:21px;margin:20px 0 8px}
+.expired p{color:var(--dim);font-size:14.5px;line-height:1.55;padding:0 20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="loading">Loading…</div>
+
+  <div id="app" style="display:none">
+    <div class="hero">
+      <div class="ring"><div class="inner"><span class="mono">L</span></div></div>
+      <h1 id="greeting"></h1>
+      <p class="tagline" id="bizline"></p>
+      <span class="badge"><span class="dot"></span><span id="datebadge"></span></span>
+    </div>
+    <div id="jobs"></div>
+  </div>
+
+  <div class="expired" id="expired">
+    <div class="icon">✕</div>
+    <h2>Link expired</h2>
+    <p id="expiredmsg">Ask the shop for a new one.</p>
+  </div>
+</div>
+<p class="foot">Powered by <a href="https://heyledger.ai">Ledger AI</a></p>
+<script>
+const FN = "https://lbzkyyehmgudlxmfpzzh.supabase.co/functions/v1/crew";
+const token = new URLSearchParams(location.search).get("t") || "";
+const $ = (id) => document.getElementById(id);
+const STEPS = [
+  { key: "on_my_way", label: "On my way", icon: "🚗" },
+  { key: "on_site", label: "On site", icon: "📍" },
+  { key: "done", label: "Done", icon: "✓" },
+];
+let busy = false;
+let refreshTimer = null;
+
+function fmtTime(iso) {
+  if (!iso) return "Time TBD";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "Time TBD";
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function statusIndex(status) {
+  if (status === "done") return 2;
+  if (status === "on_site") return 1;
+  if (status === "on_my_way") return 0;
+  return -1; // assigned
+}
+
+function statusPillColor(status) {
+  if (status === "done") return { bg: "rgba(52,211,153,.12)", fg: "var(--emerald)" };
+  if (status === "on_site") return { bg: "rgba(34,211,238,.12)", fg: "var(--cyan)" };
+  if (status === "on_my_way") return { bg: "rgba(251,191,36,.12)", fg: "var(--amber)" };
+  return { bg: "rgba(147,161,175,.12)", fg: "var(--dim)" };
+}
+
+function statusLabel(status) {
+  if (status === "done") return "Done";
+  if (status === "on_site") return "On site";
+  if (status === "on_my_way") return "On my way";
+  return "Not started";
+}
+
+function jobCard(job) {
+  const idx = statusIndex(job.status);
+  const pill = statusPillColor(job.status);
+  const stepsHtml = STEPS.map((step, i) => {
+    const cls = i <= idx ? "step done" : i === idx + 1 ? "step current" : "step";
+    const dotContent = i <= idx ? "✓" : String(i + 1);
+    return `<div class="${cls}">
+      <div style="display:flex;align-items:center;width:100%">
+        ${i > 0 ? '<div class="step-line"></div>' : '<div style="width:0"></div>'}
+        <div class="step-dot">${dotContent}</div>
+        ${i < STEPS.length - 1 ? '<div class="step-line"></div>' : '<div style="width:0"></div>'}
+      </div>
+      <div class="step-label">${step.label}</div>
+    </div>`;
+  }).join("");
+
+  const nextStep = STEPS[idx + 1];
+  let actionHtml;
+  if (job.status === "done") {
+    actionHtml = `<div class="tick-burst">✓ Job complete</div>`;
+  } else if (nextStep) {
+    actionHtml = `<button class="actionbtn" data-id="${job.id}" data-next="${nextStep.key}">${nextStep.icon} Mark "${nextStep.label}"</button>`;
+  } else {
+    actionHtml = "";
+  }
+
+  const mapsUrl = job.location ? `https://maps.google.com/?q=${encodeURIComponent(job.location)}` : null;
+  const locHtml = mapsUrl
+    ? `<a class="job-loc" href="${mapsUrl}" target="_blank" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span>${escapeHtml(job.location)}</span>
+      </a>`
+    : "";
+  const detailsHtml = job.details ? `<div class="job-details">${escapeHtml(job.details)}</div>` : "";
+
+  return `<div class="job"><div class="in">
+    <div class="job-top">
+      <div>
+        <div class="job-time">${fmtTime(job.start)}</div>
+        <div class="job-title">${escapeHtml(job.title)}</div>
+      </div>
+      <div class="statuspill" style="background:${pill.bg};color:${pill.fg}">${statusLabel(job.status)}</div>
+    </div>
+    ${locHtml}
+    ${detailsHtml}
+    <div class="track">${stepsHtml}</div>
+    ${actionHtml}
+  </div></div>`;
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function render(data) {
+  $("greeting").textContent = `Hi, ${data.crewMemberName || "there"}`;
+  $("bizline").textContent = data.business ? `${data.business} — today's jobs` : "Today's jobs";
+  const d = new Date(`${data.date}T12:00:00`);
+  $("datebadge").textContent = isNaN(d.getTime()) ? "TODAY" : d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" }).toUpperCase();
+
+  const jobs = data.jobs || [];
+  if (!jobs.length) {
+    $("jobs").innerHTML = `<div class="empty">
+      <div style="font-size:40px">☕</div>
+      <h2>No jobs today</h2>
+      <p>Nothing on your list for today. Check back tomorrow.</p>
+    </div>`;
+  } else {
+    $("jobs").innerHTML = jobs.map(jobCard).join("");
+  }
+
+  document.querySelectorAll(".actionbtn[data-id]").forEach((btn) => {
+    btn.onclick = () => setStatus(btn.dataset.id, btn.dataset.next, btn);
+  });
+}
+
+async function load(showLoading) {
+  try {
+    const r = await fetch(FN, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "crew-link/jobs", token }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      showExpired(d.error || "This link is no longer active.");
+      return;
+    }
+    $("loading").style.display = "none";
+    $("expired").style.display = "none";
+    $("app").style.display = "block";
+    render(d);
+  } catch (e) {
+    if (showLoading) $("loading").textContent = "Couldn't load your jobs — check your connection.";
+  }
+}
+
+function showExpired(msg) {
+  $("loading").style.display = "none";
+  $("app").style.display = "none";
+  $("expiredmsg").textContent = msg;
+  $("expired").style.display = "block";
+  if (refreshTimer) clearInterval(refreshTimer);
+}
+
+async function setStatus(assignmentId, status, btn) {
+  if (busy) return;
+  busy = true;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Updating…";
+  try {
+    const r = await fetch(FN, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "crew-link/status", token, assignment_id: assignmentId, status }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      if (r.status === 404) { showExpired(d.error || "This link is no longer active."); busy = false; return; }
+      btn.disabled = false; btn.textContent = original;
+      alert(d.error || "Couldn't update status — try again.");
+      busy = false;
+      return;
+    }
+    render(d);
+  } catch (e) {
+    btn.disabled = false; btn.textContent = original;
+    alert("Couldn't update status — check your connection.");
+  }
+  busy = false;
+}
+
+if (!token) {
+  showExpired("This link is missing its access token.");
+} else {
+  load(true);
+  refreshTimer = setInterval(() => load(false), 60000);
+}
+</script>
+</body></html>
