@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07090d">
+<meta name="robots" content="noindex">
+<title>Your account</title>
+<style>
+:root{--bg:#07090d;--card:#10151c;--line:#1f2833;--text:#f3f5f7;--dim:#93a1af;--cyan:#22d3ee;--purple:#a855f7;--emerald:#34d399;--amber:#fbbf24;--red:#f87171}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;min-height:100dvh;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:-40%;background:
+  radial-gradient(42% 34% at 22% 12%, rgba(34,211,238,.13), transparent 60%),
+  radial-gradient(40% 34% at 82% 18%, rgba(168,85,247,.12), transparent 60%),
+  radial-gradient(50% 40% at 50% 96%, rgba(52,211,153,.06), transparent 65%);
+  animation:drift 26s ease-in-out infinite alternate;pointer-events:none;z-index:0}
+@keyframes drift{from{transform:translate3d(-1.5%,-1%,0) scale(1)}to{transform:translate3d(1.5%,1.5%,0) scale(1.05)}}
+.wrap{position:relative;z-index:1;width:100%;max-width:560px;padding:30px 18px calc(env(safe-area-inset-bottom) + 44px)}
+.hero{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:20px}
+.ring{width:64px;height:64px;border-radius:20px;padding:2px;background:linear-gradient(135deg,var(--cyan),var(--purple));box-shadow:0 0 42px rgba(34,211,238,.35),0 0 90px rgba(168,85,247,.18);animation:breathe 4.5s ease-in-out infinite}
+@keyframes breathe{0%,100%{box-shadow:0 0 34px rgba(34,211,238,.3),0 0 80px rgba(168,85,247,.15)}50%{box-shadow:0 0 52px rgba(34,211,238,.5),0 0 110px rgba(168,85,247,.28)}}
+.ring>.inner{width:100%;height:100%;border-radius:18px;background:var(--card);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.ring .mono{font-weight:800;font-size:26px;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent}
+.ring img{width:100%;height:100%;object-fit:cover;border-radius:18px}
+h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
+.tagline{margin:6px 0 0;color:var(--dim);font-size:14px}
+.badge{display:inline-flex;align-items:center;gap:7px;margin-top:12px;padding:6px 14px;border-radius:999px;border:1px solid rgba(34,211,238,.35);background:rgba(34,211,238,.08);color:var(--cyan);font-size:11.5px;font-weight:700;letter-spacing:.06em}
+.badge .dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(34,211,238,.5)}50%{box-shadow:0 0 0 6px rgba(34,211,238,0)}}
+.kicker{display:flex;align-items:center;gap:7px;margin:26px 2px 10px;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.kicker .kdot{width:5px;height:5px;border-radius:50%}
+.card{position:relative;border-radius:22px;padding:1px;margin-bottom:14px;background:linear-gradient(160deg,rgba(34,211,238,.4),rgba(168,85,247,.28) 45%,rgba(34,211,238,.1));box-shadow:0 24px 70px rgba(0,0,0,.5)}
+.card.gold{background:linear-gradient(160deg,rgba(251,191,36,.45),rgba(168,85,247,.25) 55%,rgba(251,191,36,.1))}
+.card.green{background:linear-gradient(160deg,rgba(52,211,153,.45),rgba(34,211,238,.22) 55%,rgba(52,211,153,.1))}
+.card>.in{border-radius:21px;background:rgba(16,21,28,.92);backdrop-filter:blur(18px);padding:18px}
+.balhero .amount{font-size:34px;font-weight:800;letter-spacing:-.02em;margin-top:6px}
+.balhero .sub{color:var(--dim);font-size:13px;margin-top:4px}
+.row-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.doc{font-size:12px;font-weight:800;letter-spacing:.1em;color:var(--cyan);text-transform:uppercase}
+.doc.amber{color:var(--amber)}
+.title{font-size:17px;font-weight:800;margin:4px 0 0;letter-spacing:-.01em}
+.meta{color:var(--dim);font-size:12.5px;margin-top:4px}
+.statuspill{flex-shrink:0;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;border-radius:999px;white-space:nowrap}
+.lines{margin-top:12px;border-top:1px solid var(--line);padding-top:10px;display:none}
+.lines.open{display:block}
+.lineitem{display:flex;justify-content:space-between;gap:12px;padding:5px 0;font-size:13px}
+.lineitem .d{color:var(--dim);flex:1;line-height:1.4}
+.lineitem .a{font-weight:700;white-space:nowrap}
+.linetotal{display:flex;justify-content:space-between;padding-top:9px;margin-top:6px;border-top:1px solid var(--line);font-weight:800;font-size:14px}
+.memo{margin-top:10px;color:var(--dim);font-size:12.5px;line-height:1.5;white-space:pre-wrap;padding:10px 12px;background:rgba(255,255,255,.035);border-radius:12px;border:1px solid var(--line)}
+.toggle{margin-top:12px;width:100%;padding:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--dim);border-radius:12px;font-size:12px;font-weight:700;letter-spacing:.05em;cursor:pointer}
+.approvebtn{width:100%;margin-top:14px;padding:15px;border:0;border-radius:14px;font-size:15px;font-weight:800;color:#03181d;background:linear-gradient(135deg,var(--emerald),#6ee7b7 60%,var(--cyan));cursor:pointer;transition:transform .15s;box-shadow:0 10px 34px rgba(52,211,153,.25)}
+.approvebtn:active{transform:translateY(1px) scale(.99)}
+.approvebtn:disabled{opacity:.5}
+.approved-tick{display:flex;align-items:center;justify-content:center;gap:8px;color:var(--emerald);font-weight:800;font-size:13px;letter-spacing:.05em;text-transform:uppercase;margin-top:14px;animation:rise .5s ease}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.appt-loc{display:flex;align-items:center;gap:7px;margin-top:8px;color:var(--dim);font-size:13px;text-decoration:none}
+.appt-loc span{text-decoration:underline;text-decoration-color:rgba(147,161,175,.35);text-underline-offset:3px}
+.historyrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 15px;border-radius:16px;background:rgba(255,255,255,.035);border:1px solid var(--line);margin-bottom:8px;cursor:pointer}
+.historyrow .hleft{min-width:0}
+.historyrow .hnum{font-weight:800;font-size:14px}
+.historyrow .hdate{color:var(--dim);font-size:12px;margin-top:2px}
+.historyrow .hamt{font-weight:800;font-size:14px;white-space:nowrap}
+.paidchip{font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--emerald);background:rgba(52,211,153,.12);border-radius:999px;padding:4px 9px;margin-left:8px}
+.bookbtn{display:block;text-align:center;margin-top:24px;padding:16px;border-radius:16px;font-size:15px;font-weight:800;color:#03181d;text-decoration:none;background:linear-gradient(135deg,var(--cyan),#7dd3fc 60%,var(--purple));box-shadow:0 10px 34px rgba(34,211,238,.25)}
+.empty-inline{color:var(--dim);font-size:13.5px;padding:16px 4px}
+.foot{position:relative;z-index:1;margin-top:auto;padding:20px;color:#556270;font-size:12px;letter-spacing:.04em}
+.foot a{color:var(--dim);text-decoration:none}
+#loading{position:relative;z-index:1;color:var(--dim);padding-top:16vh;text-align:center}
+.expired{display:none;text-align:center;padding-top:14vh;animation:rise .5s ease}
+.expired .icon{width:88px;height:88px;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.35);box-shadow:0 0 60px rgba(248,113,113,.15)}
+.expired h2{font-size:21px;margin:20px 0 8px}
+.expired p{color:var(--dim);font-size:14.5px;line-height:1.55;padding:0 20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="loading">Loading your account…</div>
+
+  <div id="app" style="display:none">
+    <div class="hero">
+      <div class="ring"><div class="inner" id="logo"><span class="mono">L</span></div></div>
+      <h1 id="greeting"></h1>
+      <p class="tagline" id="bizline"></p>
+      <span class="badge"><span class="dot"></span>YOUR LIVE ACCOUNT</span>
+    </div>
+    <div id="content"></div>
+    <a id="bookbtn" class="bookbtn" style="display:none" target="_blank" rel="noopener">📅 Book a service</a>
+  </div>
+
+  <div class="expired" id="expired">
+    <div class="icon">✕</div>
+    <h2>Link expired</h2>
+    <p id="expiredmsg">Ask the shop for a new one.</p>
+  </div>
+</div>
+<p class="foot">Powered by <a href="https://heyledger.ai">Ledger AI</a></p>
+<script>
+const FN = "https://lbzkyyehmgudlxmfpzzh.supabase.co/functions/v1/client-hub";
+const token = new URLSearchParams(location.search).get("t") || "";
+const $ = (id) => document.getElementById(id);
+let busy = false;
+let currency = "CAD";
+const openLines = new Set();
+
+function money(n) {
+  try { return new Intl.NumberFormat("en-CA", { style: "currency", currency }).format(Number(n) || 0); }
+  catch { return `$${(Number(n) || 0).toFixed(2)}`; }
+}
+function fmtDate(iso) {
+  if (!iso) return "";
+  const d = new Date(`${iso.slice(0, 10)}T12:00:00`);
+  return isNaN(d.getTime()) ? iso : d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+}
+function fmtDateTime(iso) {
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "" : d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function linesHtml(doc, key) {
+  const rows = (doc.lines || []).filter((l) => l.description || l.amount).map((l) => `
+    <div class="lineitem">
+      <div class="d">${escapeHtml(l.description)}${l.qty && l.rate != null ? ` <span style="opacity:.7">· ${l.qty} × ${money(l.rate)}</span>` : ""}</div>
+      <div class="a">${money(l.amount)}</div>
+    </div>`).join("");
+  const memo = doc.memo ? `<div class="memo">${escapeHtml(doc.memo)}</div>` : "";
+  return `<div class="lines${openLines.has(key) ? " open" : ""}" id="lines-${key}">
+    ${rows || '<div class="empty-inline">No line detail available.</div>'}
+    <div class="linetotal"><span>Total</span><span>${money(doc.total)}</span></div>
+    ${memo}
+  </div>
+  <button class="toggle" data-key="${key}">${openLines.has(key) ? "HIDE DETAILS" : "VIEW DETAILS"}</button>`;
+}
+
+function kicker(label, color) {
+  return `<div class="kicker" style="color:${color}"><span class="kdot" style="background:${color};box-shadow:0 0 6px ${color}"></span>${label}</div>`;
+}
+
+function render(data) {
+  currency = data.currency || "CAD";
+  $("greeting").textContent = `Hi, ${data.customerName || "there"}`;
+  $("bizline").textContent = `${data.business} — your account, live`;
+  if (data.logo_url) $("logo").innerHTML = `<img src="${escapeHtml(data.logo_url)}" alt="">`;
+  else $("logo").innerHTML = `<span class="mono">${escapeHtml((data.business || "L").slice(0, 1).toUpperCase())}</span>`;
+
+  let html = "";
+
+  // Balance hero
+  const owing = Number(data.balance) > 0;
+  html += `<div class="card ${owing ? "gold" : "green"}"><div class="in balhero">
+    <div class="doc ${owing ? "amber" : ""}" style="${owing ? "" : "color:var(--emerald)"}">ACCOUNT BALANCE</div>
+    <div class="amount" style="color:${owing ? "var(--amber)" : "var(--emerald)"}">${money(data.balance)}</div>
+    <div class="sub">${owing ? `${data.openInvoices.length} open invoice${data.openInvoices.length === 1 ? "" : "s"} — details below` : "All paid up. Thank you! 🎉"}</div>
+  </div></div>`;
+
+  // Quotes awaiting approval
+  const pending = (data.quotes || []).filter((q) => !q.approvedAt && !/^(accepted|closed)$/i.test(q.qboStatus || ""));
+  const approved = (data.quotes || []).filter((q) => q.approvedAt || /^(accepted|closed)$/i.test(q.qboStatus || ""));
+  if (pending.length) {
+    html += kicker("Quotes for your approval", "var(--purple)");
+    html += pending.map((q, i) => `<div class="card"><div class="in">
+      <div class="row-top">
+        <div>
+          <div class="doc">QUOTE ${escapeHtml(q.docNumber || "")}</div>
+          <div class="title">${money(q.total)}</div>
+          <div class="meta">${fmtDate(q.date)}${q.expires ? ` · valid until ${fmtDate(q.expires)}` : ""}</div>
+        </div>
+        <div class="statuspill" style="background:rgba(168,85,247,.12);color:var(--purple)">AWAITING YOU</div>
+      </div>
+      ${linesHtml(q, `q${i}`)}
+      <button class="approvebtn" data-est="${escapeHtml(q.id)}" data-num="${escapeHtml(q.docNumber || "")}" data-total="${q.total}">✓ Approve this quote</button>
+    </div></div>`).join("");
+  }
+
+  // Open invoices
+  html += kicker("Open invoices", "var(--amber)");
+  if ((data.openInvoices || []).length) {
+    html += data.openInvoices.map((inv, i) => {
+      const overdue = inv.status === "overdue";
+      return `<div class="card${overdue ? " gold" : ""}"><div class="in">
+      <div class="row-top">
+        <div>
+          <div class="doc${overdue ? " amber" : ""}">INVOICE ${escapeHtml(inv.docNumber || "")}</div>
+          <div class="title">${money(inv.balance)}<span style="font-size:12px;color:var(--dim);font-weight:600"> due</span></div>
+          <div class="meta">${fmtDate(inv.date)}${inv.dueDate ? ` · due ${fmtDate(inv.dueDate)}` : ""}</div>
+        </div>
+        <div class="statuspill" style="background:${overdue ? "rgba(251,191,36,.12)" : "rgba(34,211,238,.12)"};color:${overdue ? "var(--amber)" : "var(--cyan)"}">${overdue ? "OVERDUE" : "OPEN"}</div>
+      </div>
+      ${linesHtml(inv, `o${i}`)}
+    </div></div>`;
+    }).join("");
+  } else {
+    html += `<div class="empty-inline">No open invoices — you're all settled up.</div>`;
+  }
+
+  // Upcoming appointments
+  if ((data.appointments || []).length) {
+    html += kicker("Upcoming appointments", "var(--cyan)");
+    html += data.appointments.map((a) => {
+      const mapsUrl = a.location ? `https://maps.google.com/?q=${encodeURIComponent(a.location)}` : null;
+      return `<div class="card"><div class="in">
+        <div class="doc">${escapeHtml(fmtDateTime(a.start).toUpperCase())}</div>
+        <div class="title">${escapeHtml(a.title)}</div>
+        ${mapsUrl ? `<a class="appt-loc" href="${mapsUrl}" target="_blank" rel="noopener"><span>${escapeHtml(a.location)}</span></a>` : ""}
+      </div></div>`;
+    }).join("");
+  }
+
+  // Approved quotes (history of assents)
+  if (approved.length) {
+    html += kicker("Approved quotes", "var(--emerald)");
+    html += approved.map((q) => `<div class="historyrow" style="cursor:default">
+      <div class="hleft"><div class="hnum">Quote ${escapeHtml(q.docNumber || "")}</div>
+      <div class="hdate">${q.approvedAt ? `Approved ${fmtDate(q.approvedAt)}` : "Accepted"}</div></div>
+      <div><span class="hamt">${money(q.total)}</span><span class="paidchip">✓ APPROVED</span></div>
+    </div>`).join("");
+  }
+
+  // Service history
+  if ((data.paidInvoices || []).length) {
+    html += kicker("Service history", "var(--dim)");
+    html += data.paidInvoices.map((inv, i) => `
+      <div class="historyrow" data-hkey="h${i}">
+        <div class="hleft"><div class="hnum">Invoice ${escapeHtml(inv.docNumber || "")}</div>
+        <div class="hdate">${fmtDate(inv.date)}</div></div>
+        <div><span class="hamt">${money(inv.total)}</span><span class="paidchip">✓ PAID</span></div>
+      </div>
+      <div class="card" id="hcard-h${i}" style="display:${openLines.has("h" + i) ? "block" : "none"}"><div class="in">${linesHtml(inv, `h${i}`)}</div></div>`).join("");
+  }
+
+  $("content").innerHTML = html;
+  if (data.bookingLink) { $("bookbtn").href = data.bookingLink; $("bookbtn").style.display = "block"; }
+
+  document.querySelectorAll(".toggle[data-key]").forEach((btn) => {
+    btn.onclick = () => {
+      const key = btn.dataset.key;
+      const panel = $(`lines-${key}`);
+      const open = panel.classList.toggle("open");
+      if (open) openLines.add(key); else openLines.delete(key);
+      btn.textContent = open ? "HIDE DETAILS" : "VIEW DETAILS";
+    };
+  });
+  document.querySelectorAll(".historyrow[data-hkey]").forEach((row) => {
+    row.onclick = () => {
+      const key = row.dataset.hkey;
+      const card = $(`hcard-${key}`);
+      const show = card.style.display === "none";
+      card.style.display = show ? "block" : "none";
+      const panel = card.querySelector(".lines");
+      if (panel) panel.classList.add("open");
+      if (show) openLines.add(key); else openLines.delete(key);
+    };
+  });
+  document.querySelectorAll(".approvebtn[data-est]").forEach((btn) => {
+    btn.onclick = () => approve(btn);
+  });
+}
+
+async function approve(btn) {
+  if (busy) return;
+  const num = btn.dataset.num ? `#${btn.dataset.num}` : "";
+  if (!confirm(`Approve quote ${num} for ${money(btn.dataset.total)}? This tells the shop to go ahead.`)) return;
+  busy = true;
+  btn.disabled = true;
+  btn.textContent = "Approving…";
+  try {
+    const r = await fetch(FN, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "hub/approve", token, estimate_id: btn.dataset.est }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      if (r.status === 404) { showExpired(d.error || "This link is no longer active."); busy = false; return; }
+      btn.disabled = false; btn.textContent = "✓ Approve this quote";
+      alert(d.error || "Couldn't record your approval — try again.");
+      busy = false;
+      return;
+    }
+    render(d);
+  } catch {
+    btn.disabled = false; btn.textContent = "✓ Approve this quote";
+    alert("Couldn't record your approval — check your connection.");
+  }
+  busy = false;
+}
+
+async function load(showLoading) {
+  try {
+    const r = await fetch(FN, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "hub/data", token }),
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) {
+      showExpired(d.error || "This link is no longer active.");
+      return;
+    }
+    $("loading").style.display = "none";
+    $("expired").style.display = "none";
+    $("app").style.display = "block";
+    render(d);
+  } catch {
+    if (showLoading) $("loading").textContent = "Couldn't load your account — check your connection.";
+  }
+}
+
+function showExpired(msg) {
+  $("loading").style.display = "none";
+  $("app").style.display = "none";
+  $("expiredmsg").textContent = msg;
+  $("expired").style.display = "block";
+}
+
+if (!token) showExpired("This link is missing its access token.");
+else load(true);
+</script>
+</body></html>
