@@ -37,7 +37,16 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
 .job-loc{display:flex;align-items:center;gap:7px;margin-top:10px;color:var(--dim);font-size:13.5px;text-decoration:none}
 .job-loc svg{flex-shrink:0}
 .job-loc span{text-decoration:underline;text-decoration-color:rgba(147,161,175,.35);text-underline-offset:3px}
+.navrow{display:flex;gap:9px;margin-top:12px}
+.navbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 10px;border-radius:13px;font-size:13.5px;font-weight:800;letter-spacing:.02em;text-decoration:none;color:#03181d;background:linear-gradient(135deg,var(--cyan),#7dd3fc);box-shadow:0 8px 26px rgba(34,211,238,.28);transition:transform .15s}
+.navbtn:active{transform:translateY(1px) scale(.99)}
+.navbtn.alt{flex:0 0 auto;color:var(--text);background:rgba(255,255,255,.06);border:1px solid var(--line);box-shadow:none;padding:13px 14px;font-size:12px}
 .job-details{margin-top:10px;color:var(--dim);font-size:13px;line-height:1.5;white-space:pre-wrap;padding:10px 12px;background:rgba(255,255,255,.035);border-radius:12px;border:1px solid var(--line)}
+.job-details a{color:var(--cyan);text-decoration:none;font-weight:700}
+.daymeter{display:flex;align-items:center;gap:10px;margin:2px 0 18px;padding:13px 15px;border-radius:16px;background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.25)}
+.daymeter .bar{flex:1;height:7px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
+.daymeter .fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--cyan),var(--emerald));box-shadow:0 0 12px rgba(52,211,153,.6);transition:width .5s ease}
+.daymeter .count{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--emerald);white-space:nowrap}
 .track{display:flex;align-items:center;gap:6px;margin-top:16px}
 .step{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
 .step-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;border:1.5px solid var(--line);color:var(--dim);background:rgba(255,255,255,.03);transition:all .3s ease}
@@ -151,14 +160,26 @@ function jobCard(job) {
     actionHtml = "";
   }
 
-  const mapsUrl = job.location ? `https://maps.google.com/?q=${encodeURIComponent(job.location)}` : null;
-  const locHtml = mapsUrl
-    ? `<a class="job-loc" href="${mapsUrl}" target="_blank" rel="noopener">
+  // NAVIGATE fires real turn-by-turn: Apple Maps natively on iPhone/iPad,
+  // Google Maps directions everywhere else. The address text stays as a
+  // secondary pin link for "where is that?" glances.
+  const isApple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
+  const dest = job.location ? encodeURIComponent(job.location) : null;
+  const navUrl = dest ? (isApple ? `https://maps.apple.com/?daddr=${dest}&dirflg=d` : `https://www.google.com/maps/dir/?api=1&destination=${dest}`) : null;
+  const altUrl = dest ? (isApple ? `https://www.google.com/maps/dir/?api=1&destination=${dest}` : `https://maps.apple.com/?daddr=${dest}&dirflg=d`) : null;
+  const locHtml = dest
+    ? `<a class="job-loc" href="https://maps.google.com/?q=${dest}" target="_blank" rel="noopener">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
         <span>${escapeHtml(job.location)}</span>
-      </a>`
+      </a>
+      <div class="navrow">
+        <a class="navbtn" href="${navUrl}" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
+          NAVIGATE</a>
+        <a class="navbtn alt" href="${altUrl}" target="_blank" rel="noopener">${isApple ? "G Maps" : "Apple"}</a>
+      </div>`
     : "";
-  const detailsHtml = job.details ? `<div class="job-details">${escapeHtml(job.details)}</div>` : "";
+  const detailsHtml = job.details ? `<div class="job-details">${linkifyPhones(escapeHtml(job.details))}</div>` : "";
 
   return `<div class="job"><div class="in">
     <div class="job-top">
@@ -179,6 +200,14 @@ function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// Any phone number in the job notes becomes one-tap callable.
+function linkifyPhones(s) {
+  return s.replace(/(\+?1[\s.-]?)?(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})\b/g, (m) => {
+    const digits = m.replace(/[^\d+]/g, "");
+    return digits.replace(/\D/g, "").length >= 10 ? `<a href="tel:${digits}">${m}</a>` : m;
+  });
+}
+
 function render(data) {
   $("greeting").textContent = `Hi, ${data.crewMemberName || "there"}`;
   $("bizline").textContent = data.business ? `${data.business} — today's jobs` : "Today's jobs";
@@ -193,7 +222,14 @@ function render(data) {
       <p>Nothing on your list for today. Check back tomorrow.</p>
     </div>`;
   } else {
-    $("jobs").innerHTML = jobs.map(jobCard).join("");
+    const done = jobs.filter((j) => j.status === "done").length;
+    const meter = jobs.length > 1 || done > 0
+      ? `<div class="daymeter">
+          <div class="bar"><div class="fill" style="width:${Math.round((done / jobs.length) * 100)}%"></div></div>
+          <div class="count">${done} OF ${jobs.length} DONE${done === jobs.length ? " ✓" : ""}</div>
+        </div>`
+      : "";
+    $("jobs").innerHTML = meter + jobs.map(jobCard).join("");
   }
 
   document.querySelectorAll(".actionbtn[data-id]").forEach((btn) => {
