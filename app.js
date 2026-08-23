@@ -2823,13 +2823,12 @@ async function supportSheet() {
   });
 }
 
-// Support chat — public, no-auth support-agent function, native-styled twin of
-// the marketing site's "Ask Ledger Support" widget (assets/support-widget.js).
-// Deliberately never attaches the session/JWT to the request — the endpoint
-// takes none, is stateless server-side, and never sees tenant data. The
-// signed-in email is only used to save the visitor retyping it into a ticket:
-// it rides along as a hidden context turn the agent reads silently, not as an
-// auth credential, and the chat behaves identically for a signed-out visitor.
+// Support chat — support-agent function, native-styled twin of the marketing
+// site's "Ask Ledger Support" widget (assets/support-widget.js). Authorization
+// is OPTIONAL: v2 (2026-08-22) attaches the signed-in session token, the same
+// idiom as api()/token() above, so a signed-in visitor unlocks three read-only
+// self-service tools (subscription, connectors, AI allowance) server-side. A
+// signed-out visitor sends no header and the chat behaves exactly as before.
 const SUPPORT_FN = "https://lbzkyyehmgudlxmfpzzh.supabase.co/functions/v1/support-agent";
 const SUPPORT_GREETING = "Hey — I'm the Ledger AI support agent. Ask me anything about how the product works, or tell me what's going wrong and I'll help or get you to a human.";
 
@@ -2846,7 +2845,7 @@ function supportChatSheet() {
       <textarea id="scInput" rows="1" placeholder="Type a message…" maxlength="4000"></textarea>
       <button class="supchat-send" id="scSend" aria-label="Send">&#8593;</button>
     </div>
-    <p class="note" style="margin-top:9px;text-align:center">Public support chat · no account data visible here · <a href="mailto:supportteam@heyledger.ai">email a human</a></p>`,
+    <p class="note" style="margin-top:9px;text-align:center">${S.email ? "Signed in — I can check your subscription, connections, and AI allowance." : "Public support chat · no account data visible here"} · <a href="mailto:supportteam@heyledger.ai">email a human</a></p>`,
   (root) => {
     const log = root.querySelector("#scLog");
     const typingEl = root.querySelector("#scTyping");
@@ -2883,7 +2882,10 @@ function supportChatSheet() {
       payload.push(...history, { role: "user", content: trimmed });
 
       try {
-        const r = await fetch(SUPPORT_FN, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: payload }) });
+        const headers = { "content-type": "application/json" };
+        const t = await token().catch(() => null);
+        if (t) headers.Authorization = "Bearer " + t;
+        const r = await fetch(SUPPORT_FN, { method: "POST", headers, body: JSON.stringify({ messages: payload }) });
         const d = await r.json().catch(() => ({}));
         typingEl.style.display = "none";
         if (!r.ok || d?.error) {
