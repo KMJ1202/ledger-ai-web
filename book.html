@@ -3,56 +3,82 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0f14">
+<meta name="theme-color" content="#07090d">
 <meta name="robots" content="noindex">
 <title>Book an appointment</title>
 <style>
-:root{--bg:#0b0f14;--card:#141a22;--line:#232c37;--text:#f3f5f7;--dim:#9aa6b2;--cyan:#22d3ee;--purple:#a855f7;--emerald:#34d399;--red:#f87171}
+:root{--bg:#07090d;--card:#10151c;--line:#1f2833;--text:#f3f5f7;--dim:#93a1af;--cyan:#22d3ee;--purple:#a855f7;--emerald:#34d399;--red:#f87171}
 *{box-sizing:border-box}
-body{margin:0;min-height:100dvh;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;align-items:center}
-.wrap{width:100%;max-width:520px;padding:28px 20px calc(env(safe-area-inset-bottom) + 40px)}
-.biz{display:flex;align-items:center;gap:14px;margin-bottom:6px}
-.biz img{width:52px;height:52px;border-radius:13px;object-fit:cover;border:1px solid var(--line)}
-.mark{width:52px;height:52px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:24px;color:var(--cyan);background:linear-gradient(135deg,rgba(34,211,238,.22),rgba(168,85,247,.2));border:1px solid rgba(34,211,238,.35)}
-h1{font-size:22px;margin:0}
-.sub{color:var(--dim);font-size:14px;margin:4px 0 22px}
-label{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--dim);margin:16px 0 6px;text-transform:uppercase}
-input,textarea{width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--text);font-size:15px;padding:12px 14px;font-family:inherit}
-input:focus,textarea:focus{outline:none;border-color:var(--cyan)}
+html{scroll-behavior:smooth}
+body{margin:0;min-height:100dvh;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:-40%;background:
+  radial-gradient(42% 34% at 22% 12%, rgba(34,211,238,.13), transparent 60%),
+  radial-gradient(40% 34% at 82% 18%, rgba(168,85,247,.12), transparent 60%),
+  radial-gradient(50% 40% at 50% 96%, rgba(34,211,238,.06), transparent 65%);
+  animation:drift 26s ease-in-out infinite alternate;pointer-events:none;z-index:0}
+@keyframes drift{from{transform:translate3d(-1.5%,-1%,0) scale(1)}to{transform:translate3d(1.5%,1.5%,0) scale(1.05)}}
+.wrap{position:relative;z-index:1;width:100%;max-width:540px;padding:34px 20px calc(env(safe-area-inset-bottom) + 44px)}
+.hero{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:24px}
+.ring{width:86px;height:86px;border-radius:26px;padding:2px;background:linear-gradient(135deg,var(--cyan),var(--purple));box-shadow:0 0 42px rgba(34,211,238,.35),0 0 90px rgba(168,85,247,.18);animation:breathe 4.5s ease-in-out infinite}
+@keyframes breathe{0%,100%{box-shadow:0 0 34px rgba(34,211,238,.3),0 0 80px rgba(168,85,247,.15)}50%{box-shadow:0 0 52px rgba(34,211,238,.5),0 0 110px rgba(168,85,247,.28)}}
+.ring>.inner{width:100%;height:100%;border-radius:24px;background:var(--card);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.ring img{width:100%;height:100%;object-fit:cover}
+.ring .mono{font-weight:800;font-size:38px;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent}
+h1{font-size:26px;margin:18px 0 0;letter-spacing:-.02em}
+.tagline{margin:8px 0 0;color:var(--dim);font-size:14.5px}
+.badge{display:inline-flex;align-items:center;gap:7px;margin-top:14px;padding:6px 14px;border-radius:999px;border:1px solid rgba(52,211,153,.35);background:rgba(52,211,153,.08);color:var(--emerald);font-size:12px;font-weight:700;letter-spacing:.06em}
+.badge .dot{width:7px;height:7px;border-radius:50%;background:var(--emerald);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(52,211,153,.5)}50%{box-shadow:0 0 0 6px rgba(52,211,153,0)}}
+.panel{position:relative;border-radius:22px;padding:1px;background:linear-gradient(160deg,rgba(34,211,238,.4),rgba(168,85,247,.28) 45%,rgba(34,211,238,.1));box-shadow:0 24px 70px rgba(0,0,0,.5)}
+.panel>.in{border-radius:21px;background:rgba(16,21,28,.92);backdrop-filter:blur(18px);padding:24px 20px 26px}
+label{display:block;font-size:10.5px;font-weight:800;letter-spacing:.14em;color:var(--cyan);margin:18px 0 7px;text-transform:uppercase}
+label:first-of-type{margin-top:0}
+input,textarea{width:100%;background:rgba(255,255,255,.045);border:1px solid var(--line);border-radius:13px;color:var(--text);font-size:15.5px;padding:13px 15px;font-family:inherit;transition:border-color .2s,box-shadow .2s}
+input:focus,textarea:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 3px rgba(34,211,238,.14)}
 textarea{resize:vertical}
-.btn{width:100%;margin-top:22px;padding:14px;border:0;border-radius:13px;font-size:16px;font-weight:700;color:#04262e;background:linear-gradient(135deg,var(--cyan),#67e8f9);cursor:pointer}
-.btn:disabled{opacity:.55}
+::placeholder{color:#5c6a78}
+.btn{width:100%;margin-top:24px;padding:15px;border:0;border-radius:14px;font-size:16px;font-weight:800;letter-spacing:.01em;color:#03181d;background:linear-gradient(135deg,var(--cyan),#7dd3fc 60%,var(--purple));background-size:200% 100%;cursor:pointer;transition:transform .15s,box-shadow .2s,background-position .4s;box-shadow:0 10px 34px rgba(34,211,238,.28)}
+.btn:hover{background-position:100% 0;transform:translateY(-1px)}
+.btn:active{transform:translateY(1px) scale(.99)}
+.btn:disabled{opacity:.55;transform:none}
 .err{color:var(--red);font-size:13.5px;margin-top:12px;display:none}
-.done{display:none;text-align:center;padding-top:8vh}
-.done .big{font-size:52px}
-.done h2{font-size:21px;margin:14px 0 8px}
-.done p{color:var(--dim);font-size:15px;line-height:1.5}
-.foot{margin-top:auto;padding:18px;color:var(--dim);font-size:12px}
-.foot a{color:var(--dim)}
+.done{display:none;text-align:center;padding-top:6vh;animation:rise .5s ease}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.done .tick{width:92px;height:92px;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:44px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.4);box-shadow:0 0 60px rgba(52,211,153,.25)}
+.done h2{font-size:23px;margin:20px 0 8px}
+.done p{color:var(--dim);font-size:15px;line-height:1.55}
+.foot{position:relative;z-index:1;margin-top:auto;padding:20px;color:#556270;font-size:12px;letter-spacing:.04em}
+.foot a{color:var(--dim);text-decoration:none}
 .hp{position:absolute;left:-9999px;opacity:0;height:0;overflow:hidden}
-#loading{color:var(--dim);padding-top:10vh;text-align:center}
+#loading{position:relative;z-index:1;color:var(--dim);padding-top:12vh;text-align:center}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div id="loading">Loading…</div>
   <div id="form" style="display:none">
-    <div class="biz"><span id="logo" class="mark">L</span><h1 id="bizname"></h1></div>
-    <p class="sub">Request an appointment — they'll get back to you to confirm a time.</p>
-    <label for="fname">Your name</label><input id="fname" autocomplete="name" maxlength="160">
-    <label for="fphone">Phone</label><input id="fphone" type="tel" autocomplete="tel" maxlength="40">
-    <label for="femail">Email</label><input id="femail" type="email" autocomplete="email" maxlength="160">
-    <label for="fservice">What do you need?</label><input id="fservice" maxlength="300" placeholder="e.g. 4 new tires installed, leaky faucet, haircut…">
-    <label for="fwhen">Preferred day &amp; time</label><input id="fwhen" maxlength="200" placeholder="e.g. Tuesday morning, any weekday after 5">
-    <label for="fnotes">Anything else?</label><textarea id="fnotes" rows="3" maxlength="2000"></textarea>
-    <div class="hp"><label for="website">Website</label><input id="website" tabindex="-1" autocomplete="off"></div>
-    <button class="btn" id="go">Send booking request</button>
-    <p class="err" id="err"></p>
+    <div class="hero">
+      <div class="ring"><div class="inner" id="logobox"><span class="mono">L</span></div></div>
+      <h1 id="bizname"></h1>
+      <p class="tagline">Request an appointment — they'll confirm your time personally.</p>
+      <span class="badge"><span class="dot"></span>ACCEPTING REQUESTS 24/7</span>
+    </div>
+    <div class="panel"><div class="in">
+      <label for="fname">Your name</label><input id="fname" autocomplete="name" maxlength="160">
+      <label for="fphone">Phone</label><input id="fphone" type="tel" autocomplete="tel" maxlength="40">
+      <label for="femail">Email</label><input id="femail" type="email" autocomplete="email" maxlength="160">
+      <label for="fservice">What do you need?</label><input id="fservice" maxlength="300" placeholder="e.g. 4 new tires installed, leaky faucet, haircut…">
+      <label for="fwhen">Preferred day &amp; time</label><input id="fwhen" maxlength="200" placeholder="e.g. Tuesday morning, any weekday after 5">
+      <label for="fnotes">Anything else?</label><textarea id="fnotes" rows="3" maxlength="2000"></textarea>
+      <div class="hp"><label for="website">Website</label><input id="website" tabindex="-1" autocomplete="off"></div>
+      <button class="btn" id="go">Send booking request →</button>
+      <p class="err" id="err"></p>
+    </div></div>
   </div>
   <div class="done" id="done">
-    <div class="big">✅</div>
-    <h2>Request sent!</h2>
-    <p><span id="donebiz"></span> has your request and will reach out to confirm your appointment.</p>
+    <div class="tick">✓</div>
+    <h2>Request received</h2>
+    <p><b id="donebiz"></b> has your request and will reach out shortly to lock in your appointment.</p>
   </div>
 </div>
 <p class="foot">Powered by <a href="https://heyledger.ai">Ledger AI</a></p>
@@ -70,7 +96,7 @@ async function load() {
     bizName = d.business;
     document.title = "Book with " + bizName;
     $("bizname").textContent = bizName;
-    if (d.logo_url) $("logo").outerHTML = `<img src="${d.logo_url.replace(/"/g, "")}" alt="">`;
+    if (d.logo_url) $("logobox").innerHTML = `<img src="${d.logo_url.replace(/"/g, "")}" alt="">`;
     $("loading").style.display = "none";
     $("form").style.display = "block";
   } catch (e) {
@@ -97,9 +123,10 @@ $("go").onclick = async () => {
     $("form").style.display = "none";
     $("donebiz").textContent = bizName;
     $("done").style.display = "block";
+    window.scrollTo({ top: 0 });
   } catch (e) {
     err.textContent = e.message; err.style.display = "block";
-    btn.disabled = false; btn.textContent = "Send booking request";
+    btn.disabled = false; btn.textContent = "Send booking request →";
   }
 };
 load();

@@ -2747,12 +2747,23 @@ async function businessSheet() {
         const canToggle = ["owner", "admin"].includes(S.profile?.role || "owner");
         let html = "";
         if (s.enabled && s.link) {
-          html = `<p class="note ok" style="margin:0 0 8px">&#9679; Booking page is live — share this link anywhere:</p>
-            <div class="kv" style="align-items:center"><span style="word-break:break-all;font-size:12.5px">${esc(s.link)}</span>
-            <span><button class="btn ghost" id="bkcopy" style="padding:6px 11px;font-size:12px">Copy</button></span></div>
-            <p class="note" style="margin:8px 0 0">New requests show up in your Leads lane — ask Ledger "any new leads?"</p>
-            ${canToggle ? '<button class="btn ghost wide" style="margin-top:10px" id="bktoggle">Turn booking page off</button>' : ""}
-            <div id="bkreqs"></div>`;
+          html = `<style>@keyframes bkpulse{0%,100%{box-shadow:0 0 0 0 rgba(52,211,153,.5)}50%{box-shadow:0 0 0 7px rgba(52,211,153,0)}}</style>
+            <div style="border-radius:18px;padding:1px;background:linear-gradient(150deg,rgba(34,211,238,.5),rgba(168,85,247,.35) 55%,rgba(34,211,238,.12))">
+            <div style="border-radius:17px;background:rgba(13,18,25,.95);padding:16px 15px">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
+              <span style="width:9px;height:9px;border-radius:50%;background:var(--emerald);animation:bkpulse 2s ease-in-out infinite"></span>
+              <b style="color:var(--emerald);letter-spacing:.04em;font-size:13px">BOOKING PAGE LIVE</b></div>
+            <div style="display:flex;gap:14px;align-items:center">
+              <div id="bkqr" style="flex:0 0 auto;width:96px;height:96px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 6px 24px rgba(34,211,238,.18)"></div>
+              <div style="min-width:0">
+                <div style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--dim);word-break:break-all;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:8px 10px">${esc(s.link)}</div>
+                <p class="note" style="margin:8px 0 0;font-size:11.5px">Scan or share — requests land in your Leads lane.</p>
+              </div></div>
+            <div style="display:flex;gap:9px;margin-top:14px">
+              <button id="bkcopy" style="flex:1;padding:11px;border:0;border-radius:12px;font-weight:800;font-size:13px;color:#03181d;background:linear-gradient(135deg,var(--cyan),#7dd3fc);cursor:pointer">Copy link</button>
+              <button id="bkshare" style="flex:1;padding:11px;border:0;border-radius:12px;font-weight:800;font-size:13px;color:#fff;background:linear-gradient(135deg,var(--purple),#c084fc);cursor:pointer">Share</button></div>
+            ${canToggle ? '<button class="btn ghost wide" style="margin-top:10px;color:var(--red)" id="bktoggle">Turn booking page off</button>' : ""}
+            <div id="bkreqs"></div></div></div>`;
         } else {
           html = `<p class="note" style="margin:0 0 8px">Give customers a link to request appointments 24/7 — no account, no phone tag. Requests land straight in your Leads lane.</p>
             ${canToggle ? '<button class="btn primary wide" id="bktoggle">Turn on my booking page</button>' : '<p class="note">Ask the owner to switch it on.</p>'}`;
@@ -2769,6 +2780,22 @@ async function businessSheet() {
           try { await navigator.clipboard.writeText(s.link); toast("Link copied"); }
           catch { prompt("Copy your booking link:", s.link); }
         };
+        const sh2 = slot.querySelector("#bkshare");
+        if (sh2) sh2.onclick = async () => {
+          try { await navigator.share({ title: "Book with " + (S.profile?.business?.name || "us"), url: s.link }); }
+          catch { try { await navigator.clipboard.writeText(s.link); toast("Link copied"); } catch {} }
+        };
+        const qrBox = slot.querySelector("#bkqr");
+        if (qrBox && s.link) {
+          try {
+            if (!window.qrcode) await new Promise((res, rej) => {
+              const sc = document.createElement("script"); sc.src = "assets/qrcode.js?v=1";
+              sc.onload = res; sc.onerror = rej; document.head.appendChild(sc);
+            });
+            const q = window.qrcode(0, "M"); q.addData(s.link); q.make();
+            qrBox.innerHTML = `<img src="${q.createDataURL(4, 2)}" alt="Booking QR" style="width:88px;height:88px;image-rendering:pixelated">`;
+          } catch { qrBox.style.display = "none"; }
+        }
         if (s.enabled) {
           try {
             const l = await api("/bookings", { action: "list" });
