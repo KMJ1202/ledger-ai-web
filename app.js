@@ -2690,6 +2690,9 @@ async function businessSheet() {
     <p class="note" style="margin-top:5px">Authorization happens on each provider's official sign-in page. Ledger never receives your password.</p>
     <div id="connslot" class="note" style="margin-top:8px">Checking connections…</div>
 
+    <div class="eyebrow" style="margin-top:20px">ONLINE BOOKING</div>
+    <div id="bookslot" class="note" style="margin-top:8px">Loading…</div>
+
     <div class="eyebrow" style="margin-top:20px">TEAM</div>
     <div id="teamslot" class="note" style="margin-top:8px">Loading…</div>
 
@@ -2735,6 +2738,57 @@ async function businessSheet() {
       }).join("");
       wireConnect(slot);
     });
+    // Online booking — public link customers use with no account; requests
+    // land in booking_requests AND the Leads lane. Owner/admin can toggle.
+    const renderBooking = async () => {
+      const slot = sh.querySelector("#bookslot"); if (!slot) return;
+      try {
+        const s = await api("/bookings", { action: "settings" });
+        const canToggle = ["owner", "admin"].includes(S.profile?.role || "owner");
+        let html = "";
+        if (s.enabled && s.link) {
+          html = `<p class="note ok" style="margin:0 0 8px">&#9679; Booking page is live — share this link anywhere:</p>
+            <div class="kv" style="align-items:center"><span style="word-break:break-all;font-size:12.5px">${esc(s.link)}</span>
+            <span><button class="btn ghost" id="bkcopy" style="padding:6px 11px;font-size:12px">Copy</button></span></div>
+            <p class="note" style="margin:8px 0 0">New requests show up in your Leads lane — ask Ledger "any new leads?"</p>
+            ${canToggle ? '<button class="btn ghost wide" style="margin-top:10px" id="bktoggle">Turn booking page off</button>' : ""}
+            <div id="bkreqs"></div>`;
+        } else {
+          html = `<p class="note" style="margin:0 0 8px">Give customers a link to request appointments 24/7 — no account, no phone tag. Requests land straight in your Leads lane.</p>
+            ${canToggle ? '<button class="btn primary wide" id="bktoggle">Turn on my booking page</button>' : '<p class="note">Ask the owner to switch it on.</p>'}`;
+        }
+        slot.innerHTML = html;
+        const tog = slot.querySelector("#bktoggle");
+        if (tog) tog.onclick = async () => {
+          tog.disabled = true;
+          try { await api("/bookings", { action: "set-enabled", enabled: !s.enabled }); renderBooking(); }
+          catch (e) { tog.disabled = false; toast(e.message, "err"); }
+        };
+        const cp = slot.querySelector("#bkcopy");
+        if (cp) cp.onclick = async () => {
+          try { await navigator.clipboard.writeText(s.link); toast("Link copied"); }
+          catch { prompt("Copy your booking link:", s.link); }
+        };
+        if (s.enabled) {
+          try {
+            const l = await api("/bookings", { action: "list" });
+            const fresh = (l.requests || []).filter((r) => r.status === "new").slice(0, 5);
+            const rq = slot.querySelector("#bkreqs");
+            if (rq && fresh.length) {
+              rq.innerHTML = `<div class="eyebrow" style="margin-top:12px;font-size:10px">NEW REQUESTS</div>` + fresh.map((r) =>
+                `<div class="kv"><span>${esc(r.name)}<br><small style="color:var(--dim)">${esc(r.service || r.preferredText || "")}</small></span>
+                 <span><button class="btn ghost" data-bkdone="${esc(r.id)}" style="padding:6px 11px;font-size:12px">Handled</button></span></div>`).join("");
+              rq.querySelectorAll("[data-bkdone]").forEach((btn) => btn.onclick = async () => {
+                btn.disabled = true;
+                try { await api("/bookings", { action: "mark-handled", id: btn.dataset.bkdone }); renderBooking(); }
+                catch (e) { btn.disabled = false; toast(e.message, "err"); }
+              });
+            }
+          } catch {}
+        }
+      } catch { slot.textContent = "Booking unavailable right now."; }
+    };
+    renderBooking();
     sh.querySelector("#bpu").onclick = powerUpSheet;
     sh.querySelector("#bnew").onclick = () => { newConversation(); closeSheet(); openChat(); };
     sh.querySelector("#bbill").onclick = async () => {
