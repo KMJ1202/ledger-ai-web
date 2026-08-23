@@ -43,6 +43,19 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
 .navbtn.alt{flex:0 0 auto;color:var(--text);background:rgba(255,255,255,.06);border:1px solid var(--line);box-shadow:none;padding:13px 14px;font-size:12px}
 .job-details{margin-top:10px;color:var(--dim);font-size:13px;line-height:1.5;white-space:pre-wrap;padding:10px 12px;background:rgba(255,255,255,.035);border-radius:12px;border:1px solid var(--line)}
 .job-details a{color:var(--cyan);text-decoration:none;font-weight:700}
+.clockcard{position:relative;border-radius:22px;padding:1px;margin:0 0 16px;background:linear-gradient(160deg,rgba(52,211,153,.5),rgba(34,211,238,.3) 55%,rgba(52,211,153,.12));box-shadow:0 24px 70px rgba(0,0,0,.5)}
+.clockcard.on{background:linear-gradient(160deg,rgba(251,191,36,.5),rgba(34,211,238,.28) 55%,rgba(251,191,36,.12))}
+.clockcard>.in{border-radius:21px;background:rgba(16,21,28,.94);backdrop-filter:blur(18px);padding:17px 16px}
+.clockrow{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.clocklabel{font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;display:flex;align-items:center;gap:7px}
+.clockdot{width:8px;height:8px;border-radius:50%}
+.clocktime{font-size:30px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums;margin-top:3px}
+.clocksub{color:var(--dim);font-size:12px;margin-top:3px}
+.clockbtn{flex-shrink:0;padding:15px 20px;border:0;border-radius:15px;font-size:14px;font-weight:800;letter-spacing:.05em;cursor:pointer;transition:transform .15s}
+.clockbtn:active{transform:translateY(1px) scale(.98)}
+.clockbtn:disabled{opacity:.5}
+.clockbtn.in{color:#03181d;background:linear-gradient(135deg,var(--emerald),#6ee7b7);box-shadow:0 10px 34px rgba(52,211,153,.35)}
+.clockbtn.out{color:#1a1002;background:linear-gradient(135deg,var(--amber),#fcd34d);box-shadow:0 10px 34px rgba(251,191,36,.3)}
 .daymeter{display:flex;align-items:center;gap:10px;margin:2px 0 18px;padding:13px 15px;border-radius:16px;background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.25)}
 .daymeter .bar{flex:1;height:7px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
 .daymeter .fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--cyan),var(--emerald));box-shadow:0 0 12px rgba(52,211,153,.6);transition:width .5s ease}
@@ -84,6 +97,7 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
       <p class="tagline" id="bizline"></p>
       <span class="badge"><span class="dot"></span><span id="datebadge"></span></span>
     </div>
+    <div id="clock"></div>
     <div id="jobs"></div>
   </div>
 
@@ -208,7 +222,67 @@ function linkifyPhones(s) {
   });
 }
 
+// ---- Punch clock ----
+let clockTicker = null;
+function fmtHMS(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = Math.floor(totalSeconds % 60);
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+function renderClock(clock) {
+  if (clockTicker) { clearInterval(clockTicker); clockTicker = null; }
+  if (!clock) { $("clock").innerHTML = ""; return; }
+  const baseSeconds = clock.todaySeconds || 0;
+  const baseAt = Date.now();
+  const on = clock.clockedIn;
+  $("clock").innerHTML = `<div class="clockcard${on ? " on" : ""}"><div class="in">
+    <div class="clockrow">
+      <div>
+        <div class="clocklabel" style="color:${on ? "var(--amber)" : "var(--emerald)"}">
+          <span class="clockdot" style="background:${on ? "var(--amber)" : "var(--emerald)"};${on ? "box-shadow:0 0 8px var(--amber);animation:pulse 2s ease-in-out infinite" : ""}"></span>
+          ${on ? "ON THE CLOCK" : "OFF THE CLOCK"}
+        </div>
+        <div class="clocktime" id="clockelapsed">${fmtHMS(baseSeconds)}</div>
+        <div class="clocksub">${on ? `since ${new Date(clock.clockInAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : (baseSeconds > 0 ? "worked today" : "tap to start your day")}</div>
+      </div>
+      <button class="clockbtn ${on ? "out" : "in"}" id="clockbtn">${on ? "CLOCK OUT" : "CLOCK IN"}</button>
+    </div>
+  </div></div>`;
+  if (on) {
+    clockTicker = setInterval(() => {
+      const el = $("clockelapsed");
+      if (el) el.textContent = fmtHMS(baseSeconds + Math.round((Date.now() - baseAt) / 1000));
+    }, 1000);
+  }
+  $("clockbtn").onclick = async () => {
+    const btn = $("clockbtn");
+    if (busy) return;
+    busy = true; btn.disabled = true; btn.textContent = "…";
+    try {
+      const r = await fetch(FN, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "crew-link/clock", token, direction: on ? "out" : "in" }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        if (r.status === 404) { showExpired(d.error || "This link is no longer active."); busy = false; return; }
+        alert(d.error || "Couldn't update the clock — try again.");
+        busy = false; renderClock(clock); return;
+      }
+      busy = false;
+      render(d);
+      return;
+    } catch (e) {
+      alert("Couldn't update the clock — check your connection.");
+      busy = false; renderClock(clock);
+    }
+  };
+}
+
 function render(data) {
+  renderClock(data.clock);
   $("greeting").textContent = `Hi, ${data.crewMemberName || "there"}`;
   $("bizline").textContent = data.business ? `${data.business} — today's jobs` : "Today's jobs";
   const d = new Date(`${data.date}T12:00:00`);
