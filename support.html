@@ -8,16 +8,17 @@
 <meta name="description" content="Ledger AI support — how to reach us and what to include in a support request.">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>Support — Ledger AI</title>
+<link rel="stylesheet" href="assets/styles.css?v=23">
 <style>
 :root{--bg:#0b0f14;--card:#141a22;--line:#232c37;--text:#f3f5f7;--dim:#9aa6b2;--cyan:#22d3ee;--purple:#a855f7}
 *{box-sizing:border-box;margin:0}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.55}
 .wrap{max-width:760px;margin:0 auto;padding:0 22px}
-nav{display:flex;align-items:center;gap:12px;padding:20px 0}
+.oldnav{display:flex;align-items:center;gap:12px;padding:20px 0}
 .mark{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,rgba(34,211,238,.28),rgba(168,85,247,.22));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;color:var(--cyan);border:1px solid rgba(34,211,238,.4)}
-nav b{font-size:18px;flex:1}
-nav a{color:var(--dim);text-decoration:none;font-size:14px;margin-left:18px}
-nav a:hover{color:var(--text)}
+
+
+
 .btn{display:inline-block;text-decoration:none;text-align:center;font-weight:700;border-radius:13px;padding:13px 22px;font-size:15px;cursor:pointer;border:0}
 .btn.primary{background:linear-gradient(135deg,var(--cyan),var(--purple));color:#fff;box-shadow:0 8px 30px rgba(34,211,238,.25)}
 .btn.ghost{background:rgba(255,255,255,.06);color:var(--text);border:1px solid var(--line)}
@@ -40,13 +41,33 @@ footer a{color:var(--dim)}
 </style>
 </head>
 <body>
+<header class="site">
+  <div class="wrap">
+    <nav class="sitenav">
+      <a class="brand" href="index.html"><img src="assets/logo-mark-96.png" alt="Ledger AI"><b>Ledger AI</b><span class="bcaret">▾</span></a>
+      <div class="links">
+        <a href="index.html">Home</a>
+        <div class="drop">
+          <span>Integrations ▾</span>
+          <div class="menu">
+            <a href="integrations/quickbooks.html"><img class="mico" src="assets/icons/quickbooks.svg" alt=""> QuickBooks Online</a>
+            <a href="integrations/gmail.html"><img class="mico" src="assets/icons/gmail.svg" alt=""> Gmail — Receipt Radar</a>
+            <a href="integrations/google-calendar.html"><img class="mico" src="assets/icons/googlecalendar.svg" alt=""> Google Calendar</a>
+            <a href="integrations/google-business.html"><img class="mico" src="assets/icons/googlebusiness.svg" alt=""> Google Business Profile</a>
+          </div>
+        </div>
+        <a href="index.html#pricing">Pricing</a>
+        <a href="support.html">Support</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+      <div class="navcta">
+        <a class="btn ghost sm" href="app.html">Sign in</a>
+        <a class="btn primary sm" href="app.html">Open the app →</a>
+      </div>
+    </nav>
+  </div>
+</header>
 <div class="wrap">
-  <nav>
-    <div class="mark">L</div><b>Ledger AI</b>
-    <a href="index.html">Home</a>
-    <a href="privacy.html">Privacy</a>
-    <a class="btn ghost" href="app.html">Sign in</a>
-  </nav>
 
   <main>
     <h1>Support</h1>
@@ -91,5 +112,6 @@ footer a{color:var(--dim)}
     <a href="index.html">Home</a> &middot; <a href="privacy.html">Privacy</a> &middot; Support: supportteam@heyledger.ai
   </footer>
 </div>
+<script src="assets/nav.js?v=23"></script>
 </body>
 </html>
