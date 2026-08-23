@@ -2694,6 +2694,7 @@ async function businessSheet() {
       <button class="btn ghost wide" id="bnew">Start a fresh conversation</button>
       <button class="btn ghost wide" id="bbill">Manage subscription</button>
       <button class="btn ghost wide" id="bsupport">Contact support</button>
+      <button class="btn ghost wide" id="bsupportchat">Support &amp; account help</button>
       <button class="btn ghost wide" id="bout" style="color:var(--red)">Sign out</button>
       <button class="btn ghost wide" id="bdel" style="color:var(--red)">Delete account</button>
     </div>
@@ -2702,6 +2703,7 @@ async function businessSheet() {
       <a href="${FN}/legal/terms" target="_blank" rel="noopener">Terms of Service</a></p>`, async (sh) => {
     wireConnect(sh);
     sh.querySelector("#bsupport").onclick = supportSheet;
+    sh.querySelector("#bsupportchat").onclick = supportChatSheet;
     sh.querySelector("#blogo").onclick = () => sh.querySelector("#blogofile").click();
     sh.querySelector("#blogofile").onchange = async (e) => {
       const file = e.target.files?.[0];
@@ -2818,6 +2820,96 @@ async function supportSheet() {
       e.currentTarget.disabled = false;
     };
     refresh();
+  });
+}
+
+// Support chat — public, no-auth support-agent function, native-styled twin of
+// the marketing site's "Ask Ledger Support" widget (assets/support-widget.js).
+// Deliberately never attaches the session/JWT to the request — the endpoint
+// takes none, is stateless server-side, and never sees tenant data. The
+// signed-in email is only used to save the visitor retyping it into a ticket:
+// it rides along as a hidden context turn the agent reads silently, not as an
+// auth credential, and the chat behaves identically for a signed-out visitor.
+const SUPPORT_FN = "https://lbzkyyehmgudlxmfpzzh.supabase.co/functions/v1/support-agent";
+const SUPPORT_GREETING = "Hey — I'm the Ledger AI support agent. Ask me anything about how the product works, or tell me what's going wrong and I'll help or get you to a human.";
+
+function supportChatSheet() {
+  const history = []; // {role, content} pairs already answered — sent back each turn
+  let sending = false;
+  let lastFailed = null;
+
+  sheet(`<h2>Support &amp; account help</h2>
+    <p class="sh-sub">Ask anything about Ledger AI — instant answers, and it can open a ticket for you.</p>
+    <div class="supchat-log" id="scLog"></div>
+    <div class="typing" id="scTyping" style="display:none">Ledger Support is typing…</div>
+    <div class="supchat-row">
+      <textarea id="scInput" rows="1" placeholder="Type a message…" maxlength="4000"></textarea>
+      <button class="supchat-send" id="scSend" aria-label="Send">&#8593;</button>
+    </div>
+    <p class="note" style="margin-top:9px;text-align:center">Public support chat · no account data visible here · <a href="mailto:supportteam@heyledger.ai">email a human</a></p>`,
+  (root) => {
+    const log = root.querySelector("#scLog");
+    const typingEl = root.querySelector("#scTyping");
+    const input = root.querySelector("#scInput");
+    const sendBtn = root.querySelector("#scSend");
+
+    const addBubble = (cls, html) => {
+      const d = document.createElement("div"); d.className = "msg " + cls; d.innerHTML = html;
+      log.appendChild(d); log.scrollTop = log.scrollHeight; return d;
+    };
+    const renderTicket = (t) => `<div class="supchat-ticket"><b>Ticket ${esc(t.ticket_id)} opened</b><br>A human will follow up at ${esc(t.email)} — usually within 1 business day.</div>`;
+    const renderError = (msg) => `${esc(msg)} <button class="btn ghost" style="padding:3px 10px;font-size:12px;margin-left:6px" data-scretry>Try again</button>`;
+
+    addBubble("ai", esc(SUPPORT_GREETING));
+
+    async function sendMessage(text) {
+      if (sending) return;
+      const trimmed = text.trim().slice(0, 4000);
+      if (!trimmed) return;
+      sending = true; lastFailed = null;
+      addBubble("me", esc(trimmed));
+      input.value = ""; input.style.height = "auto";
+      sendBtn.disabled = true; typingEl.style.display = "block"; log.scrollTop = log.scrollHeight;
+
+      // Prefill: a hidden context turn ahead of the real transcript so the agent
+      // already has the signed-in email if it needs one for create_ticket, and
+      // never has to ask. Only sent when S.email is set (signed in); the chat
+      // works identically, minus the prefill, for a signed-out visitor.
+      const payload = [];
+      if (S.email) {
+        payload.push({ role: "user", content: `[Silent context, do not reply to this line — just remember it: the signed-in visitor's account email is ${S.email}. If you open a support ticket, use this email automatically instead of asking for one.]` });
+        payload.push({ role: "assistant", content: "Understood." });
+      }
+      payload.push(...history, { role: "user", content: trimmed });
+
+      try {
+        const r = await fetch(SUPPORT_FN, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: payload }) });
+        const d = await r.json().catch(() => ({}));
+        typingEl.style.display = "none";
+        if (!r.ok || d?.error) {
+          addBubble("ai err", renderError(d?.message || "Something went wrong reaching support just now."));
+          lastFailed = trimmed;
+        } else {
+          history.push({ role: "user", content: trimmed }, { role: "assistant", content: d.reply });
+          let html = esc(d.reply).replace(/\n/g, "<br>");
+          if (d.ticket) html += renderTicket(d.ticket);
+          addBubble("ai", html);
+        }
+      } catch {
+        typingEl.style.display = "none";
+        addBubble("ai err", renderError("Couldn't reach support — check your connection."));
+        lastFailed = trimmed;
+      }
+      sending = false; sendBtn.disabled = false;
+    }
+
+    log.addEventListener("click", (e) => {
+      if (e.target.closest("[data-scretry]") && lastFailed) { const t = lastFailed; lastFailed = null; sendMessage(t); }
+    });
+    sendBtn.onclick = () => sendMessage(input.value);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input.value); } });
+    input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 100) + "px"; });
+    setTimeout(() => input.focus(), 60);
   });
 }
 
