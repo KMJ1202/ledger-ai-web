@@ -983,13 +983,73 @@ async function runProfitSweep() {
   try { await api("/gmail/scan", {}); }
   catch (e) { scanNote = "Email scan skipped — " + e.message; } // Gmail down or not connected: sweep what we have
   stage("Sweeping the books…");
-  try { applyBoard(await api("/profit/sweep", {})); }
+  let sweepResult;
+  try { sweepResult = await api("/profit/sweep", {}); applyBoard(sweepResult); }
   catch (e) { toast(e.message, "err"); closeSheet(); return; }
   stage("Lining up today's receipts…");
   let cards = [];
   try { cards = (await get("/profit/day-review")).cards || []; }
   catch { /* the board already updated; a review hiccup shouldn't eat the sweep */ }
-  psCard(cards, 0, { confirmed: 0, excluded: 0, parked: 0, classified: 0, scanNote });
+  const tally = { confirmed: 0, excluded: 0, parked: 0, classified: 0, added: 0, scanNote };
+  // Nothing arrived by email and nothing is on file for today at all — the one
+  // moment the sweep volunteers a question, because it is the owner's explicit
+  // tap that got us here, not a background nag.
+  if (!cards.length && sweepResult?.sweep_empty_today) { psEmptyDay(tally); return; }
+  psCard(cards, 0, tally);
+}
+
+/* Empty Day: no supplier invoice/receipt arrived today and nothing is on file
+   for it yet. Universal by design — no KMJ/tire wording — so the same four
+   buckets read naturally to a barber or a plumber: Supplies, Fuel, Materials,
+   Other. Each maps onto an existing cost_class the board already counts. */
+const EMPTY_DAY_CLASSES = [
+  ["shop_supplies", "Supplies"],
+  ["fuel", "Fuel"],
+  ["tires_parts", "Materials"],
+  ["other", "Other"],
+];
+
+function psEmptyDay(tally) {
+  const today = S.profit?.today_date || localDay();
+  sheet(`<h2>No invoices found today</h2>
+    <p class="sh-sub">Would you like to add any costs to today's profit sweep?</p>
+    ${EMPTY_DAY_CLASSES.map(([k, l]) => `
+      <label class="fld">${esc(l.toUpperCase())}</label>
+      <input id="ed-${k}-amt" class="cmpinput" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+      <input id="ed-${k}-note" class="cmpinput" style="margin-top:5px" placeholder="Note — optional">
+    `).join("")}
+    <button class="btn em wide" style="margin-top:13px" id="edSave">Add to today's sweep</button>
+    <button class="btn ghost wide" style="margin-top:8px" id="edCam">&#128247;&nbsp; Photograph a receipt</button>
+    <input type="file" id="edCamInput" accept="image/*" capture="environment" hidden>
+    <button class="btn ghost wide" style="margin-top:8px" id="edSkip">Skip — nothing to add</button>
+    <div class="note err" id="edErr" style="margin-top:8px"></div>`, (sh) => {
+    const err = sh.querySelector("#edErr");
+    sh.querySelector("#edCam").onclick = () => sh.querySelector("#edCamInput").click();
+    // The existing receipt-photo pipeline: read → categorize → post to
+    // QuickBooks. Reused as-is rather than re-built for this popup.
+    sh.querySelector("#edCamInput").onchange = (e) => captureReceipt(e.target.files?.[0]);
+    sh.querySelector("#edSkip").onclick = () => psDone(0, tally);
+    sh.querySelector("#edSave").onclick = async (e) => {
+      const lines = EMPTY_DAY_CLASSES.map(([k, l]) => ({
+        k, l,
+        amount: Number(sh.querySelector(`#ed-${k}-amt`).value) || 0,
+        note: (sh.querySelector(`#ed-${k}-note`).value || "").trim(),
+      })).filter((x) => x.amount > 0);
+      if (!lines.length) { err.textContent = "Enter an amount in at least one section, or skip."; return; }
+      e.currentTarget.disabled = true; err.textContent = "";
+      try {
+        for (const line of lines) {
+          applyBoard(await api("/profit/add-cost", {
+            vendor: line.l, date: today, amount: line.amount, gst: 0,
+            cost_class: line.k, note: line.note,
+          }));
+          tally.added += 1;
+        }
+        toast(`${lines.length} cost${lines.length === 1 ? "" : "s"} added`);
+        psDone(0, tally);
+      } catch (er) { err.textContent = er.message; e.currentTarget.disabled = false; }
+    };
+  });
 }
 
 function psCard(cards, index, tally) {
@@ -1075,8 +1135,11 @@ async function psDone(count, tally) {
   if (tally.confirmed) bits.push(`${tally.confirmed} confirmed`);
   if (tally.parked) bits.push(`${tally.parked} parked for a future job`);
   if (tally.excluded) bits.push(`${tally.excluded} removed`);
+  if (tally.added) bits.push(`${tally.added} cost${tally.added === 1 ? "" : "s"} added by hand`);
   sheet(`<h2>Day locked in</h2>
-    <p class="sh-sub">${count ? `${count} receipt${count === 1 ? "" : "s"} reviewed${bits.length ? " — " + bits.join(", ") : ""}.` : "No receipts needed your eyes today."}</p>
+    <p class="sh-sub">${count
+      ? `${count} receipt${count === 1 ? "" : "s"} reviewed${bits.length ? " — " + bits.join(", ") : ""}.`
+      : (bits.length ? `No invoices arrived by email today — ${bits.join(", ")}.` : "No receipts needed your eyes today.")}</p>
     <div class="hero" style="margin-top:10px">
       <div class="headline"><span class="eyebrow">Today's profit</span><span class="when">${esc(today.date || localDay())}</span></div>
       ${swept ? `<div class="big" style="color:${(today.net_profit || 0) >= 0 ? "var(--emerald)" : "var(--red)"}">${money(today.net_profit)}</div>
