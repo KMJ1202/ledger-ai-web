@@ -133,12 +133,13 @@ const ICONS = {
   calendar: `<svg viewBox="0 0 24 24"><path d="M7 2v2H5.5A2.5 2.5 0 003 6.5v13A2.5 2.5 0 005.5 22h13a2.5 2.5 0 002.5-2.5v-13A2.5 2.5 0 0018.5 4H17V2h-2v2H9V2H7zm12 8v9.2c0 .4-.3.8-.8.8H5.8a.8.8 0 01-.8-.8V10h14zM7.5 12a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zM7.5 16a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2z"/></svg>`,
   receipts: `<svg viewBox="0 0 24 24"><path d="M9.4 3l-1.2 2H5.5A2.5 2.5 0 003 7.5v11A2.5 2.5 0 005.5 21h13a2.5 2.5 0 002.5-2.5v-11A2.5 2.5 0 0018.5 5h-2.7l-1.2-2H9.4zM12 8.2a4.8 4.8 0 110 9.6 4.8 4.8 0 010-9.6zm0 2a2.8 2.8 0 100 5.6 2.8 2.8 0 000-5.6z"/></svg>`,
   customers: `<svg viewBox="0 0 24 24"><path d="M9 4.5a3.4 3.4 0 110 6.8 3.4 3.4 0 010-6.8zm7.6 1a2.7 2.7 0 110 5.4 2.7 2.7 0 010-5.4zM9 13c3.1 0 6 1.5 6 3.4V19H3v-2.6C3 14.5 5.9 13 9 13zm7.6.6c2.6 0 4.4 1.2 4.4 2.7V19h-4.6v-2.6c0-1.1-.5-2-1.3-2.7h1.5z"/></svg>`,
+  phone: `<svg viewBox="0 0 24 24"><path d="M6.6 2.6l3.6.6.9 4.2-2.3 1.8c.9 2.3 2.7 4.1 5 5l1.8-2.3 4.2.9.6 3.6c0 1.4-1.1 2.6-2.6 2.6C9.8 19 5 14.2 5 5.2c0-1.4 1.2-2.6 1.6-2.6z"/></svg>`,
 };
 const TABS = [
   { key: "home", icon: ICONS.ledger, label: "Ledger" },
   { key: "finance", icon: ICONS.finance, label: "Finance" },
   { key: "calendar", icon: ICONS.calendar, label: "Calendar" },
-  { key: "receipts", icon: ICONS.receipts, label: "Receipts" },
+  { key: "phone", icon: ICONS.phone, label: "Phone" },
   { key: "customers", icon: ICONS.customers, label: "Customers" },
 ];
 
@@ -207,7 +208,7 @@ function setTab(key) {
     if (key === "home" || key === "finance" || key === "customers") S.qboStale = true;
     if (key === "calendar") S.cal = null;
     if (key === "finance") S.profitStale = true;
-    if (key === "receipts") S.receipts = null;
+    if (key === "phone") S.phone = null;
     if (key === "customers") S.board = null;
   }
   S.tab = key;
@@ -223,7 +224,7 @@ function renderTab() {
   if (S.tab === "home") return renderHome();
   if (S.tab === "finance") return renderFinance();
   if (S.tab === "calendar") return renderCalendar();
-  if (S.tab === "receipts") return renderReceipts();
+  if (S.tab === "phone") return renderPhone();
   if (S.tab === "customers") return renderCustomers();
 }
 
@@ -304,7 +305,7 @@ async function renderHome() {
   box.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); fire(); } });
   // Ledger Live (realtime voice) is an iPhone capability — say so rather than fake an orb.
   $("livebtn").onclick = () => toast("Ledger Live voice runs in the iPhone app");
-  $("askcam").onclick = () => setTab("receipts");
+  $("askcam").onclick = () => { S.financeLane = "receipts"; setTab("finance"); };
   on("[data-ask]", "click", (e) => { openChat(); $("box").value = e.currentTarget.dataset.ask; send(); });
   loadHomeKpis();
   loadHomeMail();
@@ -490,7 +491,10 @@ async function loadHomeAttention() {
     ${row("cyan", "receipts", "&#128247;", "Receipt review", `${receipts} receipt draft${receipts === 1 ? "" : "s"} waiting`)}
     ${row("purple", "calendar", "&#128197;", "Schedule", `${appts} upcoming appointment${appts === 1 ? "" : "s"}`)}
   </div>`;
-  on("[data-attn]", "click", (e) => setTab(e.currentTarget.dataset.attn), slot);
+  on("[data-attn]", "click", (e) => {
+    const t = e.currentTarget.dataset.attn;
+    if (t === "receipts") { S.financeLane = "receipts"; setTab("finance"); } else setTab(t);
+  }, slot);
   on("[data-costreview]", "click", () => openCostReview(), slot);
 }
 
@@ -538,18 +542,24 @@ async function emailSheet(m) {
 }
 
 /* ---------------- FINANCE ---------------- */
+const FINANCE_CODE = { invoices: "FIN.02 · REVENUE GRID", profit: "FIN.02 · PROFIT & LOSS", receipts: "EXP.04 · EXPENSE INTAKE" };
+const FINANCE_TITLE = { invoices: "Finance", profit: "Profit", receipts: "Receipts" };
+
 async function renderFinance() {
-  const profit = S.financeLane === "profit";
+  const lane = S.financeLane === "profit" || S.financeLane === "receipts" ? S.financeLane : "invoices";
   view().innerHTML = `<div class="sect">
-    ${osHead(profit ? "FIN.02 · PROFIT & LOSS" : "FIN.02 · REVENUE GRID", profit ? "Profit" : "Finance")}
+    ${osHead(FINANCE_CODE[lane], FINANCE_TITLE[lane])}
     <div class="seg">
-      <button class="${profit ? "" : "on"}" data-fl="invoices">Invoices</button>
-      <button class="${profit ? "on" : ""}" data-fl="profit">Profit &amp; Loss</button>
+      <button class="${lane === "invoices" ? "on" : ""}" data-fl="invoices">Invoices</button>
+      <button class="${lane === "profit" ? "on" : ""}" data-fl="profit">Profit &amp; Loss</button>
+      <button class="${lane === "receipts" ? "on" : ""}" data-fl="receipts">Receipts</button>
     </div>
     <div id="finbody"><div class="skel"></div><div class="skel"></div></div>
   </div>`;
   on("[data-fl]", "click", (e) => { S.financeLane = e.currentTarget.dataset.fl; renderFinance(); });
-  if (S.financeLane === "profit") loadProfit(); else loadInvoices();
+  if (lane === "profit") loadProfit();
+  else if (lane === "receipts") loadReceipts();
+  else loadInvoices();
 }
 
 async function loadInvoices() {
@@ -621,7 +631,7 @@ async function loadInvoices() {
     if ($("clrsearch")) $("clrsearch").onclick = () => { S.invoiceSearch = ""; loadInvoices(); };
     on("[data-op]", "click", (e) => {
       const op = e.currentTarget.dataset.op;
-      if (op === "profit") { S.financeLane = "profit"; renderFinance(); } else setTab("receipts");
+      if (op === "profit") { S.financeLane = "profit"; renderFinance(); } else { S.financeLane = "receipts"; renderFinance(); }
     }, slot);
     on("[data-fcust]", "click", (e) => {
       const c = (S.qbo?.qbo?.customers || []).find((x) => x.id === e.currentTarget.dataset.fcust);
@@ -1668,8 +1678,8 @@ const CATEGORIES = {
   "Admin & Growth": ["Advertising", "Software & Subscriptions", "Office Supplies", "Professional Fees", "Bank & Processing Fees", "Licences & Permits", "Training & Education", "Other Business Cost"],
 };
 
-async function renderReceipts() {
-  skeleton(4);
+async function loadReceipts() {
+  const slot = $("finbody"); if (!slot) return;
   try {
     const d = await get("/gmail/receipts");
     S.receipts = d.receipts || [];
@@ -1679,8 +1689,7 @@ async function renderReceipts() {
     const shown = !rq ? S.receipts : S.receipts.filter((r) =>
       ((r.vendor || "") + " " + (r.category || "") + " " + (r.received_at || "") + " " + (r.subject || "") + " " + (r.summary || ""))
         .toLowerCase().includes(rq));
-    view().innerHTML = `<div class="sect">
-      ${osHead("EXP.04 · EXPENSE INTAKE", "Receipts")}
+    slot.innerHTML = `
       <button class="queue" id="batchqueue">
         <div class="ic">&#128229;</div>
         <div class="m"><small>QuickBooks batch queue</small>
@@ -1726,35 +1735,34 @@ async function renderReceipts() {
               : r.category === "Personal" ? '<span class="tag grey">personal</span>'
               : r.category ? '<span class="tag new">ready</span>' : '<span class="tag open">needs category</span>'}</small></div>
         </button>`).join("")}</div>`
-        : `<div class="empty">${rq ? "No receipts match that search." : "No receipts found yet.<br>Run a scan, or forward one to your inbox."}</div>`}
-    </div>`;
+        : `<div class="empty">${rq ? "No receipts match that search." : "No receipts found yet.<br>Run a scan, or forward one to your inbox."}</div>`}`;
     $("rcptshoot").onclick = () => $("rcptcam").click();
     $("rcptpick").onclick = () => $("rcptlib").click();
     $("rcptcam").onchange = (e) => captureReceipt(e.target.files?.[0]);
     $("rcptlib").onchange = (e) => captureReceipt(e.target.files?.[0]);
     $("scannow").onclick = async (e) => {
       e.currentTarget.disabled = true; e.currentTarget.textContent = "Scanning…";
-      try { await api("/gmail/scan", {}); toast("Scan complete"); renderReceipts(); }
-      catch (err) { toast(err.message, "err"); renderReceipts(); }
+      try { await api("/gmail/scan", {}); toast("Scan complete"); loadReceipts(); }
+      catch (err) { toast(err.message, "err"); loadReceipts(); }
     };
     if ($("batch")) $("batch").onclick = () => batchPost(ready);
     $("batchqueue").onclick = () => batchQueueSheet(ready, queueTotal);
     $("scanhour").onchange = async (e) => {
       const hour = Number(e.target.value);
       try { await api("/gmail/set-schedule", { hour }); toast("Daily scan set to " + hourLabel(hour)); }
-      catch (err) { toast(err.message, "err"); renderReceipts(); }
+      catch (err) { toast(err.message, "err"); loadReceipts(); }
     };
     const rs = $("rcptsearch");
     rs.addEventListener("input", () => {
       S.receiptSearch = rs.value.trim();
       clearTimeout(S._rt); S._rt = setTimeout(() => {
-        renderReceipts().then(() => { const n = $("rcptsearch"); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } });
+        loadReceipts().then(() => { const n = $("rcptsearch"); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } });
       }, 220);
     });
-    on("[data-rcpt]", "click", (e) => receiptSheet(S.receipts.find((r) => r.id === e.currentTarget.dataset.rcpt)));
+    on("[data-rcpt]", "click", (e) => receiptSheet(S.receipts.find((r) => r.id === e.currentTarget.dataset.rcpt)), slot);
   } catch (e) {
-    view().innerHTML = /not connected|Gmail/i.test(e.message) ? connectPanel("gmail") : `<div class="empty">${esc(e.message)}</div>`;
-    wireConnect(view());
+    slot.innerHTML = /not connected|Gmail/i.test(e.message) ? connectPanel("gmail") : `<div class="empty">${esc(e.message)}</div>`;
+    wireConnect(slot);
   }
 }
 
@@ -1818,7 +1826,7 @@ async function batchPost(ready) {
     } catch { skipped++; }
   }
   toast(`${posted} posted${duped ? ", " + duped + " possible duplicate" + (duped === 1 ? "" : "s") + " held for review" : ""}${skipped ? ", " + skipped + " left for you" : ""}`);
-  renderReceipts();
+  loadReceipts();
 }
 
 // Camera lane. The phone shoots 4000px JPEGs; a receipt only needs enough
@@ -1860,8 +1868,8 @@ async function captureReceipt(file) {
   try {
     const image = await downscaleReceipt(file);
     const d = await api("/gmail/photo-receipt", { image, media_type: "image/jpeg" });
-    await renderReceipts();
-    // renderReceipts rebuilds the panel, so the in-flight note is gone by now —
+    await loadReceipts();
+    // loadReceipts rebuilds the panel, so the in-flight note is gone by now —
     // a toast is what actually survives to be read.
     toast("Receipt read — check the details");
     receiptSheet(d.receipt, d.suggested_category);
@@ -1923,13 +1931,13 @@ function receiptSheet(r, suggestedCategory) {
     };
     sh.querySelector("#rsave").onclick = async (e) => {
       e.currentTarget.disabled = true;
-      try { await save(); closeSheet(); toast("Receipt updated"); renderReceipts(); }
+      try { await save(); closeSheet(); toast("Receipt updated"); loadReceipts(); }
       catch (err) { e.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
     };
     sh.querySelector("#rdismiss").onclick = async (e) => {
       if (!confirm("Dismiss this receipt? There's no undo for this in the app.")) return;
       e.currentTarget.disabled = true;
-      try { await api("/gmail/dismiss", { id: r.id }); closeSheet(); renderReceipts(); }
+      try { await api("/gmail/dismiss", { id: r.id }); closeSheet(); loadReceipts(); }
       catch (err) { e.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
     };
     const post = sh.querySelector("#rpost");
@@ -1948,12 +1956,221 @@ function receiptSheet(r, suggestedCategory) {
           e2.currentTarget.disabled = true;
           try {
             await api("/quickbooks-invoice/expense-post", { receipt_id: r.id, vendor_id: note.querySelector("#rvend").value });
-            closeSheet(); toast("Posted to QuickBooks"); renderReceipts();
+            closeSheet(); toast("Posted to QuickBooks"); loadReceipts();
           } catch (err) { e2.currentTarget.disabled = false; toast(err.message, "err"); }
         };
       } catch (err) { post.disabled = false; note.className = "note err"; note.textContent = err.message; }
     };
   });
+}
+
+/* ---------------- PHONE ---------------- */
+const PHONE_DAY_LABELS = [["sun", "S"], ["mon", "M"], ["tue", "T"], ["wed", "W"], ["thu", "T"], ["fri", "F"], ["sat", "S"]];
+
+function formatE164(n) {
+  const m = String(n || "").match(/^\+1(\d{3})(\d{3})(\d{4})$/);
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : (n || "");
+}
+
+async function renderPhone() {
+  skeleton(3);
+  try {
+    const d = await api("/phone", { action: "board" });
+    S.phone = d;
+    view().innerHTML = `<div class="sect">
+      ${osHead("COM.06 · CALL LINE", "Phone")}
+      ${d.hasNumber ? phoneNumberCard(d) : requestNumberCard(d.pendingRequest)}
+      ${d.hasNumber ? phoneFeedPanel(d) : ""}
+      ${d.hasNumber ? phoneSettingsPanel(d) : ""}
+    </div>`;
+    if (d.hasNumber) wirePhoneSettings(d); else wireRequestNumber(d.pendingRequest);
+    if (d.hasNumber) on("[data-pevt]", "click", (e) => phoneEventSheet(d.events.find((ev) => ev.id === e.currentTarget.dataset.pevt)));
+    if (d.hasNumber) {
+      $("phsetup").onclick = () => phoneSetupSheet(d);
+      // First time a number goes live, open the setup guide once — same
+      // one-shot pattern as the iOS onboarding interview's @AppStorage flag.
+      const seenKey = "ledger.phoneSetupSeen." + d.number.id;
+      if (!localStorage.getItem(seenKey)) { localStorage.setItem(seenKey, "1"); phoneSetupSheet(d); }
+    }
+  } catch (e) {
+    view().innerHTML = `<div class="sect">${osHead("COM.06 · CALL LINE", "Phone")}<div class="empty">${esc(e.message)}</div></div>`;
+  }
+}
+
+function phoneNumberCard(d) {
+  return `<div class="panel">
+    <h3>&#128222; Business number</h3>
+    <div class="bignum">${esc(formatE164(d.number.e164))}</div>
+    <p class="sub">Missed calls get a same-second auto-text, and the caller lands in your Leads list — nothing to do here but read the feed.</p>
+    <button class="btn ghost wide" style="margin-top:12px" id="phsetup">&#128203; Setup guide</button>
+  </div>`;
+}
+
+// Standard GSM/3GPP conditional-forwarding codes — the same codes Bell,
+// Rogers, Telus, Fido, Koodo, AT&T and T-Mobile all honour. Verizon's legacy
+// CDMA codes differ, so that's called out rather than guessed at.
+function phoneForwardingCodes(target) {
+  const t = target.replace(/^\+1/, "1");
+  return [
+    ["Busy", `*67*${t}#`, `#67#`],
+    ["No answer", `*61*${t}#`, `#61#`],
+    ["Unreachable / phone off", `*62*${t}#`, `#62#`],
+    ["All calls", `*21*${t}#`, `#21#`],
+  ];
+}
+
+function voicemailScript(businessName) {
+  return `You've reached ${businessName}. We're either helping another customer or away from the phone right now. `
+    + `Leave your name, number, and a quick note about what you need, and we'll call you back as soon as we can. `
+    + `Thanks for calling ${businessName}!`;
+}
+
+function phoneSetupSheet(d) {
+  const bizName = S.profile?.business?.name || "your business";
+  const codes = phoneForwardingCodes(d.number.e164);
+  const script = voicemailScript(bizName);
+  sheet(`<h2>Set up your new number</h2>
+    <p class="sh-sub">${esc(formatE164(d.number.e164))} is live. Two ways to put it to work:</p>
+    <h3 style="margin-top:16px">1 &middot; Keep your old number</h3>
+    <p class="sub">Forward calls from your existing line to your new Ledger AI number using your carrier's conditional-forwarding codes. Dial the "enable" code from the old phone once — no app, no settings menu.</p>
+    <div class="list" style="margin-top:8px">
+      ${codes.map(([label, on, off]) => `
+        <div class="item" style="cursor:default">
+          <div class="main"><div class="ttl">${esc(label)}</div>
+            <div class="sub">Enable <code>${esc(on)}</code> &middot; Disable <code>${esc(off)}</code></div></div>
+        </div>`).join("")}
+    </div>
+    <p class="note" style="margin-top:6px">Works on Bell, Rogers, Telus, Fido, Koodo, AT&amp;T and T-Mobile. On Verizon, use your carrier's call forwarding settings instead of these codes.</p>
+    <h3 style="margin-top:18px">2 &middot; Or advertise your new number</h3>
+    <p class="sub">Put ${esc(formatE164(d.number.e164))} on your website, Google Business Profile, invoices and vehicles as your primary line going forward. No forwarding needed — it just works.</p>
+    <h3 style="margin-top:18px">Voicemail greeting script</h3>
+    <p class="sub">Read this into your carrier's greeting recorder (recording the audio itself is still a manual step — this just gives you the words).</p>
+    <p class="note" id="vmscript" style="margin-top:8px;white-space:pre-wrap">${esc(script)}</p>
+    <button class="btn ghost wide" style="margin-top:9px" id="vmcopy">Copy script</button>`, (sh) => {
+    sh.querySelector("#vmcopy").onclick = () => {
+      navigator.clipboard?.writeText(script).then(() => toast("Script copied")).catch(() => toast("Couldn't copy — select and copy manually", "err"));
+    };
+  });
+}
+
+function phoneEventBadge(ev) {
+  if (ev.autoReplySent) return '<span class="tag new">auto-replied</span>';
+  if (!ev.answered) return '<span class="tag open">no reply sent</span>';
+  return '<span class="tag paid">answered</span>';
+}
+
+function phoneFeedPanel(d) {
+  const events = d.events || [];
+  return `<div class="lanehead"><span class="eyebrow">Missed-call feed</span><span class="note">${events.length} logged</span></div>
+    ${events.length ? `<div class="list">${events.map((ev) => `
+      <button class="item" data-pevt="${esc(ev.id)}">
+        <div class="main">
+          <div class="ttl">${esc(formatE164(ev.callerNumber) || "Unknown caller")}</div>
+          <div class="sub">${esc(dayLabel(ev.occurredAt))} · ${esc(timeLabel(ev.occurredAt))}${ev.voicemailUrl ? " · 🎙 voicemail" : ""}</div>
+        </div>
+        <div class="amt"><small>${phoneEventBadge(ev)}</small></div>
+      </button>`).join("")}</div>`
+      : `<div class="empty">No missed calls yet. When one comes in, it shows up here within seconds.</div>`}`;
+}
+
+function phoneEventSheet(ev) {
+  if (!ev) return;
+  sheet(`<h2>${esc(formatE164(ev.callerNumber) || "Unknown caller")}</h2>
+    <p class="sh-sub">${esc(dayLabel(ev.occurredAt))} · ${esc(timeLabel(ev.occurredAt))} · ${esc(ev.direction)} · ${esc(ev.status)}</p>
+    ${ev.voicemailUrl ? `<audio controls src="${esc(ev.voicemailUrl)}" style="width:100%;margin-top:10px"></audio>` : ""}
+    ${ev.transcript ? `<p class="note" style="margin-top:9px">${esc(ev.transcript)}</p>` : ""}
+    <p class="note" style="margin-top:9px">${ev.autoReplySent ? "Auto-reply sent: “" + esc(ev.autoReplyText || "") + "”" : "No auto-reply was sent for this call."}</p>
+    <div class="rowbtns" style="margin-top:14px">
+      <a class="btn ghost" href="tel:${esc(ev.callerNumber)}">Call back</a>
+      <a class="btn primary" href="sms:${esc(ev.callerNumber)}">Text back</a>
+    </div>`);
+}
+
+function phoneSettingsPanel(d) {
+  return `<div class="panel">
+    <h3>&#9200; Business hours</h3>
+    <p class="sub">Sets which auto-reply a missed call gets.</p>
+    <div class="timerow" style="margin-top:10px">
+      <input type="time" id="phstart" value="${esc(d.hoursStart || "08:00")}">
+      <span class="note">to</span>
+      <input type="time" id="phend" value="${esc(d.hoursEnd || "17:00")}">
+    </div>
+    <div class="daypick" style="margin-top:10px">
+      ${PHONE_DAY_LABELS.map(([k, l]) => `<button class="daybtn ${((d.hoursDays || []).includes(k)) ? "on" : ""}" data-phday="${k}" type="button">${l}</button>`).join("")}
+    </div>
+    <label class="fld" style="margin-top:14px">AUTO-REPLY · BUSINESS HOURS</label>
+    <textarea id="phauto1" rows="3">${esc(d.autoReplyHours || "")}</textarea>
+    <label class="fld" style="margin-top:10px">AUTO-REPLY · AFTER HOURS</label>
+    <textarea id="phauto2" rows="3">${esc(d.autoReplyAfter || "")}</textarea>
+    <p class="note" style="margin-top:6px">Use <code>{business}</code> and <code>{hours}</code> — they fill in automatically.</p>
+    <button class="btn em wide" style="margin-top:13px" id="phsave">Save</button>
+    <div class="note" id="phnote" style="margin-top:8px"></div>
+  </div>`;
+}
+
+function wirePhoneSettings(d) {
+  let days = new Set(d.hoursDays || []);
+  on("[data-phday]", "click", (e) => {
+    const k = e.currentTarget.dataset.phday;
+    days.has(k) ? days.delete(k) : days.add(k);
+    e.currentTarget.classList.toggle("on");
+  });
+  $("phsave").onclick = async (e) => {
+    e.currentTarget.disabled = true;
+    const note = $("phnote");
+    try {
+      await api("/phone", {
+        action: "settings-save",
+        hoursStart: $("phstart").value, hoursEnd: $("phend").value,
+        hoursDays: [...days], autoReplyHours: $("phauto1").value, autoReplyAfter: $("phauto2").value,
+      });
+      toast("Phone settings saved");
+    } catch (err) { note.className = "note err"; note.textContent = err.message; }
+    e.currentTarget.disabled = false;
+  };
+}
+
+function requestNumberCard(pending) {
+  if (pending) {
+    return `<div class="panel">
+      <h3>&#128241; Business number requested</h3>
+      <p class="sub">We're provisioning <b>${esc(pending.businessName)}</b>'s number now — you'll be texted here the moment it's live.</p>
+      <p class="note" style="margin-top:8px">Requested ${esc(dayLabel(pending.createdAt))}</p>
+    </div>`;
+  }
+  return `<div class="panel">
+    <h3>&#128241; Request a business number &#128664;</h3>
+    <p class="sub">Get a dedicated business line: missed calls auto-text the caller and land them in your Leads list.</p>
+    <label class="fld" style="margin-top:10px">BUSINESS NAME</label>
+    <input id="rnbiz" placeholder="Your business name">
+    <label class="fld" style="margin-top:10px">PREFERRED AREA CODE</label>
+    <input id="rnarea" placeholder="e.g. 587" inputmode="numeric" maxlength="3">
+    <label class="fld" style="margin-top:10px">BUSINESS HOURS</label>
+    <input id="rnhours" placeholder="e.g. Mon–Fri 8am–5pm">
+    <label class="fld" style="margin-top:10px">AUTO-REPLY TEXT (OPTIONAL)</label>
+    <textarea id="rntemplate" rows="3" placeholder="We'll suggest one if you leave this blank."></textarea>
+    <button class="btn em wide" style="margin-top:13px" id="rnsubmit">Request number</button>
+    <div class="note" id="rnnote" style="margin-top:8px"></div>
+  </div>`;
+}
+
+function wireRequestNumber(pending) {
+  if (pending) return;
+  $("rnsubmit").onclick = async (e) => {
+    const note = $("rnnote");
+    const businessName = $("rnbiz").value.trim();
+    if (businessName.length < 2) { note.className = "note err"; note.textContent = "Business name is required"; return; }
+    e.currentTarget.disabled = true;
+    try {
+      await api("/phone", {
+        action: "request-number", businessName,
+        areaCode: $("rnarea").value.trim(), hoursNote: $("rnhours").value.trim(),
+        autoReplyTemplate: $("rntemplate").value.trim(),
+      });
+      toast("Request sent — we'll text you when your number is live");
+      renderPhone();
+    } catch (err) { e.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
+  };
 }
 
 /* ---------------- CUSTOMERS · LEADS · TO-DO ---------------- */

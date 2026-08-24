@@ -581,6 +581,14 @@ label.fld{display:block;font-family:var(--mono);font-size:11px;color:var(--dim);
 .searchwrap .mag{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--cyan);pointer-events:none;display:flex}
 .searchwrap .mag svg{width:17px;height:17px;fill:currentColor}
 
+/* phone tab */
+.bignum{font-size:30px;font-weight:900;letter-spacing:-.8px;margin-top:8px;font-family:var(--mono);color:var(--cyan)}
+.timerow{display:flex;gap:10px;align-items:center}
+.timerow input{flex:1}
+.daypick{display:flex;gap:7px}
+.daybtn{flex:1;padding:10px 0;border-radius:11px;border:1px solid var(--line);background:var(--glass);color:var(--dim);font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
+.daybtn.on{background:linear-gradient(120deg,#2fe0a0,#38bdf8);color:#04241a;border-color:transparent}
+
 /* calendar */
 .calstats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px}
 .calstat{position:relative;border-radius:18px;padding:15px 12px;border:1px solid var(--line);background:linear-gradient(160deg,rgba(255,255,255,.05),rgba(255,255,255,.015))}
@@ -781,5 +789,5 @@ a{color:var(--cyan)}
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=22"></script>
+<script type="module" src="app.js?v=23"></script>
 </body></html>
