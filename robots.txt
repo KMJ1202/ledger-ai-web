@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /crew.html
+Disallow: /client.html
+Sitemap: https://heyledger.ai/sitemap.xml
