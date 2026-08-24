@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://heyledger.ai/</loc></url>
-  <url><loc>https://heyledger.ai/features/ai.html</loc></url>
-  <url><loc>https://heyledger.ai/features/crew.html</loc></url>
-  <url><loc>https://heyledger.ai/features/client-hub.html</loc></url>
-  <url><loc>https://heyledger.ai/features/invoicing.html</loc></url>
-  <url><loc>https://heyledger.ai/features/booking.html</loc></url>
-  <url><loc>https://heyledger.ai/integrations/quickbooks.html</loc></url>
-  <url><loc>https://heyledger.ai/integrations/gmail.html</loc></url>
-  <url><loc>https://heyledger.ai/integrations/google-calendar.html</loc></url>
-  <url><loc>https://heyledger.ai/integrations/google-business.html</loc></url>
-  <url><loc>https://heyledger.ai/support.html</loc></url>
-  <url><loc>https://heyledger.ai/privacy.html</loc></url>
+  <url><loc>https://heyledger.ai/features/ai/</loc></url>
+  <url><loc>https://heyledger.ai/features/crew/</loc></url>
+  <url><loc>https://heyledger.ai/features/client-hub/</loc></url>
+  <url><loc>https://heyledger.ai/features/invoicing/</loc></url>
+  <url><loc>https://heyledger.ai/features/booking/</loc></url>
+  <url><loc>https://heyledger.ai/integrations/quickbooks/</loc></url>
+  <url><loc>https://heyledger.ai/integrations/gmail/</loc></url>
+  <url><loc>https://heyledger.ai/integrations/google-calendar/</loc></url>
+  <url><loc>https://heyledger.ai/integrations/google-business/</loc></url>
+  <url><loc>https://heyledger.ai/support/</loc></url>
+  <url><loc>https://heyledger.ai/privacy/</loc></url>
   <url><loc>https://heyledger.ai/book.html</loc></url>
 </urlset>
