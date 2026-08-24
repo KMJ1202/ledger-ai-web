@@ -147,6 +147,7 @@ section.tight{padding:56px 0}
 .card.orange{border-color:rgba(251,146,60,.28)}.card.orange .ic{background:rgba(251,146,60,.15);color:var(--orange)}
 .card.gold{border-color:rgba(251,191,36,.26)}.card.gold .ic{background:rgba(251,191,36,.14);color:var(--gold)}
 .card.red{border-color:rgba(248,113,113,.26)}.card.red .ic{background:rgba(248,113,113,.14);color:var(--red)}
+.card.blue{border-color:rgba(59,130,246,.28)}.card.blue .ic{background:rgba(59,130,246,.15);color:var(--blue)}
 
 /* ---------- integration cards (glow, link-out) ---------- */
 .intcard{
@@ -170,10 +171,12 @@ nav.sitenav .links .menu img.mico{width:18px;height:18px;flex-shrink:0}
 .intcard.orange{border-color:rgba(251,146,60,.28)}.intcard.orange .ic{background:rgba(251,146,60,.16);color:var(--orange)}.intcard.orange .glow{background:var(--orange)}
 .intcard.emerald{border-color:rgba(47,224,160,.28)}.intcard.emerald .ic{background:rgba(47,224,160,.16);color:var(--emerald)}.intcard.emerald .glow{background:var(--emerald)}
 .intcard.purple{border-color:rgba(168,85,247,.3)}.intcard.purple .ic{background:rgba(168,85,247,.17);color:var(--magenta)}.intcard.purple .glow{background:var(--purple)}
+.intcard.blue{border-color:rgba(59,130,246,.3)}.intcard.blue .ic{background:rgba(59,130,246,.17);color:var(--blue)}.intcard.blue .glow{background:var(--blue)}
 .intcard:hover.cyan{border-color:rgba(58,200,245,.6)}
 .intcard:hover.orange{border-color:rgba(251,146,60,.55)}
 .intcard:hover.emerald{border-color:rgba(47,224,160,.55)}
 .intcard:hover.purple{border-color:rgba(168,85,247,.6)}
+.intcard:hover.blue{border-color:rgba(59,130,246,.6)}
 
 /* ---------- pricing ---------- */
 .price{
@@ -275,6 +278,7 @@ footer.site .copy{color:var(--dim2);font-size:12.5px}
   .card.orange::before{background:#fb923c}
   .card.gold::before{background:#fbbf24}
   .card.red::before{background:#f87171}
+  .card.blue::before{background:#3b82f6}
   .card:hover{transform:translateY(-4px)}
   .card:hover::before{opacity:.26}
   .card.cyan:hover{border-color:rgba(58,200,245,.55);box-shadow:0 18px 44px rgba(0,0,0,.5),0 0 36px rgba(58,200,245,.13)}
@@ -283,6 +287,7 @@ footer.site .copy{color:var(--dim2);font-size:12.5px}
   .card.orange:hover{border-color:rgba(251,146,60,.55);box-shadow:0 18px 44px rgba(0,0,0,.5),0 0 36px rgba(251,146,60,.13)}
   .card.gold:hover{border-color:rgba(251,191,36,.55);box-shadow:0 18px 44px rgba(0,0,0,.5),0 0 36px rgba(251,191,36,.13)}
   .card.red:hover{border-color:rgba(248,113,113,.55);box-shadow:0 18px 44px rgba(0,0,0,.5),0 0 36px rgba(248,113,113,.13)}
+  .card.blue:hover{border-color:rgba(59,130,246,.55);box-shadow:0 18px 44px rgba(0,0,0,.5),0 0 36px rgba(59,130,246,.13)}
   .intcard:hover{transform:translateY(-4px)}
   .intcard:hover .glow{opacity:.55}
   .intcard.cyan:hover{border-color:rgba(58,200,245,.5)}
@@ -291,4 +296,5 @@ footer.site .copy{color:var(--dim2);font-size:12.5px}
   .intcard.orange:hover{border-color:rgba(251,146,60,.5)}
   .intcard.gold:hover{border-color:rgba(251,191,36,.5)}
   .intcard.red:hover{border-color:rgba(248,113,113,.5)}
+  .intcard.blue:hover{border-color:rgba(59,130,246,.5)}
 }
