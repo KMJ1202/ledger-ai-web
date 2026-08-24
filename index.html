@@ -12,7 +12,7 @@
 <meta property="og:image" content="https://heyledger.ai//assets/logo-full-640.png">
 <meta property="og:type" content="website">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/assets/styles.css?v=30">
+<link rel="stylesheet" href="/assets/styles.css?v=31">
 <title>Ledger AI — Your business, on speaking terms</title>
 <link rel="canonical" href="https://heyledger.ai/">
 <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "Organization", "@id": "https://heyledger.ai/#org", "name": "Ledger AI", "url": "https://heyledger.ai/", "logo": "https://heyledger.ai//assets/logo-full-640.png", "email": "supportteam@heyledger.ai", "address": {"@type": "PostalAddress", "addressLocality": "Calgary", "addressRegion": "AB", "addressCountry": "CA"}, "description": "Ledger AI is the AI business platform for small service businesses: live QuickBooks answers, AI-drafted invoicing, crew dispatch with live job links and time cards, customer portals, and booking — with no per-seat fees."}, {"@type": "WebSite", "@id": "https://heyledger.ai/#website", "url": "https://heyledger.ai/", "name": "Ledger AI", "publisher": {"@id": "https://heyledger.ai/#org"}}, {"@type": "SoftwareApplication", "@id": "https://heyledger.ai/#app", "name": "Ledger AI", "operatingSystem": "iOS, Web", "applicationCategory": "BusinessApplication", "url": "https://heyledger.ai/", "publisher": {"@id": "https://heyledger.ai/#org"}, "offers": {"@type": "Offer", "price": "499", "priceCurrency": "CAD", "description": "One plan, everything included. $499/month USD or CAD, no per-seat fees for crew or customers."}, "description": "An AI copilot wired into QuickBooks Online, Gmail, and Google Calendar that runs a service business: conversational answers from live books, invoice and estimate drafting with tap-to-confirm, crew dispatch with no-app live job links, punch-clock time cards with overtime, customer Client Hub portals with one-tap quote approval, and a public booking page.", "featureList": ["AI copilot with live QuickBooks answers (text and voice)", "Invoice and estimate drafting with tap-to-confirm posting", "Mark invoices paid, print invoices, send payment reminders", "Receipt Radar: automatic receipt capture from Gmail plus photo receipts", "Crew dispatch: roster, one-tap dispatch emails, morning day sheets", "Crew live links: job status taps, turn-by-turn navigation, no app install", "Punch-clock time cards: server-stamped hours, Alberta overtime, payroll CSV export", "Client Hub: personal customer portals with live balance, invoices, one-tap quote approval, service history", "Public booking page with calendar conflict checking", "Leads pipeline with follow-up call list", "Dedicated business phone number with same-second missed-call auto-text and automatic lead capture", "Google review reply drafting with owner approval", "Business memory and Advisor Mode", "No per-seat fees for crew members or customers"]}]}</script>
@@ -68,18 +68,60 @@
       <a class="btn ghost" href="#pricing">See pricing</a>
     </div>
 
-    <div class="chatdemo">
-      <div class="chead"><b>Ask Ledger</b><span class="live"><i></i>Live on your books</span></div>
-      <div class="q"><span class="prompt">›</span>Who owes me money right now?</div>
-      <div class="readout">
-        <div class="rline sum"><span class="k">RECEIVABLE</span><span class="v">$9,764</span><span class="k2">19 open invoices</span></div>
-        <div class="rsep"></div>
-        <div class="rline warn"><span class="k">OVERDUE</span><span class="v">$890</span></div>
-        <div class="rrow"><span class="doc">#3243</span><span class="due">due Aug 12</span><span class="amt">$162.75</span></div>
-        <div class="rrow"><span class="doc">#3317</span><span class="due">due Aug 15</span><span class="amt">$351.75</span></div>
-        <div class="rsep"></div>
-        <div class="rline"><span class="k">LARGEST OUT</span><span class="v">$2,763.60</span><span class="k2">#3264 · due Tuesday</span></div>
-        <div class="rfoot">Want the list to chase?<span class="cursor"></span></div>
+    <div class="chatdemo herodemo" id="heroDemo">
+      <div class="chead">
+        <span class="hicon" id="heroChIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.5.6 3.8.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.6.6 3.8.1.4 0 .8-.3 1.1L6.6 10.8Z"/></svg></span>
+        <b id="heroChLabel">Missed-call feed</b>
+        <span class="live"><i></i><span id="heroChLive">Same-second auto-text</span></span>
+      </div>
+      <div class="hstage" id="heroStage">
+
+        <div class="hscene active" data-scene="0">
+          <div class="q"><span class="hicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.5.6 3.8.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.6.6 3.8.1.4 0 .8-.3 1.1L6.6 10.8Z"/></svg></span>Incoming call — (403) 555-0148 · 2:41 PM</div>
+          <div class="readout">
+            <div class="rline warn" style="--d:0"><span class="k">RANG OUT</span><span class="v">No answer</span><span class="k2">4 rings · to voicemail</span></div>
+            <div class="rsep" style="--d:1"></div>
+            <div class="rline sum" style="--d:2"><span class="k">AUTO-TEXT</span><span class="v">0:04 later</span><span class="k2">business-hours template</span></div>
+            <div class="rrow" style="--d:3"><span class="doc">Sent</span><span class="due">"Sorry we missed you! This is KMJ Tire — we'll call you right back. Text us here anytime."</span></div>
+            <div class="rsep" style="--d:4"></div>
+            <div class="rline" style="--d:5"><span class="k">CALLER</span><span class="v">Saved</span><span class="k2">landed in Leads · status: new</span></div>
+            <div class="rrow" style="--d:6"><span class="doc">Voicemail</span><span class="due">"Needs 4 tires for an F-150, wants Friday."</span></div>
+            <div class="rfoot" style="--d:7">Lead created — ready for callback<span class="cursor"></span></div>
+          </div>
+        </div>
+
+        <div class="hscene" data-scene="1">
+          <div class="q"><span class="prompt">›</span>Who owes me money right now?</div>
+          <div class="readout">
+            <div class="rline sum" style="--d:0"><span class="k">RECEIVABLE</span><span class="v">$9,764</span><span class="k2">19 open invoices</span></div>
+            <div class="rsep" style="--d:1"></div>
+            <div class="rline warn" style="--d:2"><span class="k">OVERDUE</span><span class="v">$890</span></div>
+            <div class="rrow" style="--d:3"><span class="doc">#7741</span><span class="due">due Aug 12</span><span class="amt">$162.75</span></div>
+            <div class="rrow" style="--d:4"><span class="doc">#7802</span><span class="due">due Aug 15</span><span class="amt">$351.75</span></div>
+            <div class="rsep" style="--d:5"></div>
+            <div class="rline" style="--d:6"><span class="k">LARGEST OUT</span><span class="v">$2,763.60</span><span class="k2">#7818 · due Tuesday</span></div>
+            <div class="rfoot" style="--d:7">Want me to chase them? → <b>2 reminders drafted</b><span class="cursor"></span></div>
+          </div>
+        </div>
+
+        <div class="hscene" data-scene="2">
+          <div class="q"><span class="hicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5a1 1 0 0 1 1-1h2.2l1-1.7A1 1 0 0 1 9 5.3h6a1 1 0 0 1 .9.5l1 1.7H19a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8.5Z"/><circle cx="12" cy="13" r="3.4"/></svg></span>Receipt photo captured · 4:12 PM</div>
+          <div class="readout">
+            <div class="rline sum" style="--d:0"><span class="k">PARSED</span><span class="v">Foothills Auto Supply</span><span class="k2">Shop Supplies</span></div>
+            <div class="rsep" style="--d:1"></div>
+            <div class="rline" style="--d:2"><span class="k">AMOUNT</span><span class="v">$84.00</span></div>
+            <div class="rrow" style="--d:3"><span class="doc">Filed</span><span class="due">Posted to QuickBooks as a Bill</span></div>
+            <div class="rsep" style="--d:4"></div>
+            <div class="rline" style="--d:5"><span class="k">PROFIT TODAY</span><span class="v">$1,184<span class="delta">was $1,268</span></span><span class="k2">updated live</span></div>
+            <div class="rfoot" style="--d:6">Today's profit updated automatically<span class="cursor"></span></div>
+          </div>
+        </div>
+
+      </div>
+      <div class="stabs" id="heroTabs">
+        <button type="button" class="stab active" data-idx="0" aria-label="Show missed-call rescue demo"></button>
+        <button type="button" class="stab" data-idx="1" aria-label="Show Ask Ledger demo"></button>
+        <button type="button" class="stab" data-idx="2" aria-label="Show receipt to profit demo"></button>
       </div>
     </div>
 
@@ -304,5 +346,6 @@
 </footer>
 
 <script src="/assets/nav.js?v=28"></script>
+<script src="/assets/herodemo.js?v=1"></script>
 </body>
 </html>
