@@ -954,20 +954,141 @@ function drawProfit(refreshError) {
     ${costPanel(p.cost_of_operations || {})}
     <div class="panel">
       <div style="display:flex;align-items:center;gap:9px">
-        <span class="eyebrow" style="color:var(--emerald)">Daily sweep</span>
-        <span class="note" style="margin-left:auto;font-family:var(--mono);font-size:10.5px;letter-spacing:1.1px">DAILY AT ${String(p.sweep_hour ?? 18).padStart(2, "0")}:30</span>
+        <span class="eyebrow" style="color:var(--emerald)">Profit sweep</span>
+        <span class="note" style="margin-left:auto;font-family:var(--mono);font-size:10.5px;letter-spacing:1.1px">AUTO AT ${String(p.sweep_hour ?? 18).padStart(2, "0")}:30</span>
       </div>
-      <p class="sub" style="margin-top:9px">Receipts and invoices land all day — the evening sweep pulls the day's Profit &amp; Loss from QuickBooks and locks it into the chart.</p>
-      <p class="note" style="margin-top:8px">${p.last_sweep_at ? "Last sweep " + esc(new Date(p.last_sweep_at).toLocaleString()) : "Never swept"} · ${p.snapshot_count || 0} days on file</p>
-      <button class="btn em wide" style="margin-top:13px" id="sweep">&#8635;&nbsp; Run sweep now</button>
+      <p class="sub" style="margin-top:9px">One button, the whole day: pulls today's receipts from your email, walks you through each one — today's cost, not a cost, or a future job — then locks the day's profit.</p>
+      <p class="note" style="margin-top:8px">${p.last_sweep_at ? "Last sweep " + esc(new Date(p.last_sweep_at).toLocaleString()) : "Never swept"} · ${p.snapshot_count || 0} days on file · runs by itself every evening too</p>
+      <button class="btn em wide" style="margin-top:13px" id="sweep">&#8635;&nbsp; Profit sweep</button>
     </div>`;
   on("[data-pr]", "click", (e) => { S.profitRange = e.currentTarget.dataset.pr; drawProfit(); }, slot);
   wireCostPanel(slot);
-  $("sweep").onclick = async (e) => {
-    e.currentTarget.disabled = true; e.currentTarget.textContent = "Sweeping…";
-    try { S.profit = (await api("/profit/sweep", {})).board || {}; drawProfit(); toast("Profit board updated"); }
-    catch (err) { toast(err.message, "err"); drawProfit(); }
-  };
+  $("sweep").onclick = () => runProfitSweep();
+}
+
+/* ---------------- profit sweep walkthrough ----------------
+   Kyle's 2026-08-24 redesign: the receipt scan and the profit sweep read as two
+   fighting mechanisms, so this is the one button that does the whole day —
+   scan the inbox, sweep the books, then triage today's receipts one card at a
+   time. The card walkthrough is PULL, not push: it only runs when the owner
+   taps the button, which is what keeps it outside the dismissal-fatigue rule
+   that killed the nightly vendor roll-call. Known vendors arrive pre-answered,
+   so the walk decays toward a single confirm as the vendor memory fills in. */
+async function runProfitSweep() {
+  sheet(`<h2>Profit sweep</h2>
+    <p class="sh-sub" id="psStage">Pulling today's receipts from your email…</p>
+    <div class="note" id="psNote" style="margin-top:8px"></div>`);
+  const stage = (t) => { const el = document.querySelector("#psStage"); if (el) el.textContent = t; };
+  let scanNote = "";
+  try { await api("/gmail/scan", {}); }
+  catch (e) { scanNote = "Email scan skipped — " + e.message; } // Gmail down or not connected: sweep what we have
+  stage("Sweeping the books…");
+  try { applyBoard(await api("/profit/sweep", {})); }
+  catch (e) { toast(e.message, "err"); closeSheet(); return; }
+  stage("Lining up today's receipts…");
+  let cards = [];
+  try { cards = (await get("/profit/day-review")).cards || []; }
+  catch { /* the board already updated; a review hiccup shouldn't eat the sweep */ }
+  psCard(cards, 0, { confirmed: 0, excluded: 0, parked: 0, classified: 0, scanNote });
+}
+
+function psCard(cards, index, tally) {
+  if (index >= cards.length) { psDone(cards.length, tally); return; }
+  const x = cards[index];
+  const step = `${index + 1} of ${cards.length}`;
+  const chips = COST_CLASS_OPTIONS.map(([k, l]) =>
+    `<button class="btn ghost" data-psclass="${k}" style="margin:3px 4px 0 0">${l}</button>`).join("");
+  sheet(`<h2>${esc(x.vendor)}</h2>
+    <p class="sh-sub">${money(x.amount)}${x.doc_number ? " · " + esc(x.doc_number) : ""} · receipt ${step}</p>
+    ${x.subject ? `<p class="note" style="margin:0 0 4px">${esc(x.subject)}</p>` : ""}
+    ${x.from ? `<p class="note" style="margin:0 0 8px">From ${esc(x.from)}</p>` : ""}
+    <p class="note" style="margin:0 0 10px">${x.vendor_pending
+      ? "New vendor — Ledger hasn't seen this one before."
+      : "Counted as " + esc(COST_CLASS_NAME[x.cost_class] || x.cost_class) + (x.owner_dated ? " · date already set by you" : "") + "."}</p>
+    <p style="font-weight:600;margin:0 0 8px">Is this part of today's costs?</p>
+    <button class="btn em wide" id="psYes">&#10003;&nbsp; Yes — today's cost</button>
+    <button class="btn ghost wide" style="margin-top:8px" id="psFuture">&#128197;&nbsp; It's for a future job</button>
+    <button class="btn ghost wide" style="margin-top:8px" id="psNo">&#10005;&nbsp; No — not a business cost</button>
+    <div id="psMore" style="margin-top:10px"></div>
+    <div class="note err" id="psErr" style="margin-top:8px"></div>`, (sh) => {
+    const more = sh.querySelector("#psMore");
+    const err = sh.querySelector("#psErr");
+    const busy = (on) => ["#psYes", "#psFuture", "#psNo"].forEach((s) => { const b = sh.querySelector(s); if (b) b.disabled = on; });
+    const next = () => psCard(cards, index + 1, tally);
+    const fail = (e) => { err.textContent = e.message; busy(false); };
+
+    sh.querySelector("#psYes").onclick = async () => {
+      if (x.vendor_pending) {
+        // The class answer is the vendor memory: one tap here pre-answers every
+        // future receipt this supplier ever sends.
+        more.innerHTML = `<p style="font-weight:600;margin:0 0 4px">What kind of cost is ${esc(x.vendor)}?</p>${chips}`;
+        on("[data-psclass]", "click", async (e) => {
+          busy(true); err.textContent = "";
+          try {
+            await api("/profit/classify-vendor", { vendor_key: x.vendor_key, cost_class: e.currentTarget.dataset.psclass });
+            tally.classified += 1; tally.confirmed += 1; S.review = null; next();
+          } catch (er) { fail(er); }
+        }, more);
+        return;
+      }
+      tally.confirmed += 1; next();
+    };
+
+    sh.querySelector("#psFuture").onclick = () => {
+      const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+      more.innerHTML = `<p style="font-weight:600;margin:0 0 4px">When is the job?</p>
+        <input id="psDate" class="cmpinput" type="date" value="${localDay(tomorrow)}" min="${localDay(tomorrow)}">
+        <button class="btn em wide" style="margin-top:8px" id="psPark">Park it on that day</button>
+        <p class="note" style="margin-top:7px">It leaves today's costs and counts on the day you picked. Until then it shows under "parked for future jobs" — nothing vanishes.</p>`;
+      more.querySelector("#psPark").onclick = async () => {
+        busy(true); err.textContent = "";
+        try {
+          applyBoard(await api("/profit/set-cost-date", { id: x.id, service_date: more.querySelector("#psDate").value, future_ok: true }));
+          tally.parked += 1; next();
+        } catch (er) { fail(er); }
+      };
+    };
+
+    sh.querySelector("#psNo").onclick = () => {
+      more.innerHTML = `<p class="note" style="margin:0 0 6px">This removes it from your profit numbers and dismisses the receipt for good — it won't come back on the next scan.</p>
+        <button class="btn em wide" id="psDrop">Remove it</button>`;
+      more.querySelector("#psDrop").onclick = async () => {
+        busy(true); err.textContent = "";
+        try {
+          applyBoard(await api("/profit/exclude-cost", { id: x.id }));
+          tally.excluded += 1; next();
+        } catch (er) { fail(er); }
+      };
+    };
+  });
+}
+
+async function psDone(count, tally) {
+  // A vendor answer reclassifies stored cost but only a sweep moves the day's
+  // number — finish on the recomputed board so the profit shown is the real one.
+  if (tally.classified) {
+    try { applyBoard(await api("/profit/sweep", {})); } catch { /* board keeps last numbers */ }
+  }
+  const today = (S.profit || {}).today || {};
+  const swept = today.date === localDay();
+  const bits = [];
+  if (tally.confirmed) bits.push(`${tally.confirmed} confirmed`);
+  if (tally.parked) bits.push(`${tally.parked} parked for a future job`);
+  if (tally.excluded) bits.push(`${tally.excluded} removed`);
+  sheet(`<h2>Day locked in</h2>
+    <p class="sh-sub">${count ? `${count} receipt${count === 1 ? "" : "s"} reviewed${bits.length ? " — " + bits.join(", ") : ""}.` : "No receipts needed your eyes today."}</p>
+    <div class="hero" style="margin-top:10px">
+      <div class="headline"><span class="eyebrow">Today's profit</span><span class="when">${esc(today.date || localDay())}</span></div>
+      ${swept ? `<div class="big" style="color:${(today.net_profit || 0) >= 0 ? "var(--emerald)" : "var(--red)"}">${money(today.net_profit)}</div>
+      <div class="trio">
+        <div><small>Income</small><b style="color:var(--cyan)">${money0(today.total_income)}</b></div>
+        <div><small>Expenses</small><b style="color:var(--orange)">${money0(today.total_expenses)}</b></div>
+      </div>` : `<div class="big" style="color:var(--dim)">${money(today.net_profit || 0)}</div>`}
+    </div>
+    ${tally.scanNote ? `<p class="note" style="margin-top:9px">${esc(tally.scanNote)}</p>` : ""}
+    <button class="btn em wide" style="margin-top:12px" id="psClose">Done</button>`, (sh) => {
+    sh.querySelector("#psClose").onclick = () => { closeSheet(); drawProfit(); };
+  });
 }
 
 
@@ -1022,6 +1143,8 @@ function costPanel(c) {
           <span class="m"><b>${flagged.count} cost${flagged.count === 1 ? "" : "s"} on a day with no sales</b>
             <span>${money(flagged.amount)} — usually a delivery that landed before the job. Set the day the work happened.</span></span>
           <span class="chev">&#8250;</span></button>` : ""}
+      ${c.parked?.count ? `<div class="warnstrip" style="margin-top:12px"><em>&#128198;</em>
+          <span>${c.parked.count} cost${c.parked.count === 1 ? "" : "s"} parked for future jobs — ${money(c.parked.amount)}. ${c.parked.count === 1 ? "Counts" : "First one counts"} on ${esc(c.parked.next_date || "")}.</span></div>` : ""}
       ${recent.length
         ? `<div style="margin-top:12px">${recent.slice(0, 6).map(costRow).join("")}</div>
            <button class="btn ghost wide" style="margin-top:4px" data-allcosts="1">See every cost</button>`
