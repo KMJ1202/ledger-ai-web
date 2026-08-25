@@ -2007,7 +2007,6 @@ async function renderPhone() {
       ${d.hasNumber ? phoneStatusStrip(d) : ""}
       ${d.hasNumber ? phoneNumberCard(d) : requestNumberCard(d.pendingRequest)}
       ${d.hasNumber ? frontDeskCard(d) : ""}
-      ${d.hasNumber ? `<div id="vmlane"><div class="skel"></div></div>` : ""}
       ${d.hasNumber ? phoneThreadsPanel(d) : ""}
       ${d.hasNumber ? phoneFeedPanel(d) : ""}
       ${d.hasNumber ? phoneSettingsSummary(d) : ""}
@@ -2026,7 +2025,6 @@ async function renderPhone() {
       // one-shot pattern as the iOS onboarding interview's @AppStorage flag.
       const seenKey = "ledger.phoneSetupSeen." + d.number.id;
       if (!localStorage.getItem(seenKey)) { localStorage.setItem(seenKey, "1"); phoneSetupSheet(d); }
-      loadVoicemails(d);
       loadPhoneLeads();
     }
   } catch (e) {
@@ -2292,82 +2290,6 @@ function timeLabel12(hhmm) {
   const [h, m] = (hhmm || "08:00").split(":").map(Number);
   const d = new Date(); d.setHours(h || 0, m || 0, 0, 0);
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-}
-
-// ---- VOICEMAIL -----------------------------------------------------------
-// Only calls that actually left a message. Playback asks the server for a
-// fresh signed URL at press-play rather than trusting the one stored at
-// ingest, because provider media links expire.
-const VM = { heard: new Set() };
-
-async function loadVoicemails(board) {
-  const host = $("vmlane");
-  if (!host) return;
-  try {
-    const d = await api("/phone", { action: "voicemails", limit: 40 });
-    const list = d.voicemails || [];
-    const unheard = list.filter((v) => !v.voicemailHeardAt && !VM.heard.has(v.id)).length;
-    host.innerHTML = `<div class="panel">
-      <h3>&#9993; Voicemail ${unheard ? `<span class="pill live">${unheard} NEW</span>` : (list.length ? '<span class="pill">all heard</span>' : "")}</h3>
-      ${list.length ? `<div class="list">${list.map((v) => voicemailRow(v, board)).join("")}</div>`
-        : `<p class="sub">No voicemails. When a caller leaves a message it lands here — play it right on this page, transcript underneath.</p>`}
-    </div>`;
-    on("[data-vmplay]", "click", (e) => playVoicemail(e.currentTarget.dataset.vmplay), host);
-    on("[data-vmtx]", "click", (e) => {
-      const row = (board.threads || []).find((t) => t.id === e.currentTarget.dataset.vmtx);
-      if (row) phoneThreadSheet(row);
-    }, host);
-    on("[data-vmscript]", "click", (e) => {
-      const box = host.querySelector(`#vmtx-${e.currentTarget.dataset.vmscript}`);
-      if (box) box.hidden = !box.hidden;
-    }, host);
-  } catch (e) {
-    host.innerHTML = `<div class="panel"><h3>&#9993; Voicemail</h3><p class="sub">${esc(e.message)}</p></div>`;
-  }
-}
-
-function vmClock(seconds) {
-  const total = Number(seconds) || 0;
-  if (total <= 0) return "";
-  return `${Math.floor(total / 60)}:${String(Math.round(total % 60)).padStart(2, "0")}`;
-}
-
-function voicemailRow(v, board) {
-  const heard = !!v.voicemailHeardAt || VM.heard.has(v.id);
-  const length = vmClock(v.voicemailDurationSeconds);
-  const thread = (board.threads || []).find((t) => t.peerNumber === v.callerNumber);
-  return `<div class="item vmitem">
-    <div class="main">
-      <div class="ttl">${heard ? "" : "&#128309; "}${esc(v.callerName || formatE164(v.callerNumber) || "Unknown caller")}</div>
-      <div class="sub">${esc(dayLabel(v.occurredAt))} · ${esc(timeLabel(v.occurredAt))}${length ? ` · ${length}` : ""}</div>
-      <div class="rowbtns" style="margin-top:8px">
-        <button class="btn ${heard ? "" : "em"}" data-vmplay="${esc(v.id)}">&#9654; Play</button>
-        ${v.transcript ? `<button class="btn" data-vmscript="${esc(v.id)}">Transcript</button>` : ""}
-        <a class="btn" href="tel:${esc(v.callerNumber)}">Call back</a>
-        ${thread ? `<button class="btn" data-vmtx="${esc(thread.id)}">Text back</button>` : ""}
-      </div>
-      <div id="vmplayer-${esc(v.id)}"></div>
-      ${v.transcript ? `<div class="note" id="vmtx-${esc(v.id)}" hidden style="margin-top:8px">${esc(v.transcript)}</div>` : ""}
-    </div>
-  </div>`;
-}
-
-async function playVoicemail(eventId) {
-  const slot = $(`vmplayer-${eventId}`);
-  if (!slot) return;
-  // One at a time — starting a second message stops the first.
-  document.querySelectorAll(".vmitem audio").forEach((a) => { if (a.parentElement !== slot) { a.pause(); a.remove(); } });
-  slot.innerHTML = `<div class="note">Loading…</div>`;
-  try {
-    const media = await api("/phone", { action: "voicemail-media", event_id: eventId });
-    slot.innerHTML = `<audio controls autoplay src="${esc(media.url)}" style="width:100%;margin-top:9px"></audio>`;
-    if (!VM.heard.has(eventId)) {
-      VM.heard.add(eventId);
-      api("/phone", { action: "voicemail-heard", event_id: eventId }).catch(() => {});
-    }
-  } catch (e) {
-    slot.innerHTML = `<div class="note err">${esc(e.message)}</div>`;
-  }
 }
 
 // ---- FRONT DESK ----------------------------------------------------------
@@ -3514,147 +3436,6 @@ async function connectionStates() {
   } catch { return {}; }
 }
 
-// Inventory & pricing — the catalog the assistant sells from. Two boxes on
-// purpose: a CSV works for any business on day one, an API key needs to know
-// which system it belongs to, so it carries a provider picker beside it.
-const CAT_FIELDS = [
-  ["sku", "Item / SKU"], ["brand", "Brand"], ["model", "Model"], ["size", "Size"],
-  ["description", "Description"], ["price", "Price"], ["cost", "Cost"],
-  ["quantity", "In stock"], ["unit", "Unit"], ["location", "Location"],
-];
-
-async function renderCatalog(sh) {
-  const slot = sh.querySelector("#catslot");
-  if (!slot) return;
-  let board;
-  try { board = await api("/catalog", { action: "board" }); }
-  catch (err) { slot.innerHTML = `<p class="note">Couldn't load your catalog — ${esc(err.message)}</p>`; return; }
-
-  // A live feed that answers through the shop's own machine can be connected and
-  // still unable to answer, because the machine is off. Saying "live feed" with
-  // nothing behind it is the failure the owner finds out about mid-quote, so the
-  // real state gets its own line.
-  let bridges = {};
-  try {
-    const bs = await api("/catalog", { action: "bridge-status" });
-    for (const b of bs.bridges || []) bridges[b.source_id] = b;
-  } catch { /* status is a nicety; never block the page on it */ }
-
-  const BRIDGE_LABEL = {
-    online: ['<small style="color:var(--green,#39d98a)">· live · ready</small>', ""],
-    offline: ['<small style="color:var(--red)">· not answering</small>',
-              "Live prices come from the lookup service on your shop computer. It isn't responding, so Ledger will fall back to uploaded lists and say so."],
-    paused: ['<small style="color:var(--amber,#f0b429)">· paused</small>',
-             "The supplier refused a recent request, so lookups are paused for a short while rather than retried into a block. This clears on its own."],
-  };
-
-  const sources = board.sources || [];
-  const providers = board.providers || [];
-  const rows = sources.length
-    ? sources.map((s) => {
-        const st = s.kind === "api" ? (BRIDGE_LABEL[bridges[s.id]?.state] || BRIDGE_LABEL.offline) : null;
-        return `<div class="kv"><span>${esc(s.name)}${s.kind === "api" ? ' <small style="color:var(--cyan)">· live feed</small> ' + st[0] : ""}<br>
-        <small style="color:var(--dim)">${s.kind === "api" ? (st[1] ? esc(st[1]) : "Prices are fetched at the moment you ask, so they are never stale.") : (s.item_count ? esc(String(s.item_count)) + " items · " : "") + esc(s.as_of || "")}</small></span>
-        <span><button class="btn ghost" data-catdel="${esc(s.id)}" style="padding:6px 11px;font-size:12px;color:var(--red)">Remove</button></span></div>`;
-      }).join("")
-    : `<p class="note" style="margin:0 0 10px">Nothing loaded yet. Ledger will say it doesn't know rather than guess a price.</p>`;
-
-  slot.innerHTML = `${rows}
-    <div class="panel" style="margin-top:12px">
-      <b style="font-size:13.5px">📄 Upload a price list</b>
-      <p class="note" style="margin:6px 0 10px">Any spreadsheet, any column names — CSV or tab-separated. Ledger reads the header and works out which column is the price, the size and the stock count. Nothing to set up.</p>
-      <button class="btn ghost wide" id="catpick">Choose a file</button>
-      <input type="file" id="catfile" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden>
-      <div id="catstage"></div>
-    </div>
-    <div class="panel" style="margin-top:10px">
-      <b style="font-size:13.5px">🔌 Connect a live feed</b>
-      <p class="note" style="margin:6px 0 10px">A key on its own is just a string — pick the system it belongs to so Ledger knows where to send it. Prices stay live, nothing goes stale.</p>
-      <label class="fld">WHICH SYSTEM</label>
-      <select id="catprov" style="width:100%;padding:11px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:inherit;font:inherit">
-        ${providers.map((p) => `<option value="${esc(p.key)}">${esc(p.name)} — ${esc(p.detail)}</option>`).join("")}
-      </select>
-      <label class="fld" style="margin-top:10px">API KEY</label>
-      <input id="catkey" placeholder="Paste the key from that system" autocomplete="off">
-      <label class="fld" style="margin-top:10px">DEALER / LOCATION ID <span style="opacity:.6">(optional)</span></label>
-      <input id="catdealer" placeholder="If that system gave you one" autocomplete="off">
-      <button class="btn ghost wide" style="margin-top:11px" id="catconn">Save key</button>
-      <p class="note" style="margin-top:8px;font-size:11.5px">Stored encrypted at rest and never shown back to anyone, including us.</p>
-    </div>`;
-
-  slot.querySelectorAll("[data-catdel]").forEach((btn) => {
-    btn.onclick = async () => {
-      if (!confirm("Remove this price list? Ledger will stop quoting from it.")) return;
-      btn.disabled = true;
-      try { await api("/catalog", { action: "delete-source", source_id: btn.dataset.catdel }); toast("Removed"); renderCatalog(sh); }
-      catch (err) { btn.disabled = false; toast(err.message, "err"); }
-    };
-  });
-
-  const stage = slot.querySelector("#catstage");
-  slot.querySelector("#catpick").onclick = () => slot.querySelector("#catfile").click();
-  slot.querySelector("#catfile").onchange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 6_000_000) { toast("That file is over 6 MB — trim unused columns or split it", "err"); return; }
-    stage.innerHTML = `<p class="note" style="margin-top:10px">Reading ${esc(file.name)}…</p>`;
-    let csv;
-    try {
-      csv = await new Promise((res, rej) => {
-        const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsText(file);
-      });
-    } catch { stage.innerHTML = `<p class="note" style="color:var(--red)">Couldn't read that file.</p>`; return; }
-
-    stage.innerHTML = `<p class="note" style="margin-top:10px">Working out your columns…</p>`;
-    let look;
-    try { look = await api("/catalog", { action: "analyze", filename: file.name, csv }); }
-    catch (err) { stage.innerHTML = `<p class="note" style="color:var(--red);margin-top:10px">${esc(err.message)}</p>`; return; }
-
-    // Show what it decided BEFORE anything is stored. A mapping the owner can
-    // see is a mapping they can catch — and a wrong price column is the one
-    // mistake that would quote a customer badly.
-    const mapped = CAT_FIELDS.filter(([key]) => look.column_map?.[key])
-      .map(([key, label]) => `<div class="kv"><span>${esc(label)}</span><span style="color:var(--cyan);font-size:12.5px">${esc(look.column_map[key])}</span></div>`).join("");
-    stage.innerHTML = `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
-      <b style="font-size:13px">${esc(String(look.row_count))} rows${look.truncated ? " (first 25,000)" : ""}</b>
-      ${look.summary ? `<p class="note" style="margin:5px 0 9px">${esc(look.summary)}</p>` : ""}
-      ${look.warning ? `<p class="note" style="color:var(--orange);margin:5px 0 9px">⚠️ ${esc(look.warning)}</p>` : ""}
-      <div class="eyebrow" style="margin-top:6px">COLUMNS I FOUND</div>
-      ${mapped || '<p class="note">None — this file may not be a product list.</p>'}
-      ${look.unmapped?.length ? `<p class="note" style="margin-top:8px;font-size:11.5px">Kept alongside each item: ${esc(look.unmapped.slice(0, 8).join(", "))}${look.unmapped.length > 8 ? "…" : ""}</p>` : ""}
-      <button class="btn primary wide" style="margin-top:12px" id="catgo">Import ${esc(String(look.row_count))} items</button>
-      <button class="btn ghost wide" style="margin-top:8px" id="catcancel">Cancel</button></div>`;
-    stage.querySelector("#catcancel").onclick = () => { stage.innerHTML = ""; };
-    stage.querySelector("#catgo").onclick = async (ev) => {
-      const go = ev.currentTarget;
-      go.disabled = true; go.textContent = "Importing…";
-      try {
-        const done = await api("/catalog", { action: "import", filename: file.name, csv, column_map: look.column_map });
-        toast(`${done.imported} items loaded`);
-        renderCatalog(sh);
-      } catch (err) { go.disabled = false; go.textContent = "Try import again"; toast(err.message, "err"); }
-    };
-  };
-
-  slot.querySelector("#catconn").onclick = async (ev) => {
-    const btn = ev.currentTarget;
-    const key = slot.querySelector("#catkey").value.trim();
-    if (!key) { toast("Paste the API key first", "err"); return; }
-    btn.disabled = true; btn.textContent = "Saving…";
-    try {
-      const done = await api("/catalog", {
-        action: "connect-api",
-        provider: slot.querySelector("#catprov").value,
-        api_key: key,
-        dealer_id: slot.querySelector("#catdealer").value.trim(),
-      });
-      toast("Key saved");
-      if (done.note) alert(done.note);
-      renderCatalog(sh);
-    } catch (err) { btn.disabled = false; btn.textContent = "Save key"; toast(err.message, "err"); }
-  };
-}
-
 async function businessSheet() {
   const b = S.profile?.business || {};
   const u = S.usage;
@@ -3681,10 +3462,6 @@ async function businessSheet() {
     <div class="eyebrow" style="margin-top:20px">CONNECTIONS</div>
     <p class="note" style="margin-top:5px">Authorization happens on each provider's official sign-in page. Ledger never receives your password.</p>
     <div id="connslot" class="note" style="margin-top:8px">Checking connections…</div>
-
-    <div class="eyebrow" style="margin-top:20px">INVENTORY &amp; PRICING</div>
-    <p class="note" style="margin-top:5px">Give Ledger your product list and it can quote from it — price, size, what's in stock.</p>
-    <div id="catslot" class="note" style="margin-top:8px">Loading…</div>
 
     <div class="eyebrow" style="margin-top:20px">ONLINE BOOKING</div>
     <div id="bookslot" class="note" style="margin-top:8px">Loading…</div>
@@ -3734,7 +3511,6 @@ async function businessSheet() {
       }).join("");
       wireConnect(slot);
     });
-    renderCatalog(sh);
     // Online booking — public link customers use with no account; requests
     // land in booking_requests AND the Leads lane. Owner/admin can toggle.
     const renderBooking = async () => {

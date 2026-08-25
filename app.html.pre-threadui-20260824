@@ -106,35 +106,8 @@ main.chatpane{padding:16px}
 .panel p.sub{margin:0;color:var(--dim);font-size:13.5px;line-height:1.55}
 
 /* phone command-center status strip */
-.phstrip{display:flex;flex-direction:column;gap:9px;padding:13px 14px;border-radius:16px;
+.phstrip{display:flex;gap:10px;padding:13px 14px;border-radius:16px;
   background:rgba(255,255,255,.045);border:1px solid rgba(58,200,245,.22)}
-.phrow{display:flex;gap:10px;min-width:0}
-.phrule{height:1px;background:rgba(255,255,255,.08)}
-
-/* text threads — inbox rows, thread bubbles, reply composer */
-.thitem{display:flex;align-items:center;gap:12px;width:100%;text-align:left}
-.thitem .ttl{display:flex;align-items:center;gap:6px}
-.thdot{width:7px;height:7px;border-radius:50%;background:var(--orange);flex-shrink:0}
-.thitem.unread .sub{color:var(--fg)}
-.thmeta{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
-.thmeta small{font-size:11px;color:var(--dim)}
-.thdone{color:var(--emerald);font-size:13px}
-.chat{max-height:46vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;
-  margin-top:12px;padding:12px 2px;-webkit-overflow-scrolling:touch}
-.bubrow{display:flex}
-.bubrow.me{justify-content:flex-end}
-.bub{max-width:78%;padding:9px 13px;border-radius:17px;font-size:14px;line-height:1.45;
-  white-space:pre-wrap;word-break:break-word}
-.bubrow.them .bub{background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.1)}
-.bubrow.me .bub{background:linear-gradient(135deg,var(--cyan),#2b6cf6);color:#fff;border:none}
-.bubstamp{font-family:var(--mono);font-size:9.5px;color:var(--dim);margin-top:4px;
-  display:flex;gap:5px;align-items:center}
-.bubrow.me .bubstamp{justify-content:flex-end}
-.bubstamp .auto{color:var(--emerald);font-weight:800}
-.bubstamp .failed{color:var(--orange);font-weight:800}
-.composer{display:flex;gap:9px;align-items:flex-end;margin-top:10px}
-.composer textarea{flex:1;min-height:44px;max-height:120px;resize:none;border-radius:18px;padding:11px 14px}
-.composer .btn{flex-shrink:0}
 .phcell{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .phcell small{font-family:var(--mono);font-size:8px;font-weight:800;letter-spacing:1px;color:var(--dim);text-transform:uppercase}
 .phcell b{font-size:13px;font-weight:800;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -870,5 +843,5 @@ a{color:var(--cyan)}
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=29"></script>
+<script type="module" src="app.js?v=24"></script>
 </body></html>

@@ -105,78 +105,6 @@ main.chatpane{padding:16px}
 .panel h3{margin:0 0 4px;font-size:16px;font-weight:800;letter-spacing:-.2px}
 .panel p.sub{margin:0;color:var(--dim);font-size:13.5px;line-height:1.55}
 
-/* phone command-center status strip */
-.phstrip{display:flex;flex-direction:column;gap:9px;padding:13px 14px;border-radius:16px;
-  background:rgba(255,255,255,.045);border:1px solid rgba(58,200,245,.22)}
-.phrow{display:flex;gap:10px;min-width:0}
-.phrule{height:1px;background:rgba(255,255,255,.08)}
-
-/* text threads — inbox rows, thread bubbles, reply composer */
-.thitem{display:flex;align-items:center;gap:12px;width:100%;text-align:left}
-.thitem .ttl{display:flex;align-items:center;gap:6px}
-.thdot{width:7px;height:7px;border-radius:50%;background:var(--orange);flex-shrink:0}
-.thitem.unread .sub{color:var(--fg)}
-.thmeta{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
-.thmeta small{font-size:11px;color:var(--dim)}
-.thdone{color:var(--emerald);font-size:13px}
-.chat{max-height:46vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;
-  margin-top:12px;padding:12px 2px;-webkit-overflow-scrolling:touch}
-.bubrow{display:flex}
-.bubrow.me{justify-content:flex-end}
-.bub{max-width:78%;padding:9px 13px;border-radius:17px;font-size:14px;line-height:1.45;
-  white-space:pre-wrap;word-break:break-word}
-.bubrow.them .bub{background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.1)}
-.bubrow.me .bub{background:linear-gradient(135deg,var(--cyan),#2b6cf6);color:#fff;border:none}
-.bubstamp{font-family:var(--mono);font-size:9.5px;color:var(--dim);margin-top:4px;
-  display:flex;gap:5px;align-items:center}
-.bubrow.me .bubstamp{justify-content:flex-end}
-.bubstamp .auto{color:var(--emerald);font-weight:800}
-.bubstamp .failed{color:var(--orange);font-weight:800}
-.composer{display:flex;gap:9px;align-items:flex-end;margin-top:10px}
-.composer textarea{flex:1;min-height:44px;max-height:120px;resize:none;border-radius:18px;padding:11px 14px}
-.composer .btn{flex-shrink:0}
-.phcell{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.phcell small{font-family:var(--mono);font-size:8px;font-weight:800;letter-spacing:1px;color:var(--dim);text-transform:uppercase}
-.phcell b{font-size:13px;font-weight:800;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.phcell b.ok{color:var(--emerald)}.phcell b.warn{color:var(--orange)}
-.phcell.line{flex-direction:row;align-items:center;gap:7px}
-.phcell.line .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.phcell.line .dot.on{background:var(--emerald);box-shadow:0 0 6px var(--emerald)}
-.phcell.line .dot.off{background:var(--orange);box-shadow:0 0 6px var(--orange)}
-.phcell.line div{display:flex;flex-direction:column;gap:3px;min-width:0}
-
-/* phone settings summary row — opens the hours/template sheet, keeps the
-   editor out of the tab's own scroll flow */
-.phsettingsrow{display:flex;align-items:center;gap:12px;cursor:pointer}
-.phsettingsrow .ic{width:42px;height:42px;border-radius:11px;flex-shrink:0;
-  background:rgba(58,200,245,.14);display:flex;align-items:center;justify-content:center;font-size:18px}
-.phsettingsrow .m{flex:1;min-width:0}
-.phsettingsrow .m b{display:block;font-size:14.5px;font-weight:700}
-.phsettingsrow .m span{display:block;color:var(--dim);font-size:12.5px;margin-top:2px}
-.phsettingsrow .chev{color:var(--dim)}
-
-/* leads lane, now hosted under the Phone tab */
-.lanehdr{display:flex;align-items:center;gap:10px}
-.lanehdr .eyebrow{flex:1;min-width:0}
-.chip.add{padding:7px 12px;font-size:12.5px;border-color:rgba(47,224,160,.45);color:var(--emerald);background:rgba(47,224,160,.1)}
-.leadtiles{display:flex;gap:9px}
-.leadtile{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding:11px;border-radius:14px;
-  background:linear-gradient(135deg,rgba(255,255,255,.055),rgba(255,255,255,.02));border:1px solid var(--line)}
-.leadtile small{font-family:var(--mono);font-size:8px;font-weight:800;letter-spacing:1px;text-transform:uppercase}
-.leadtile b{font-size:16px;font-weight:900;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.leadtile i{font-style:normal;font-size:9.5px;color:var(--dim2)}
-.leadtile.cyan{border-color:rgba(58,200,245,.24)}.leadtile.cyan small{color:var(--cyan)}
-.leadtile.red{border-color:rgba(248,113,113,.3)}.leadtile.red small{color:var(--red)}
-.leadtile.emerald{border-color:rgba(47,224,160,.24)}.leadtile.emerald small{color:var(--emerald)}
-.leadtile.dim small{color:var(--dim)}
-.callq{padding:12px 13px;border-radius:16px;background:rgba(248,113,113,.055);border:1px solid rgba(248,113,113,.22)}
-.callq .list{background:none}
-.qcall{flex-shrink:0;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-  background:rgba(47,224,160,.14);font-size:14px}
-.leadfilters{display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-.leadfilters::-webkit-scrollbar{display:none}
-.leadfilters .chip{flex:0 0 auto;padding:7px 13px;font-size:12.5px}
-
 /* brand / status card */
 .brandcard{
   display:flex;align-items:center;gap:15px;padding:17px;border-radius:22px;
@@ -653,14 +581,6 @@ label.fld{display:block;font-family:var(--mono);font-size:11px;color:var(--dim);
 .searchwrap .mag{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--cyan);pointer-events:none;display:flex}
 .searchwrap .mag svg{width:17px;height:17px;fill:currentColor}
 
-/* phone tab */
-.bignum{font-size:30px;font-weight:900;letter-spacing:-.8px;margin-top:8px;font-family:var(--mono);color:var(--cyan)}
-.timerow{display:flex;gap:10px;align-items:center}
-.timerow input{flex:1}
-.daypick{display:flex;gap:7px}
-.daybtn{flex:1;padding:10px 0;border-radius:11px;border:1px solid var(--line);background:var(--glass);color:var(--dim);font-weight:800;font-size:13px;cursor:pointer;font-family:inherit}
-.daybtn.on{background:linear-gradient(120deg,#2fe0a0,#38bdf8);color:#04241a;border-color:transparent}
-
 /* calendar */
 .calstats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px}
 .calstat{position:relative;border-radius:18px;padding:15px 12px;border:1px solid var(--line);background:linear-gradient(160deg,rgba(255,255,255,.05),rgba(255,255,255,.015))}
@@ -776,15 +696,13 @@ nav#tabs button svg{width:21px;height:21px;fill:currentColor}
 nav#tabs button.on{color:var(--cyan);background:rgba(255,255,255,.09)}
 nav#tabs button .dot{position:absolute;top:5px;right:22%;width:8px;height:8px;border-radius:50%;background:var(--red)}
 
-/* header chat entry — the floating orb is gone (Kyle, 2026-08-24: "take the
-   orb out of all the tabs"); this is now the only way into Ask Ledger. */
-.hchat{
-  width:38px;height:38px;border-radius:50%;flex-shrink:0;border:1px solid rgba(139,92,246,.4);cursor:pointer;
+/* orb */
+.fab{
+  position:absolute;right:18px;bottom:calc(var(--bot) + var(--tabh) + 18px);width:58px;height:58px;border-radius:50%;border:0;cursor:pointer;z-index:21;
   background:radial-gradient(circle at 32% 28%,#c4b5fd,#8b5cf6 45%,#4f46e5);
-  box-shadow:0 0 14px rgba(139,92,246,.45),inset 0 1px 0 rgba(255,255,255,.18);
-  color:#fff;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 34px rgba(139,92,246,.6),0 10px 26px rgba(0,0,0,.5);
+  color:#fff;font-size:22px;
 }
-.hchat svg{width:18px;height:18px;fill:currentColor}
 
 /* ---------- chat ---------- */
 #chatwrap{position:absolute;inset:0;background:var(--bg);display:none;flex-direction:column;z-index:40}
@@ -828,13 +746,6 @@ footer textarea{flex:1;border-radius:17px;padding:12px 14px;resize:none;max-heig
 .sheet .sh-sub{color:var(--dim);font-size:13.5px;margin:0 0 15px}
 .sheet-close{width:100%;background:none;border:none;color:var(--dim);padding:13px;font-size:14px;cursor:pointer;font-family:inherit}
 .grab{width:40px;height:4px;border-radius:99px;background:rgba(255,255,255,.16);margin:-8px auto 13px}
-/* sticky keyboard escape hatch inside every sheet */
-.kbbar{display:none}
-#sheetwrap.kbon .kbbar{display:flex;justify-content:flex-end;position:sticky;top:-18px;z-index:3;
-  margin:-13px -17px 10px;padding:8px 17px;background:linear-gradient(180deg,#131922 72%,rgba(19,25,34,0));
-  backdrop-filter:blur(6px)}
-.kbdone{border:1px solid rgba(58,200,245,.5);background:rgba(58,200,245,.14);color:var(--cyan);
-  border-radius:999px;padding:7px 18px;font-size:13.5px;font-weight:800;cursor:pointer;font-family:inherit}
 .kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;font-size:14.5px;border-bottom:1px solid rgba(255,255,255,.045)}
 .kv span:first-child{color:var(--dim)}
 .kv.tot{font-weight:900;font-size:16.5px;border-bottom:0;padding-top:11px}
@@ -870,5 +781,5 @@ a{color:var(--cyan)}
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=29"></script>
+<script type="module" src="app.js?v=21"></script>
 </body></html>

@@ -3530,33 +3530,12 @@ async function renderCatalog(sh) {
   try { board = await api("/catalog", { action: "board" }); }
   catch (err) { slot.innerHTML = `<p class="note">Couldn't load your catalog — ${esc(err.message)}</p>`; return; }
 
-  // A live feed that answers through the shop's own machine can be connected and
-  // still unable to answer, because the machine is off. Saying "live feed" with
-  // nothing behind it is the failure the owner finds out about mid-quote, so the
-  // real state gets its own line.
-  let bridges = {};
-  try {
-    const bs = await api("/catalog", { action: "bridge-status" });
-    for (const b of bs.bridges || []) bridges[b.source_id] = b;
-  } catch { /* status is a nicety; never block the page on it */ }
-
-  const BRIDGE_LABEL = {
-    online: ['<small style="color:var(--green,#39d98a)">· live · ready</small>', ""],
-    offline: ['<small style="color:var(--red)">· not answering</small>',
-              "Live prices come from the lookup service on your shop computer. It isn't responding, so Ledger will fall back to uploaded lists and say so."],
-    paused: ['<small style="color:var(--amber,#f0b429)">· paused</small>',
-             "The supplier refused a recent request, so lookups are paused for a short while rather than retried into a block. This clears on its own."],
-  };
-
   const sources = board.sources || [];
   const providers = board.providers || [];
   const rows = sources.length
-    ? sources.map((s) => {
-        const st = s.kind === "api" ? (BRIDGE_LABEL[bridges[s.id]?.state] || BRIDGE_LABEL.offline) : null;
-        return `<div class="kv"><span>${esc(s.name)}${s.kind === "api" ? ' <small style="color:var(--cyan)">· live feed</small> ' + st[0] : ""}<br>
-        <small style="color:var(--dim)">${s.kind === "api" ? (st[1] ? esc(st[1]) : "Prices are fetched at the moment you ask, so they are never stale.") : (s.item_count ? esc(String(s.item_count)) + " items · " : "") + esc(s.as_of || "")}</small></span>
-        <span><button class="btn ghost" data-catdel="${esc(s.id)}" style="padding:6px 11px;font-size:12px;color:var(--red)">Remove</button></span></div>`;
-      }).join("")
+    ? sources.map((s) => `<div class="kv"><span>${esc(s.name)}${s.kind === "api" ? ' <small style="color:var(--cyan)">· live feed</small>' : ""}<br>
+        <small style="color:var(--dim)">${s.item_count ? esc(String(s.item_count)) + " items · " : ""}${esc(s.as_of || "")}${s.status === "pending" ? " · key saved" : ""}</small></span>
+        <span><button class="btn ghost" data-catdel="${esc(s.id)}" style="padding:6px 11px;font-size:12px;color:var(--red)">Remove</button></span></div>`).join("")
     : `<p class="note" style="margin:0 0 10px">Nothing loaded yet. Ledger will say it doesn't know rather than guess a price.</p>`;
 
   slot.innerHTML = `${rows}

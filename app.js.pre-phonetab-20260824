@@ -92,39 +92,14 @@ function toast(text, kind) {
 function sheet(html, wire) {
   closeSheet();
   const wrap = document.createElement("div"); wrap.id = "sheetwrap";
-  wrap.innerHTML = `<div class="sheet-back"></div><div class="sheet"><div class="grab"></div>
-    <div class="kbbar"><button class="kbdone" type="button">Done</button></div>${html}
+  wrap.innerHTML = `<div class="sheet-back"></div><div class="sheet"><div class="grab"></div>${html}
     <button class="sheet-close">Close</button></div>`;
   document.body.appendChild(wrap);
   wrap.querySelector(".sheet-back").onclick = closeSheet;
   wrap.querySelector(".sheet-close").onclick = closeSheet;
-  // Keyboard escape hatch (Kyle, 2026-08-24 — got trapped on the Phone tab).
-  // The sheet's own Close button sits below the keyboard once it opens, so a
-  // sticky Done bar rides the top of the sheet the whole time a field is
-  // focused. Scrolling the sheet also dismisses, matching iOS.
-  const pane = wrap.querySelector(".sheet");
-  wrap.querySelector(".kbdone").onclick = () => blurInput();
-  pane.addEventListener("focusin", (e) => { if (isTextInput(e.target)) wrap.classList.add("kbon"); });
-  pane.addEventListener("focusout", () => setTimeout(() => {
-    if (!isTextInput(document.activeElement)) wrap.classList.remove("kbon");
-  }, 60));
-  pane.addEventListener("scroll", () => { if (isTextInput(document.activeElement)) blurInput(); }, { passive: true });
-  if (wire) wire(pane);
+  if (wire) wire(wrap.querySelector(".sheet"));
   return wrap;
 }
-
-const isTextInput = (el) => !!el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
-function blurInput() { if (isTextInput(document.activeElement)) document.activeElement.blur(); }
-
-// Tap anywhere that is not itself a field and the keyboard closes. One global
-// listener rather than per-form wiring, so a field added later can never ship
-// without an escape hatch.
-document.addEventListener("pointerdown", (e) => {
-  if (!isTextInput(document.activeElement)) return;
-  if (e.target === document.activeElement) return;
-  if (e.target.closest && e.target.closest("input,textarea,select,label")) return;
-  blurInput();
-}, true);
 function closeSheet() { const w = $("sheetwrap"); if (w) w.remove(); }
 
 /* ---------------- app shell ---------------- */
@@ -189,12 +164,12 @@ function appView() {
     <div class="mark">${logo ? `<img src="${esc(logo)}" alt="">` : "L"}</div>
     <h1 id="bizname">${esc(S.profile?.business?.name || "Ledger AI")}</h1>
     <span id="usage"></span>
-    <button class="hchat" id="hchat" title="Ask Ledger">&#128172;</button>
     <button class="avatar" id="more" title="Your business">&#9679;</button>
   </header>
   <div id="banner">💡 Advisor Mode — business guidance beyond your books, on your AI allowance</div>
   <div id="alertbar"></div>
   <main id="view"></main>
+  <button class="fab" id="fab" title="Ask Ledger">&#9679;</button>
   <nav id="tabs">${TABS.map((t) => `<button data-tab="${t.key}" class="${S.tab === t.key ? "on" : ""}">
       ${t.icon}${t.label}</button>`).join("")}</nav>
   <div id="chatwrap">
@@ -210,7 +185,7 @@ function appView() {
 
   on("#tabs button", "click", (e) => setTab(e.currentTarget.dataset.tab));
   $("more").onclick = businessSheet;
-  $("hchat").onclick = () => openChat();
+  $("fab").onclick = () => openChat();
   $("chatback").onclick = closeChat;
   $("newconv").onclick = newConversation;
   $("advisor").onclick = toggleAdvisor;
@@ -2004,247 +1979,29 @@ async function renderPhone() {
     S.phone = d;
     view().innerHTML = `<div class="sect">
       ${osHead("COM.06 · CALL LINE", "Phone")}
-      ${d.hasNumber ? phoneStatusStrip(d) : ""}
       ${d.hasNumber ? phoneNumberCard(d) : requestNumberCard(d.pendingRequest)}
-      ${d.hasNumber ? frontDeskCard(d) : ""}
-      ${d.hasNumber ? `<div id="vmlane"><div class="skel"></div></div>` : ""}
-      ${d.hasNumber ? phoneThreadsPanel(d) : ""}
       ${d.hasNumber ? phoneFeedPanel(d) : ""}
-      ${d.hasNumber ? phoneSettingsSummary(d) : ""}
-      ${d.hasNumber ? `<div id="phoneleads"><div class="skel"></div></div>` : ""}
+      ${d.hasNumber ? phoneSettingsPanel(d) : ""}
     </div>`;
-    if (!d.hasNumber) wireRequestNumber(d.pendingRequest);
+    if (d.hasNumber) wirePhoneSettings(d); else wireRequestNumber(d.pendingRequest);
     if (d.hasNumber) on("[data-pevt]", "click", (e) => phoneEventSheet(d.events.find((ev) => ev.id === e.currentTarget.dataset.pevt)));
-    if (d.hasNumber) on("[data-pthread]", "click", (e) => phoneThreadSheet((d.threads || []).find((t) => t.id === e.currentTarget.dataset.pthread)));
-    if (d.hasNumber) {
-      $("phsetup").onclick = () => phoneSetupSheet(d);
-      $("phsettings").onclick = () => phoneSettingsSheet(d);
-      if ($("fdtoggle")) $("fdtoggle").onclick = () => toggleFrontDesk(d);
-      if ($("fdtune")) $("fdtune").onclick = () => frontDeskSheet(d);
-      if ($("fdlog")) $("fdlog").onclick = () => frontDeskLogSheet();
-      // First time a number goes live, open the setup guide once — same
-      // one-shot pattern as the iOS onboarding interview's @AppStorage flag.
-      const seenKey = "ledger.phoneSetupSeen." + d.number.id;
-      if (!localStorage.getItem(seenKey)) { localStorage.setItem(seenKey, "1"); phoneSetupSheet(d); }
-      loadVoicemails(d);
-      loadPhoneLeads();
-    }
   } catch (e) {
     view().innerHTML = `<div class="sect">${osHead("COM.06 · CALL LINE", "Phone")}<div class="empty">${esc(e.message)}</div></div>`;
   }
-}
-
-// Dense glanceable strip — line armed/off, the number, calls today and leads
-// captured this week (both read off the already-fetched missed-call feed, no
-// second round trip). LEADS LANE now lives under this tab, not Customers.
-function phoneReplyLabel(minutes) {
-  if (minutes === null || minutes === undefined) return "\u2014";
-  if (minutes < 1) return "<1m";
-  if (minutes < 60) return Math.round(minutes) + "m";
-  const hours = minutes / 60;
-  if (hours < 24) return hours.toFixed(1) + "h";
-  return Math.round(hours / 24) + "d";
-}
-
-function phoneStatusStrip(d) {
-  const armed = !!((d.autoReplyHours || "").trim() || (d.autoReplyAfter || "").trim());
-  const events = d.events || [];
-  const threads = d.threads || [];
-  const m = d.metrics || {};
-  const today = localDay();
-  // Prefer the server's metrics block; fall back to what's locally derivable so
-  // an older edge deployment degrades to the old numbers instead of zeros.
-  const callsToday = m.callsToday ?? events.filter((ev) => localDay(new Date(ev.occurredAt)) === today).length;
-  const missedToday = m.missedToday ?? events.filter((ev) => localDay(new Date(ev.occurredAt)) === today && !ev.answered).length;
-  const cutoff = Date.now() - 7 * 86400000;
-  const leadsWeek = m.leads7d ?? events.filter((ev) => ev.leadId && new Date(ev.occurredAt).getTime() >= cutoff).length;
-  const awaiting = m.awaitingReply ?? threads.filter((t) => (t.unreadCount || 0) > 0 && (t.status || "open") === "open").length;
-  const textsToday = m.textsToday ?? 0;
-  return `<div class="phstrip">
-    <div class="phrow">
-      <div class="phcell line"><span class="dot ${armed ? "on" : "off"}"></span>
-        <div><small>Line</small><b>${esc(formatE164(d.number.e164))}</b></div></div>
-      <div class="phcell"><small>Awaiting reply</small><b class="${awaiting > 0 ? "warn" : "ok"}">${awaiting}</b></div>
-      <div class="phcell"><small>Median reply</small><b>${esc(phoneReplyLabel(m.medianResponseMinutes))}</b></div>
-    </div>
-    <div class="phrule"></div>
-    <div class="phrow">
-      <div class="phcell"><small>Calls</small><b>${callsToday}</b></div>
-      <div class="phcell"><small>Missed</small><b class="${missedToday > 0 ? "warn" : ""}">${missedToday}</b></div>
-      <div class="phcell"><small>Texts</small><b>${textsToday}</b></div>
-      <div class="phcell"><small>Leads &middot; 7d</small><b>${leadsWeek}</b></div>
-      <div class="phcell"><small>Auto-reply</small><b class="${armed ? "ok" : "warn"}">${armed ? "Armed" : "Off"}</b></div>
-    </div>
-  </div>`;
 }
 
 function phoneNumberCard(d) {
   return `<div class="panel">
     <h3>&#128222; Business number</h3>
     <div class="bignum">${esc(formatE164(d.number.e164))}</div>
-    <p class="sub">Missed calls get a same-second auto-text, and the caller lands in your Leads lane below — nothing to do here but read the feed.</p>
-    <button class="btn ghost wide" style="margin-top:12px" id="phsetup">&#128203; Setup guide</button>
+    <p class="sub">Missed calls get a same-second auto-text, and the caller lands in your Leads list — nothing to do here but read the feed.</p>
   </div>`;
-}
-
-// Standard GSM/3GPP conditional-forwarding codes — the same codes Bell,
-// Rogers, Telus, Fido, Koodo, AT&T and T-Mobile all honour. Verizon's legacy
-// CDMA codes differ, so that's called out rather than guessed at.
-function phoneForwardingCodes(target) {
-  const t = target.replace(/^\+1/, "1");
-  return [
-    ["Busy", `*67*${t}#`, `#67#`],
-    ["No answer", `*61*${t}#`, `#61#`],
-    ["Unreachable / phone off", `*62*${t}#`, `#62#`],
-    ["All calls", `*21*${t}#`, `#21#`],
-  ];
-}
-
-function voicemailScript(businessName) {
-  return `You've reached ${businessName}. We're either helping another customer or away from the phone right now. `
-    + `Leave your name, number, and a quick note about what you need, and we'll call you back as soon as we can. `
-    + `Thanks for calling ${businessName}!`;
-}
-
-function phoneSetupSheet(d) {
-  const bizName = S.profile?.business?.name || "your business";
-  const codes = phoneForwardingCodes(d.number.e164);
-  const script = voicemailScript(bizName);
-  sheet(`<h2>Set up your new number</h2>
-    <p class="sh-sub">${esc(formatE164(d.number.e164))} is live. Two ways to put it to work:</p>
-    <h3 style="margin-top:16px">1 &middot; Keep your old number</h3>
-    <p class="sub">Forward calls from your existing line to your new Ledger AI number using your carrier's conditional-forwarding codes. Dial the "enable" code from the old phone once — no app, no settings menu.</p>
-    <div class="list" style="margin-top:8px">
-      ${codes.map(([label, on, off]) => `
-        <div class="item" style="cursor:default">
-          <div class="main"><div class="ttl">${esc(label)}</div>
-            <div class="sub">Enable <code>${esc(on)}</code> &middot; Disable <code>${esc(off)}</code></div></div>
-        </div>`).join("")}
-    </div>
-    <p class="note" style="margin-top:6px">Works on Bell, Rogers, Telus, Fido, Koodo, AT&amp;T and T-Mobile. On Verizon, use your carrier's call forwarding settings instead of these codes.</p>
-    <h3 style="margin-top:18px">2 &middot; Or advertise your new number</h3>
-    <p class="sub">Put ${esc(formatE164(d.number.e164))} on your website, Google Business Profile, invoices and vehicles as your primary line going forward. No forwarding needed — it just works.</p>
-    <h3 style="margin-top:18px">Voicemail greeting script</h3>
-    <p class="sub">Read this into your carrier's greeting recorder (recording the audio itself is still a manual step — this just gives you the words).</p>
-    <p class="note" id="vmscript" style="margin-top:8px;white-space:pre-wrap">${esc(script)}</p>
-    <button class="btn ghost wide" style="margin-top:9px" id="vmcopy">Copy script</button>`, (sh) => {
-    sh.querySelector("#vmcopy").onclick = () => {
-      navigator.clipboard?.writeText(script).then(() => toast("Script copied")).catch(() => toast("Couldn't copy — select and copy manually", "err"));
-    };
-  });
 }
 
 function phoneEventBadge(ev) {
   if (ev.autoReplySent) return '<span class="tag new">auto-replied</span>';
   if (!ev.answered) return '<span class="tag open">no reply sent</span>';
   return '<span class="tag paid">answered</span>';
-}
-
-// The Phone tab was calls-only because the original Quo webhook subscribed to
-// call.completed alone. With message.received/message.delivered flowing, the
-// thread inbox is the primary surface and the missed-call feed sits under it.
-function phoneThreadsPanel(d) {
-  const threads = d.threads || [];
-  const open = threads.filter((t) => (t.status || "open") !== "done");
-  const done = threads.filter((t) => (t.status || "open") === "done").slice(0, 6);
-  const awaiting = open.filter((t) => (t.unreadCount || 0) > 0).length;
-  const row = (t) => {
-    const isDone = (t.status || "open") === "done";
-    const unread = (t.unreadCount || 0) > 0 && !isDone;
-    const preview = (t.lastMessagePreview || "").trim();
-    const body = preview ? (t.lastMessageDirection === "outgoing" ? "You: " : "") + preview : "No messages yet.";
-    return `<button class="item thitem${unread ? " unread" : ""}" data-pthread="${esc(t.id)}">
-      <div class="main">
-        <div class="ttl">${esc(t.peerName || formatE164(t.peerNumber))}${unread ? '<span class="thdot"></span>' : ""}</div>
-        <div class="sub">${esc(body)}</div>
-      </div>
-      <div class="thmeta">
-        <small>${esc(t.lastMessageAt ? dayLabel(t.lastMessageAt) + " " + timeLabel(t.lastMessageAt) : "")}</small>
-        ${unread ? '<span class="tag open">reply</span>' : isDone ? '<span class="thdone">&#10003;</span>' : ""}
-      </div>
-    </button>`;
-  };
-  return `<div class="lanehead"><span class="eyebrow">Text threads</span>
-      <span class="note">${awaiting > 0 ? awaiting + " awaiting reply" : open.length + " open"}</span></div>
-    ${threads.length ? `<div class="list">${open.map(row).join("")}${done.length ? `<div class="eyebrow" style="margin:10px 0 4px">Done</div>${done.map(row).join("")}` : ""}</div>`
-      : `<div class="empty">No texts yet. When someone texts your business number the conversation lands here, and you can answer from this screen.</div>`}`;
-}
-
-function phoneBubble(msg) {
-  const mine = msg.direction !== "incoming";
-  const status = (msg.status || "").toLowerCase();
-  const failed = status === "failed" || status === "undelivered";
-  return `<div class="bubrow ${mine ? "me" : "them"}">
-    <div>
-      <div class="bub">${esc(msg.body || "")}</div>
-      <div class="bubstamp">${esc(dayLabel(msg.occurredAt))} ${esc(timeLabel(msg.occurredAt))}
-        ${mine && msg.sentBy === "auto" ? '<span class="auto">AUTO</span>' : ""}
-        ${failed ? `<span class="failed">${esc(status.toUpperCase())}</span>` : ""}</div>
-    </div>
-  </div>`;
-}
-
-async function phoneThreadSheet(t) {
-  if (!t) return;
-  const title = t.peerName || formatE164(t.peerNumber);
-  let status = t.status || "open";
-  const wrap = sheet(`<h2>${esc(title)}</h2>
-    <p class="sh-sub" id="phthsub">${esc(formatE164(t.peerNumber))}</p>
-    <div class="chat" id="phchat"><div class="skel"></div></div>
-    <div class="composer">
-      <textarea id="phdraft" rows="1" placeholder="Text ${esc(title)}&hellip;"></textarea>
-      <button class="btn primary" id="phsend">Send</button>
-    </div>
-    <div class="note" id="pherr" style="display:none"></div>
-    <div class="rowbtns" style="margin-top:12px">
-      <a class="btn ghost" href="tel:${esc(t.peerNumber)}">Call</a>
-      <button class="btn ghost" id="phdone">${status === "done" ? "Reopen" : "Mark done"}</button>
-    </div>`);
-  const chat = wrap.querySelector("#phchat");
-  const err = wrap.querySelector("#pherr");
-  const showErr = (msg) => { err.style.display = "block"; err.className = "note err"; err.textContent = msg; };
-
-  async function load(markRead) {
-    try {
-      const d = await api("/phone", { action: "thread", conversation_id: t.id });
-      status = (d.thread && d.thread.status) || status;
-      chat.innerHTML = (d.messages || []).length
-        ? d.messages.map(phoneBubble).join("")
-        : `<div class="empty">No messages in this thread yet.</div>`;
-      chat.scrollTop = chat.scrollHeight;
-      err.style.display = "none";
-    } catch (e) { showErr(e.message); chat.innerHTML = ""; }
-    // Opening a thread IS reading it — fired after the history lands so a
-    // failed read never leaves the sheet blank. Mirrored into Quo server-side.
-    if (markRead && (t.unreadCount || 0) > 0) {
-      try { await api("/phone", { action: "thread-read", conversation_id: t.id }); renderPhone(); } catch (e) { /* non-fatal */ }
-    }
-  }
-
-  wrap.querySelector("#phsend").onclick = async (e) => {
-    const field = wrap.querySelector("#phdraft");
-    const body = field.value.trim();
-    if (!body) return;
-    e.currentTarget.disabled = true;
-    try {
-      await api("/phone", { action: "reply", conversation_id: t.id, to_number: t.peerNumber, body });
-      field.value = "";
-      await load(false);
-      renderPhone();
-    } catch (ex) { showErr(ex.message); }
-    e.currentTarget.disabled = false;
-  };
-
-  wrap.querySelector("#phdone").onclick = async (e) => {
-    e.currentTarget.disabled = true;
-    try {
-      await api("/phone", { action: status === "done" ? "thread-open" : "thread-done", conversation_id: t.id });
-      closeSheet();
-      renderPhone();
-    } catch (ex) { showErr(ex.message); e.currentTarget.disabled = false; }
-  };
-
-  load(true);
 }
 
 function phoneFeedPanel(d) {
@@ -2274,200 +2031,10 @@ function phoneEventSheet(ev) {
     </div>`);
 }
 
-// Tappable summary row — opens the hours/template editor in a sheet instead
-// of an always-inline form. The inline textareas used to sit right in the
-// tab's own scroll flow with nothing to close the keyboard once open.
-function phoneSettingsSummary(d) {
-  const start = timeLabel12(d.hoursStart || "08:00"), end = timeLabel12(d.hoursEnd || "17:00");
-  return `<div class="panel phsettingsrow" id="phsettings">
-    <div class="ic">&#9200;</div>
-    <div class="m"><b>Business hours &amp; auto-reply</b><span>${esc(start)} &ndash; ${esc(end)}</span></div>
-    <span class="chev">&#8250;</span>
-  </div>`;
-}
-
-// "08:00" -> "8:00 AM", local-format only (no timezone math — the string is
-// already the shop's own clock, same contract as the input[type=time] value).
-function timeLabel12(hhmm) {
-  const [h, m] = (hhmm || "08:00").split(":").map(Number);
-  const d = new Date(); d.setHours(h || 0, m || 0, 0, 0);
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-}
-
-// ---- VOICEMAIL -----------------------------------------------------------
-// Only calls that actually left a message. Playback asks the server for a
-// fresh signed URL at press-play rather than trusting the one stored at
-// ingest, because provider media links expire.
-const VM = { heard: new Set() };
-
-async function loadVoicemails(board) {
-  const host = $("vmlane");
-  if (!host) return;
-  try {
-    const d = await api("/phone", { action: "voicemails", limit: 40 });
-    const list = d.voicemails || [];
-    const unheard = list.filter((v) => !v.voicemailHeardAt && !VM.heard.has(v.id)).length;
-    host.innerHTML = `<div class="panel">
-      <h3>&#9993; Voicemail ${unheard ? `<span class="pill live">${unheard} NEW</span>` : (list.length ? '<span class="pill">all heard</span>' : "")}</h3>
-      ${list.length ? `<div class="list">${list.map((v) => voicemailRow(v, board)).join("")}</div>`
-        : `<p class="sub">No voicemails. When a caller leaves a message it lands here — play it right on this page, transcript underneath.</p>`}
-    </div>`;
-    on("[data-vmplay]", "click", (e) => playVoicemail(e.currentTarget.dataset.vmplay), host);
-    on("[data-vmtx]", "click", (e) => {
-      const row = (board.threads || []).find((t) => t.id === e.currentTarget.dataset.vmtx);
-      if (row) phoneThreadSheet(row);
-    }, host);
-    on("[data-vmscript]", "click", (e) => {
-      const box = host.querySelector(`#vmtx-${e.currentTarget.dataset.vmscript}`);
-      if (box) box.hidden = !box.hidden;
-    }, host);
-  } catch (e) {
-    host.innerHTML = `<div class="panel"><h3>&#9993; Voicemail</h3><p class="sub">${esc(e.message)}</p></div>`;
-  }
-}
-
-function vmClock(seconds) {
-  const total = Number(seconds) || 0;
-  if (total <= 0) return "";
-  return `${Math.floor(total / 60)}:${String(Math.round(total % 60)).padStart(2, "0")}`;
-}
-
-function voicemailRow(v, board) {
-  const heard = !!v.voicemailHeardAt || VM.heard.has(v.id);
-  const length = vmClock(v.voicemailDurationSeconds);
-  const thread = (board.threads || []).find((t) => t.peerNumber === v.callerNumber);
-  return `<div class="item vmitem">
-    <div class="main">
-      <div class="ttl">${heard ? "" : "&#128309; "}${esc(v.callerName || formatE164(v.callerNumber) || "Unknown caller")}</div>
-      <div class="sub">${esc(dayLabel(v.occurredAt))} · ${esc(timeLabel(v.occurredAt))}${length ? ` · ${length}` : ""}</div>
-      <div class="rowbtns" style="margin-top:8px">
-        <button class="btn ${heard ? "" : "em"}" data-vmplay="${esc(v.id)}">&#9654; Play</button>
-        ${v.transcript ? `<button class="btn" data-vmscript="${esc(v.id)}">Transcript</button>` : ""}
-        <a class="btn" href="tel:${esc(v.callerNumber)}">Call back</a>
-        ${thread ? `<button class="btn" data-vmtx="${esc(thread.id)}">Text back</button>` : ""}
-      </div>
-      <div id="vmplayer-${esc(v.id)}"></div>
-      ${v.transcript ? `<div class="note" id="vmtx-${esc(v.id)}" hidden style="margin-top:8px">${esc(v.transcript)}</div>` : ""}
-    </div>
-  </div>`;
-}
-
-async function playVoicemail(eventId) {
-  const slot = $(`vmplayer-${eventId}`);
-  if (!slot) return;
-  // One at a time — starting a second message stops the first.
-  document.querySelectorAll(".vmitem audio").forEach((a) => { if (a.parentElement !== slot) { a.pause(); a.remove(); } });
-  slot.innerHTML = `<div class="note">Loading…</div>`;
-  try {
-    const media = await api("/phone", { action: "voicemail-media", event_id: eventId });
-    slot.innerHTML = `<audio controls autoplay src="${esc(media.url)}" style="width:100%;margin-top:9px"></audio>`;
-    if (!VM.heard.has(eventId)) {
-      VM.heard.add(eventId);
-      api("/phone", { action: "voicemail-heard", event_id: eventId }).catch(() => {});
-    }
-  } catch (e) {
-    slot.innerHTML = `<div class="note err">${esc(e.message)}</div>`;
-  }
-}
-
-// ---- FRONT DESK ----------------------------------------------------------
-// The switch that lets the AI answer a missed caller on its own. Deliberately
-// loud about what it does and does not do: an owner should never be surprised
-// by what they just turned on.
-function frontDeskCard(d) {
-  const fd = d.frontDesk || {};
-  const on = fd.enabled === true;
+function phoneSettingsPanel(d) {
   return `<div class="panel">
-    <h3>&#129302; Front Desk ${on ? '<span class="pill live">ON</span>' : '<span class="pill">OFF</span>'}</h3>
-    <p class="sub">${on
-      ? "When a missed caller texts back, Ledger answers them — quoting your real QuickBooks prices and booking real open times on your calendar. Nobody has to be watching."
-      : "Turn this on and a missed call becomes a booking on its own: Ledger texts the caller back, quotes from your QuickBooks prices, offers open times from your calendar, and books one."}</p>
-    <p class="note" style="margin-top:8px">It can never invoice, take a payment, or discuss a bill. Anything it isn't sure about goes straight to you.</p>
-    ${on ? `<p class="note" style="margin-top:6px">${fd.booking === false ? "Booking is <b>off</b> — it quotes and gathers details, you book." : "Booking is <b>on</b>."} Max ${Number(fd.maxRepliesPerCaller || 8)} texts per caller a day.${fd.instructions ? `<br>Your instructions: <i>${esc(fd.instructions)}</i>` : ""}</p>` : ""}
-    <div class="rowbtns" style="margin-top:12px">
-      <button class="btn ${on ? "" : "em"}" id="fdtoggle">${on ? "Turn off" : "Turn on Front Desk"}</button>
-      ${on ? '<button class="btn" id="fdtune">Settings</button><button class="btn" id="fdlog">What it did</button>' : ""}
-    </div>
-  </div>`;
-}
-
-async function toggleFrontDesk(d) {
-  const fd = d.frontDesk || {};
-  if (fd.enabled !== true) {
-    const ok = confirm("Turn on Front Desk?\n\nFrom now on, when someone calls, misses you, and texts back, Ledger will reply to them on its own — quoting your real QuickBooks prices and booking real times on your calendar. No one has to approve each message.\n\nIt can never invoice, take payment, or discuss a bill, and anything it's unsure about it hands straight to you.\n\nYou can turn this off any time.");
-    if (!ok) return;
-  }
-  try {
-    await api("/phone", { action: "settings-save", frontDeskEnabled: fd.enabled !== true });
-    toast(fd.enabled !== true ? "Front Desk is on" : "Front Desk is off");
-    renderPhone();
-  } catch (e) { toast(e.message); }
-}
-
-function frontDeskSheet(d) {
-  const fd = d.frontDesk || {};
-  sheet(`<h2>Front Desk settings</h2>
-    <p class="sh-sub">How Ledger handles a missed caller who texts back.</p>
-    <label class="fld" style="margin-top:14px">CAN IT BOOK APPOINTMENTS?</label>
-    <div class="rowbtns">
-      <button class="btn ${fd.booking !== false ? "em" : ""}" data-fdbook="1" type="button">Yes, book them</button>
-      <button class="btn ${fd.booking === false ? "em" : ""}" data-fdbook="0" type="button">No, just quote</button>
-    </div>
-    <label class="fld" style="margin-top:14px">YOUR STANDING INSTRUCTIONS</label>
-    <textarea id="fdinstr" rows="4" placeholder="e.g. Always ask what vehicle. Never book Saturdays before 10. We don't do alignments.">${esc(fd.instructions || "")}</textarea>
-    <p class="note" style="margin-top:6px">Written in your words, followed on every reply.</p>
-    <label class="fld" style="margin-top:14px">MAX TEXTS TO ONE CALLER PER DAY</label>
-    <input id="fdcap" type="number" min="1" max="30" value="${Number(fd.maxRepliesPerCaller || 8)}">
-    <button class="btn em wide" style="margin-top:13px" id="fdsave">Save</button>
-    <div class="note" id="fdnote" style="margin-top:8px"></div>`, (sh) => {
-    let booking = fd.booking !== false;
-    on("[data-fdbook]", "click", (e) => {
-      booking = e.currentTarget.dataset.fdbook === "1";
-      sh.querySelectorAll("[data-fdbook]").forEach((b) => b.classList.toggle("em", (b.dataset.fdbook === "1") === booking));
-    }, sh);
-    sh.querySelector("#fdsave").onclick = async (e) => {
-      e.currentTarget.disabled = true;
-      const note = sh.querySelector("#fdnote");
-      try {
-        await api("/phone", {
-          action: "settings-save",
-          frontDeskBooking: booking,
-          frontDeskInstructions: sh.querySelector("#fdinstr").value,
-          frontDeskMaxReplies: Number(sh.querySelector("#fdcap").value || 8),
-        });
-        toast("Front Desk settings saved");
-        closeSheet();
-        renderPhone();
-      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
-    };
-  });
-}
-
-const FD_OUTCOME = { replied: "Answered", booked: "Booked them", handoff: "Handed to you", error: "Failed" };
-
-async function frontDeskLogSheet() {
-  sheet(`<h2>What Front Desk did</h2><div id="fdlogbody"><div class="skel"></div></div>`, async (sh) => {
-    try {
-      const d = await api("/phone", { action: "frontdesk-runs", limit: 40 });
-      const runs = d.runs || [];
-      sh.querySelector("#fdlogbody").innerHTML = runs.length
-        ? `<div class="list">${runs.map((r) => `
-            <div class="item">
-              <div class="main">
-                <div class="ttl">${esc(formatE164(r.peerNumber) || r.peerName || "Caller")}</div>
-                <div class="sub">${esc(r.reply || r.error || "")}</div>
-                ${r.handoffReason ? `<div class="sub">Why: ${esc(r.handoffReason)}</div>` : ""}
-              </div>
-              <div class="amt"><small>${esc(FD_OUTCOME[r.outcome] || r.outcome)}</small><br><small class="note">${esc(dayLabel(r.at))}</small></div>
-            </div>`).join("")}</div>`
-        : `<div class="empty">Front Desk hasn't answered anyone yet.</div>`;
-    } catch (e) { sh.querySelector("#fdlogbody").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
-  });
-}
-
-function phoneSettingsSheet(d) {
-  sheet(`<h2>Business hours &amp; templates</h2>
-    <p class="sh-sub">Sets which auto-reply a missed call gets.</p>
+    <h3>&#9200; Business hours</h3>
+    <p class="sub">Sets which auto-reply a missed call gets.</p>
     <div class="timerow" style="margin-top:10px">
       <input type="time" id="phstart" value="${esc(d.hoursStart || "08:00")}">
       <span class="note">to</span>
@@ -2482,28 +2049,30 @@ function phoneSettingsSheet(d) {
     <textarea id="phauto2" rows="3">${esc(d.autoReplyAfter || "")}</textarea>
     <p class="note" style="margin-top:6px">Use <code>{business}</code> and <code>{hours}</code> — they fill in automatically.</p>
     <button class="btn em wide" style="margin-top:13px" id="phsave">Save</button>
-    <div class="note" id="phnote" style="margin-top:8px"></div>`, (sh) => {
-    let days = new Set(d.hoursDays || []);
-    on("[data-phday]", "click", (e) => {
-      const k = e.currentTarget.dataset.phday;
-      days.has(k) ? days.delete(k) : days.add(k);
-      e.currentTarget.classList.toggle("on");
-    }, sh);
-    sh.querySelector("#phsave").onclick = async (e) => {
-      e.currentTarget.disabled = true;
-      const note = sh.querySelector("#phnote");
-      try {
-        await api("/phone", {
-          action: "settings-save",
-          hoursStart: sh.querySelector("#phstart").value, hoursEnd: sh.querySelector("#phend").value,
-          hoursDays: [...days], autoReplyHours: sh.querySelector("#phauto1").value, autoReplyAfter: sh.querySelector("#phauto2").value,
-        });
-        toast("Phone settings saved");
-        closeSheet();
-        renderPhone();
-      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
-    };
+    <div class="note" id="phnote" style="margin-top:8px"></div>
+  </div>`;
+}
+
+function wirePhoneSettings(d) {
+  let days = new Set(d.hoursDays || []);
+  on("[data-phday]", "click", (e) => {
+    const k = e.currentTarget.dataset.phday;
+    days.has(k) ? days.delete(k) : days.add(k);
+    e.currentTarget.classList.toggle("on");
   });
+  $("phsave").onclick = async (e) => {
+    e.currentTarget.disabled = true;
+    const note = $("phnote");
+    try {
+      await api("/phone", {
+        action: "settings-save",
+        hoursStart: $("phstart").value, hoursEnd: $("phend").value,
+        hoursDays: [...days], autoReplyHours: $("phauto1").value, autoReplyAfter: $("phauto2").value,
+      });
+      toast("Phone settings saved");
+    } catch (err) { note.className = "note err"; note.textContent = err.message; }
+    e.currentTarget.disabled = false;
+  };
 }
 
 function requestNumberCard(pending) {
@@ -2555,25 +2124,26 @@ const LEAD_SOURCES = [["call-in", "Call-in"], ["walk-in", "Walk-in"], ["referral
   ["website", "Website"], ["social", "Social"], ["repeat", "Repeat"], ["other", "Other"]];
 const TODO_PRIORITIES = [["low", "Low"], ["normal", "Normal"], ["high", "High"], ["urgent", "Urgent"]];
 
-const LANE_CODE = { directory: "CRM.05 · RELATIONSHIPS", todos: "CRM.05 · MISSION CONTROL" };
+const LANE_CODE = { directory: "CRM.05 · RELATIONSHIPS", leads: "CRM.05 · PIPELINE", todos: "CRM.05 · MISSION CONTROL" };
 
-// Red badge count on the lane switcher, same rule as iOS CustomerLaneSwitcher:
-// open to-dos due by end of today. Leads moved to the Phone tab — see
-// phoneStatusStrip/loadPhoneLeads.
+// Red badge counts on the lane switcher, same rule as iOS CustomerLaneSwitcher:
+// leads whose follow-up is due, and open to-dos due by end of today.
 function laneAlerts() {
   const b = S.board || {};
   const now = new Date();
   const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const leads = (b.leads || []).filter((l) =>
+    l.status !== "won" && l.status !== "lost" && l.followUpAt && new Date(l.followUpAt) <= now).length;
   const todos = (b.todos || []).filter((t) =>
     t.status === "open" && t.dueAt && new Date(t.dueAt) <= endOfToday).length;
-  return { todos };
+  return { leads, todos };
 }
 
 async function renderCustomers() {
   view().innerHTML = `<div class="sect">
-    ${osHead(LANE_CODE[S.lane] || LANE_CODE.directory, S.lane === "todos" ? "To-Do" : "Customers")}
+    ${osHead(LANE_CODE[S.lane] || LANE_CODE.directory, S.lane === "todos" ? "To-Do" : S.lane === "leads" ? "Leads" : "Customers")}
     <div class="seg">
-      ${[["directory", "Directory", 0], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
+      ${[["directory", "Directory", 0], ["leads", "Leads", laneAlerts().leads], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
         `<button class="${S.lane === k ? "on" : ""}" data-lane="${k}">${l}${n ? `<i class="badge">${n}</i>` : ""}</button>`).join("")}
     </div>
     <div id="lanebody"><div class="skel"></div><div class="skel"></div></div>
@@ -2581,7 +2151,7 @@ async function renderCustomers() {
   on("[data-lane]", "click", (e) => { S.lane = e.currentTarget.dataset.lane; renderCustomers(); });
   if (S.lane === "directory") {
     loadDirectory();
-    // iOS keeps the To-Do badge live from the same board; fetch it once so Directory shows it too.
+    // iOS keeps the badges live from the same board; fetch it once so Directory shows them too.
     if (!S.board) api("/leads", { action: "board" }).then((b) => { S.board = b; if (S.tab === "customers") renderCustomers(); }).catch(() => {});
   } else loadBoard();
 }
@@ -2984,81 +2554,29 @@ async function loadBoard() {
   const slot = $("lanebody"); if (!slot) return;
   try {
     S.board = await api("/leads", { action: "board" });
-    drawTodos();
+    S.lane === "leads" ? drawLeads() : drawTodos();
   } catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 
-// LEADS LANE — lives under the Phone tab as of 2026-08-24. Calls are where
-// leads are born, so the pipeline sits directly beneath the missed-call feed
-// instead of in a second tab the shop has to remember to open. Same /leads
-// board endpoint and same leadSheet editor as before; only the host moved.
-async function loadPhoneLeads() {
-  const slot = $("phoneleads"); if (!slot) return;
-  try { S.board = await api("/leads", { action: "board" }); drawLeads(); }
-  catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
-}
-
-const LEAD_FILTERS = [["active", "Active"], ["any", "All"], ["new", "New"],
-  ["contacted", "Contacted"], ["quoted", "Quoted"], ["won", "Won"], ["lost", "Lost"]];
-
-function leadStatusTag(l) {
-  if (l.status === "won") return "paid";
-  if (l.status === "lost") return "grey";
-  return l.followUpAt && new Date(l.followUpAt) <= new Date() ? "due" : "new";
-}
-
 function drawLeads() {
-  const slot = $("phoneleads"); if (!slot) return;
+  const slot = $("lanebody"); if (!slot) return;
   const leads = S.board?.leads || [];
-  const now = new Date();
-  const open = leads.filter((l) => l.status !== "won" && l.status !== "lost");
-  const value = open.reduce((t, l) => t + (l.valueEstimate || 0), 0);
-  const due = open.filter((l) => l.followUpAt && new Date(l.followUpAt) <= now)
-    .sort((x, y) => new Date(x.followUpAt) - new Date(y.followUpAt));
-  const cutoff = Date.now() - 30 * 86400000;
-  const won = leads.filter((l) => l.status === "won" && new Date(l.updatedAt || l.createdAt).getTime() >= cutoff);
-  const wonValue = won.reduce((t, l) => t + (l.valueEstimate || 0), 0);
-
-  const filter = S.leadFilter || "active";
-  const shown = (filter === "active" ? open : filter === "any" ? leads : leads.filter((l) => l.status === filter))
-    .sort((x, y) => {
-      const dx = x.followUpAt && new Date(x.followUpAt) <= now, dy = y.followUpAt && new Date(y.followUpAt) <= now;
-      if (dx !== dy) return dx ? -1 : 1;
-      return new Date(y.createdAt) - new Date(x.createdAt);
-    });
-
+  const openLeads = leads.filter((l) => l.status !== "won" && l.status !== "lost");
+  const value = openLeads.reduce((t, l) => t + (l.valueEstimate || 0), 0);
+  const due = openLeads.filter((l) => l.followUpAt && new Date(l.followUpAt) <= new Date());
   slot.innerHTML = `
-    <div class="lanehdr">
-      <span class="eyebrow" style="color:var(--purple,#b48cff)">LEAD PIPELINE</span>
-      <button class="chip add" id="addlead">+ New lead</button>
-    </div>
-    <div class="leadtiles">
-      <div class="leadtile cyan"><small>PIPELINE</small><b>${money0(value)}</b><i>${open.length} open</i></div>
-      <div class="leadtile ${due.length ? "red" : "dim"}"><small>FOLLOW-UP DUE</small><b>${due.length}</b><i>${due.length ? "call today" : "all clear"}</i></div>
-      <div class="leadtile emerald"><small>WON &middot; 30D</small><b>${money0(wonValue)}</b><i>${won.length} closed</i></div>
-    </div>
-    ${due.length ? `<div class="callq">
-      <div class="eyebrow" style="color:var(--red)">CALL LIST &middot; ${due.length} DUE</div>
-      <div class="list" style="margin-top:8px">${due.slice(0, 5).map((l) => `
-        <button class="item" data-lead="${esc(l.id)}">
-          <div class="main"><div class="ttl">${esc(l.name)}</div>
-            <div class="sub">${esc(l.phone || l.email || "no contact on file")} &middot; due ${esc(dayLabel(l.followUpAt))}</div></div>
-          ${l.phone ? `<span class="qcall" data-call="${esc(String(l.phone).replace(/[^0-9+]/g, ""))}">&#128222;</span>` : ""}
-        </button>`).join("")}</div></div>` : ""}
-    <div class="leadfilters">${LEAD_FILTERS.map(([k, lab]) =>
-      `<button class="chip ${filter === k ? "on" : ""}" data-lfilter="${k}">${lab}</button>`).join("")}</div>
-    ${shown.length ? `<div class="list">${shown.map((l) => `
+    <div class="hero"><div class="eyebrow">PIPELINE</div>
+      <div class="big">${money0(value)}</div>
+      <div class="note" style="margin-top:4px">${openLeads.length} open lead${openLeads.length === 1 ? "" : "s"}${due.length ? ` · <span style="color:var(--red)">${due.length} follow-up due</span>` : ""}</div></div>
+    <button class="btn primary wide" id="addlead">+ New lead</button>
+    ${leads.length ? `<div class="list">${leads.map((l) => `
       <button class="item" data-lead="${esc(l.id)}">
-        <div class="main"><div class="ttl">${esc(l.name)}${l.company ? " &middot; " + esc(l.company) : ""}</div>
-          <div class="sub">${esc(l.phone || l.email || l.source || "")}${l.followUpAt ? " &middot; follow up " + esc(dayLabel(l.followUpAt)) : ""}</div></div>
+        <div class="main"><div class="ttl">${esc(l.name)}${l.company ? " · " + esc(l.company) : ""}</div>
+          <div class="sub">${esc(l.phone || l.email || l.source || "")}${l.followUpAt ? " · follow up " + esc(dayLabel(l.followUpAt)) : ""}</div></div>
         <div class="amt">${l.valueEstimate ? money0(l.valueEstimate) : ""}
-          <small><span class="tag ${leadStatusTag(l)}">${esc(l.status)}</span></small></div>
-      </button>`).join("")}</div>`
-      : `<div class="empty">${leads.length ? "No " + esc(filter) + " leads." : "The call list starts here.<br>Every missed call lands here on its own — or add one by hand."}</div>`}`;
-
+          <small><span class="tag ${l.status === "won" ? "paid" : l.status === "lost" ? "grey" : l.followUpAt && new Date(l.followUpAt) <= new Date() ? "due" : "new"}">${esc(l.status)}</span></small></div>
+      </button>`).join("")}</div>` : `<div class="empty">No leads yet.<br>Snap a photo of your call list and ask Ledger to add them.</div>`}`;
   $("addlead").onclick = () => leadSheet({});
-  on("[data-lfilter]", "click", (e) => { S.leadFilter = e.currentTarget.dataset.lfilter; drawLeads(); }, slot);
-  on("[data-call]", "click", (e) => { e.stopPropagation(); location.href = "tel:" + e.currentTarget.dataset.call; }, slot);
   on("[data-lead]", "click", (e) => leadSheet(leads.find((l) => l.id === e.currentTarget.dataset.lead)), slot);
 }
 
@@ -3333,7 +2851,6 @@ async function send() {
     (d.booking_drafts || []).forEach(bookingCard);
     (d.reminder_drafts || []).forEach(reminderCard);
     (d.email_drafts || []).forEach(emailDraftCard);
-    (d.sms_drafts || []).forEach(smsDraftCard);
     (d.print_jobs || []).forEach(printJobCard);
     S.qboStale = true; S.board = null; // books may have moved — refetch on next tab visit
   } catch (e) {
@@ -3444,26 +2961,6 @@ function emailDraftCard(d) {
   };
 }
 
-function smsDraftCard(d) {
-  const card = bubble("card", `<h3>TEXT MESSAGE</h3><div class="cust">${esc(d.to_name ? d.to_name + " · " + d.to_number : d.to_number)}</div>
-    <div class="emailrow" style="display:block;white-space:pre-wrap;color:var(--text);max-height:190px;overflow:auto">${esc(d.body)}</div>
-    <div class="emailrow">From ${esc(d.from_number || "your business number")}</div>
-    <div class="row"><button class="btn cancel">Cancel</button><button class="btn confirm">Send text</button></div>`);
-  const btns = () => [card.querySelector(".confirm"), card.querySelector(".cancel")].filter(Boolean);
-  card.querySelector(".confirm").onclick = async () => {
-    btns().forEach((b) => b.disabled = true);
-    try {
-      const r = await api("/phone", { action: "sms-confirm", draft_id: d.draft_id });
-      cardDone(card, "✅ Sent to " + (r.sent?.to_number || d.to_number));
-    } catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
-  };
-  card.querySelector(".cancel").onclick = async () => {
-    btns().forEach((b) => b.disabled = true);
-    try { await api("/phone", { action: "sms-cancel", draft_id: d.draft_id }); cardDone(card, "Draft cancelled — nothing was sent"); }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
-  };
-}
-
 function printJobCard(j) {
   const card = bubble("card", `<h3>PRINT</h3><div class="cust">#${esc(j.doc_number)} · ${esc(j.customer || "")}</div>
     <table><tr><td>${esc(j.type || "invoice")}</td><td>${money(j.total)}</td></tr>
@@ -3514,147 +3011,6 @@ async function connectionStates() {
   } catch { return {}; }
 }
 
-// Inventory & pricing — the catalog the assistant sells from. Two boxes on
-// purpose: a CSV works for any business on day one, an API key needs to know
-// which system it belongs to, so it carries a provider picker beside it.
-const CAT_FIELDS = [
-  ["sku", "Item / SKU"], ["brand", "Brand"], ["model", "Model"], ["size", "Size"],
-  ["description", "Description"], ["price", "Price"], ["cost", "Cost"],
-  ["quantity", "In stock"], ["unit", "Unit"], ["location", "Location"],
-];
-
-async function renderCatalog(sh) {
-  const slot = sh.querySelector("#catslot");
-  if (!slot) return;
-  let board;
-  try { board = await api("/catalog", { action: "board" }); }
-  catch (err) { slot.innerHTML = `<p class="note">Couldn't load your catalog — ${esc(err.message)}</p>`; return; }
-
-  // A live feed that answers through the shop's own machine can be connected and
-  // still unable to answer, because the machine is off. Saying "live feed" with
-  // nothing behind it is the failure the owner finds out about mid-quote, so the
-  // real state gets its own line.
-  let bridges = {};
-  try {
-    const bs = await api("/catalog", { action: "bridge-status" });
-    for (const b of bs.bridges || []) bridges[b.source_id] = b;
-  } catch { /* status is a nicety; never block the page on it */ }
-
-  const BRIDGE_LABEL = {
-    online: ['<small style="color:var(--green,#39d98a)">· live · ready</small>', ""],
-    offline: ['<small style="color:var(--red)">· not answering</small>',
-              "Live prices come from the lookup service on your shop computer. It isn't responding, so Ledger will fall back to uploaded lists and say so."],
-    paused: ['<small style="color:var(--amber,#f0b429)">· paused</small>',
-             "The supplier refused a recent request, so lookups are paused for a short while rather than retried into a block. This clears on its own."],
-  };
-
-  const sources = board.sources || [];
-  const providers = board.providers || [];
-  const rows = sources.length
-    ? sources.map((s) => {
-        const st = s.kind === "api" ? (BRIDGE_LABEL[bridges[s.id]?.state] || BRIDGE_LABEL.offline) : null;
-        return `<div class="kv"><span>${esc(s.name)}${s.kind === "api" ? ' <small style="color:var(--cyan)">· live feed</small> ' + st[0] : ""}<br>
-        <small style="color:var(--dim)">${s.kind === "api" ? (st[1] ? esc(st[1]) : "Prices are fetched at the moment you ask, so they are never stale.") : (s.item_count ? esc(String(s.item_count)) + " items · " : "") + esc(s.as_of || "")}</small></span>
-        <span><button class="btn ghost" data-catdel="${esc(s.id)}" style="padding:6px 11px;font-size:12px;color:var(--red)">Remove</button></span></div>`;
-      }).join("")
-    : `<p class="note" style="margin:0 0 10px">Nothing loaded yet. Ledger will say it doesn't know rather than guess a price.</p>`;
-
-  slot.innerHTML = `${rows}
-    <div class="panel" style="margin-top:12px">
-      <b style="font-size:13.5px">📄 Upload a price list</b>
-      <p class="note" style="margin:6px 0 10px">Any spreadsheet, any column names — CSV or tab-separated. Ledger reads the header and works out which column is the price, the size and the stock count. Nothing to set up.</p>
-      <button class="btn ghost wide" id="catpick">Choose a file</button>
-      <input type="file" id="catfile" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden>
-      <div id="catstage"></div>
-    </div>
-    <div class="panel" style="margin-top:10px">
-      <b style="font-size:13.5px">🔌 Connect a live feed</b>
-      <p class="note" style="margin:6px 0 10px">A key on its own is just a string — pick the system it belongs to so Ledger knows where to send it. Prices stay live, nothing goes stale.</p>
-      <label class="fld">WHICH SYSTEM</label>
-      <select id="catprov" style="width:100%;padding:11px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:inherit;font:inherit">
-        ${providers.map((p) => `<option value="${esc(p.key)}">${esc(p.name)} — ${esc(p.detail)}</option>`).join("")}
-      </select>
-      <label class="fld" style="margin-top:10px">API KEY</label>
-      <input id="catkey" placeholder="Paste the key from that system" autocomplete="off">
-      <label class="fld" style="margin-top:10px">DEALER / LOCATION ID <span style="opacity:.6">(optional)</span></label>
-      <input id="catdealer" placeholder="If that system gave you one" autocomplete="off">
-      <button class="btn ghost wide" style="margin-top:11px" id="catconn">Save key</button>
-      <p class="note" style="margin-top:8px;font-size:11.5px">Stored encrypted at rest and never shown back to anyone, including us.</p>
-    </div>`;
-
-  slot.querySelectorAll("[data-catdel]").forEach((btn) => {
-    btn.onclick = async () => {
-      if (!confirm("Remove this price list? Ledger will stop quoting from it.")) return;
-      btn.disabled = true;
-      try { await api("/catalog", { action: "delete-source", source_id: btn.dataset.catdel }); toast("Removed"); renderCatalog(sh); }
-      catch (err) { btn.disabled = false; toast(err.message, "err"); }
-    };
-  });
-
-  const stage = slot.querySelector("#catstage");
-  slot.querySelector("#catpick").onclick = () => slot.querySelector("#catfile").click();
-  slot.querySelector("#catfile").onchange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 6_000_000) { toast("That file is over 6 MB — trim unused columns or split it", "err"); return; }
-    stage.innerHTML = `<p class="note" style="margin-top:10px">Reading ${esc(file.name)}…</p>`;
-    let csv;
-    try {
-      csv = await new Promise((res, rej) => {
-        const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsText(file);
-      });
-    } catch { stage.innerHTML = `<p class="note" style="color:var(--red)">Couldn't read that file.</p>`; return; }
-
-    stage.innerHTML = `<p class="note" style="margin-top:10px">Working out your columns…</p>`;
-    let look;
-    try { look = await api("/catalog", { action: "analyze", filename: file.name, csv }); }
-    catch (err) { stage.innerHTML = `<p class="note" style="color:var(--red);margin-top:10px">${esc(err.message)}</p>`; return; }
-
-    // Show what it decided BEFORE anything is stored. A mapping the owner can
-    // see is a mapping they can catch — and a wrong price column is the one
-    // mistake that would quote a customer badly.
-    const mapped = CAT_FIELDS.filter(([key]) => look.column_map?.[key])
-      .map(([key, label]) => `<div class="kv"><span>${esc(label)}</span><span style="color:var(--cyan);font-size:12.5px">${esc(look.column_map[key])}</span></div>`).join("");
-    stage.innerHTML = `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
-      <b style="font-size:13px">${esc(String(look.row_count))} rows${look.truncated ? " (first 25,000)" : ""}</b>
-      ${look.summary ? `<p class="note" style="margin:5px 0 9px">${esc(look.summary)}</p>` : ""}
-      ${look.warning ? `<p class="note" style="color:var(--orange);margin:5px 0 9px">⚠️ ${esc(look.warning)}</p>` : ""}
-      <div class="eyebrow" style="margin-top:6px">COLUMNS I FOUND</div>
-      ${mapped || '<p class="note">None — this file may not be a product list.</p>'}
-      ${look.unmapped?.length ? `<p class="note" style="margin-top:8px;font-size:11.5px">Kept alongside each item: ${esc(look.unmapped.slice(0, 8).join(", "))}${look.unmapped.length > 8 ? "…" : ""}</p>` : ""}
-      <button class="btn primary wide" style="margin-top:12px" id="catgo">Import ${esc(String(look.row_count))} items</button>
-      <button class="btn ghost wide" style="margin-top:8px" id="catcancel">Cancel</button></div>`;
-    stage.querySelector("#catcancel").onclick = () => { stage.innerHTML = ""; };
-    stage.querySelector("#catgo").onclick = async (ev) => {
-      const go = ev.currentTarget;
-      go.disabled = true; go.textContent = "Importing…";
-      try {
-        const done = await api("/catalog", { action: "import", filename: file.name, csv, column_map: look.column_map });
-        toast(`${done.imported} items loaded`);
-        renderCatalog(sh);
-      } catch (err) { go.disabled = false; go.textContent = "Try import again"; toast(err.message, "err"); }
-    };
-  };
-
-  slot.querySelector("#catconn").onclick = async (ev) => {
-    const btn = ev.currentTarget;
-    const key = slot.querySelector("#catkey").value.trim();
-    if (!key) { toast("Paste the API key first", "err"); return; }
-    btn.disabled = true; btn.textContent = "Saving…";
-    try {
-      const done = await api("/catalog", {
-        action: "connect-api",
-        provider: slot.querySelector("#catprov").value,
-        api_key: key,
-        dealer_id: slot.querySelector("#catdealer").value.trim(),
-      });
-      toast("Key saved");
-      if (done.note) alert(done.note);
-      renderCatalog(sh);
-    } catch (err) { btn.disabled = false; btn.textContent = "Save key"; toast(err.message, "err"); }
-  };
-}
-
 async function businessSheet() {
   const b = S.profile?.business || {};
   const u = S.usage;
@@ -3681,10 +3037,6 @@ async function businessSheet() {
     <div class="eyebrow" style="margin-top:20px">CONNECTIONS</div>
     <p class="note" style="margin-top:5px">Authorization happens on each provider's official sign-in page. Ledger never receives your password.</p>
     <div id="connslot" class="note" style="margin-top:8px">Checking connections…</div>
-
-    <div class="eyebrow" style="margin-top:20px">INVENTORY &amp; PRICING</div>
-    <p class="note" style="margin-top:5px">Give Ledger your product list and it can quote from it — price, size, what's in stock.</p>
-    <div id="catslot" class="note" style="margin-top:8px">Loading…</div>
 
     <div class="eyebrow" style="margin-top:20px">ONLINE BOOKING</div>
     <div id="bookslot" class="note" style="margin-top:8px">Loading…</div>
@@ -3734,7 +3086,6 @@ async function businessSheet() {
       }).join("");
       wireConnect(slot);
     });
-    renderCatalog(sh);
     // Online booking — public link customers use with no account; requests
     // land in booking_requests AND the Leads lane. Owner/admin can toggle.
     const renderBooking = async () => {
