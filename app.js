@@ -2006,12 +2006,14 @@ async function renderPhone() {
       ${osHead("COM.06 · CALL LINE", "Phone")}
       ${d.hasNumber ? phoneStatusStrip(d) : ""}
       ${d.hasNumber ? phoneNumberCard(d) : requestNumberCard(d.pendingRequest)}
+      ${d.hasNumber ? phoneThreadsPanel(d) : ""}
       ${d.hasNumber ? phoneFeedPanel(d) : ""}
       ${d.hasNumber ? phoneSettingsSummary(d) : ""}
       ${d.hasNumber ? `<div id="phoneleads"><div class="skel"></div></div>` : ""}
     </div>`;
     if (!d.hasNumber) wireRequestNumber(d.pendingRequest);
     if (d.hasNumber) on("[data-pevt]", "click", (e) => phoneEventSheet(d.events.find((ev) => ev.id === e.currentTarget.dataset.pevt)));
+    if (d.hasNumber) on("[data-pthread]", "click", (e) => phoneThreadSheet((d.threads || []).find((t) => t.id === e.currentTarget.dataset.pthread)));
     if (d.hasNumber) {
       $("phsetup").onclick = () => phoneSetupSheet(d);
       $("phsettings").onclick = () => phoneSettingsSheet(d);
@@ -2029,19 +2031,44 @@ async function renderPhone() {
 // Dense glanceable strip — line armed/off, the number, calls today and leads
 // captured this week (both read off the already-fetched missed-call feed, no
 // second round trip). LEADS LANE now lives under this tab, not Customers.
+function phoneReplyLabel(minutes) {
+  if (minutes === null || minutes === undefined) return "\u2014";
+  if (minutes < 1) return "<1m";
+  if (minutes < 60) return Math.round(minutes) + "m";
+  const hours = minutes / 60;
+  if (hours < 24) return hours.toFixed(1) + "h";
+  return Math.round(hours / 24) + "d";
+}
+
 function phoneStatusStrip(d) {
   const armed = !!((d.autoReplyHours || "").trim() || (d.autoReplyAfter || "").trim());
   const events = d.events || [];
+  const threads = d.threads || [];
+  const m = d.metrics || {};
   const today = localDay();
-  const callsToday = events.filter((ev) => localDay(new Date(ev.occurredAt)) === today).length;
+  // Prefer the server's metrics block; fall back to what's locally derivable so
+  // an older edge deployment degrades to the old numbers instead of zeros.
+  const callsToday = m.callsToday ?? events.filter((ev) => localDay(new Date(ev.occurredAt)) === today).length;
+  const missedToday = m.missedToday ?? events.filter((ev) => localDay(new Date(ev.occurredAt)) === today && !ev.answered).length;
   const cutoff = Date.now() - 7 * 86400000;
-  const leadsWeek = events.filter((ev) => ev.leadId && new Date(ev.occurredAt).getTime() >= cutoff).length;
+  const leadsWeek = m.leads7d ?? events.filter((ev) => ev.leadId && new Date(ev.occurredAt).getTime() >= cutoff).length;
+  const awaiting = m.awaitingReply ?? threads.filter((t) => (t.unreadCount || 0) > 0 && (t.status || "open") === "open").length;
+  const textsToday = m.textsToday ?? 0;
   return `<div class="phstrip">
-    <div class="phcell line"><span class="dot ${armed ? "on" : "off"}"></span>
-      <div><small>Line</small><b>${esc(formatE164(d.number.e164))}</b></div></div>
-    <div class="phcell"><small>Calls today</small><b>${callsToday}</b></div>
-    <div class="phcell"><small>Leads &middot; 7d</small><b>${leadsWeek}</b></div>
-    <div class="phcell"><small>Auto-reply</small><b class="${armed ? "ok" : "warn"}">${armed ? "Armed" : "Off"}</b></div>
+    <div class="phrow">
+      <div class="phcell line"><span class="dot ${armed ? "on" : "off"}"></span>
+        <div><small>Line</small><b>${esc(formatE164(d.number.e164))}</b></div></div>
+      <div class="phcell"><small>Awaiting reply</small><b class="${awaiting > 0 ? "warn" : "ok"}">${awaiting}</b></div>
+      <div class="phcell"><small>Median reply</small><b>${esc(phoneReplyLabel(m.medianResponseMinutes))}</b></div>
+    </div>
+    <div class="phrule"></div>
+    <div class="phrow">
+      <div class="phcell"><small>Calls</small><b>${callsToday}</b></div>
+      <div class="phcell"><small>Missed</small><b class="${missedToday > 0 ? "warn" : ""}">${missedToday}</b></div>
+      <div class="phcell"><small>Texts</small><b>${textsToday}</b></div>
+      <div class="phcell"><small>Leads &middot; 7d</small><b>${leadsWeek}</b></div>
+      <div class="phcell"><small>Auto-reply</small><b class="${armed ? "ok" : "warn"}">${armed ? "Armed" : "Off"}</b></div>
+    </div>
   </div>`;
 }
 
@@ -2105,6 +2132,113 @@ function phoneEventBadge(ev) {
   if (ev.autoReplySent) return '<span class="tag new">auto-replied</span>';
   if (!ev.answered) return '<span class="tag open">no reply sent</span>';
   return '<span class="tag paid">answered</span>';
+}
+
+// The Phone tab was calls-only because the original Quo webhook subscribed to
+// call.completed alone. With message.received/message.delivered flowing, the
+// thread inbox is the primary surface and the missed-call feed sits under it.
+function phoneThreadsPanel(d) {
+  const threads = d.threads || [];
+  const open = threads.filter((t) => (t.status || "open") !== "done");
+  const done = threads.filter((t) => (t.status || "open") === "done").slice(0, 6);
+  const awaiting = open.filter((t) => (t.unreadCount || 0) > 0).length;
+  const row = (t) => {
+    const isDone = (t.status || "open") === "done";
+    const unread = (t.unreadCount || 0) > 0 && !isDone;
+    const preview = (t.lastMessagePreview || "").trim();
+    const body = preview ? (t.lastMessageDirection === "outgoing" ? "You: " : "") + preview : "No messages yet.";
+    return `<button class="item thitem${unread ? " unread" : ""}" data-pthread="${esc(t.id)}">
+      <div class="main">
+        <div class="ttl">${esc(t.peerName || formatE164(t.peerNumber))}${unread ? '<span class="thdot"></span>' : ""}</div>
+        <div class="sub">${esc(body)}</div>
+      </div>
+      <div class="thmeta">
+        <small>${esc(t.lastMessageAt ? dayLabel(t.lastMessageAt) + " " + timeLabel(t.lastMessageAt) : "")}</small>
+        ${unread ? '<span class="tag open">reply</span>' : isDone ? '<span class="thdone">&#10003;</span>' : ""}
+      </div>
+    </button>`;
+  };
+  return `<div class="lanehead"><span class="eyebrow">Text threads</span>
+      <span class="note">${awaiting > 0 ? awaiting + " awaiting reply" : open.length + " open"}</span></div>
+    ${threads.length ? `<div class="list">${open.map(row).join("")}${done.length ? `<div class="eyebrow" style="margin:10px 0 4px">Done</div>${done.map(row).join("")}` : ""}</div>`
+      : `<div class="empty">No texts yet. When someone texts your business number the conversation lands here, and you can answer from this screen.</div>`}`;
+}
+
+function phoneBubble(msg) {
+  const mine = msg.direction !== "incoming";
+  const status = (msg.status || "").toLowerCase();
+  const failed = status === "failed" || status === "undelivered";
+  return `<div class="bubrow ${mine ? "me" : "them"}">
+    <div>
+      <div class="bub">${esc(msg.body || "")}</div>
+      <div class="bubstamp">${esc(dayLabel(msg.occurredAt))} ${esc(timeLabel(msg.occurredAt))}
+        ${mine && msg.sentBy === "auto" ? '<span class="auto">AUTO</span>' : ""}
+        ${failed ? `<span class="failed">${esc(status.toUpperCase())}</span>` : ""}</div>
+    </div>
+  </div>`;
+}
+
+async function phoneThreadSheet(t) {
+  if (!t) return;
+  const title = t.peerName || formatE164(t.peerNumber);
+  let status = t.status || "open";
+  const wrap = sheet(`<h2>${esc(title)}</h2>
+    <p class="sh-sub" id="phthsub">${esc(formatE164(t.peerNumber))}</p>
+    <div class="chat" id="phchat"><div class="skel"></div></div>
+    <div class="composer">
+      <textarea id="phdraft" rows="1" placeholder="Text ${esc(title)}&hellip;"></textarea>
+      <button class="btn primary" id="phsend">Send</button>
+    </div>
+    <div class="note" id="pherr" style="display:none"></div>
+    <div class="rowbtns" style="margin-top:12px">
+      <a class="btn ghost" href="tel:${esc(t.peerNumber)}">Call</a>
+      <button class="btn ghost" id="phdone">${status === "done" ? "Reopen" : "Mark done"}</button>
+    </div>`);
+  const chat = wrap.querySelector("#phchat");
+  const err = wrap.querySelector("#pherr");
+  const showErr = (msg) => { err.style.display = "block"; err.className = "note err"; err.textContent = msg; };
+
+  async function load(markRead) {
+    try {
+      const d = await api("/phone", { action: "thread", conversation_id: t.id });
+      status = (d.thread && d.thread.status) || status;
+      chat.innerHTML = (d.messages || []).length
+        ? d.messages.map(phoneBubble).join("")
+        : `<div class="empty">No messages in this thread yet.</div>`;
+      chat.scrollTop = chat.scrollHeight;
+      err.style.display = "none";
+    } catch (e) { showErr(e.message); chat.innerHTML = ""; }
+    // Opening a thread IS reading it — fired after the history lands so a
+    // failed read never leaves the sheet blank. Mirrored into Quo server-side.
+    if (markRead && (t.unreadCount || 0) > 0) {
+      try { await api("/phone", { action: "thread-read", conversation_id: t.id }); renderPhone(); } catch (e) { /* non-fatal */ }
+    }
+  }
+
+  wrap.querySelector("#phsend").onclick = async (e) => {
+    const field = wrap.querySelector("#phdraft");
+    const body = field.value.trim();
+    if (!body) return;
+    e.currentTarget.disabled = true;
+    try {
+      await api("/phone", { action: "reply", conversation_id: t.id, to_number: t.peerNumber, body });
+      field.value = "";
+      await load(false);
+      renderPhone();
+    } catch (ex) { showErr(ex.message); }
+    e.currentTarget.disabled = false;
+  };
+
+  wrap.querySelector("#phdone").onclick = async (e) => {
+    e.currentTarget.disabled = true;
+    try {
+      await api("/phone", { action: status === "done" ? "thread-open" : "thread-done", conversation_id: t.id });
+      closeSheet();
+      renderPhone();
+    } catch (ex) { showErr(ex.message); e.currentTarget.disabled = false; }
+  };
+
+  load(true);
 }
 
 function phoneFeedPanel(d) {
