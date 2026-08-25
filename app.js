@@ -2906,6 +2906,7 @@ async function send() {
     (d.booking_drafts || []).forEach(bookingCard);
     (d.reminder_drafts || []).forEach(reminderCard);
     (d.email_drafts || []).forEach(emailDraftCard);
+    (d.sms_drafts || []).forEach(smsDraftCard);
     (d.print_jobs || []).forEach(printJobCard);
     S.qboStale = true; S.board = null; // books may have moved — refetch on next tab visit
   } catch (e) {
@@ -3012,6 +3013,26 @@ function emailDraftCard(d) {
   card.querySelector(".cancel").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { await api("/gmail/email-cancel", { draft_id: d.draft_id }); cardDone(card, "Draft cancelled — nothing was sent"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+  };
+}
+
+function smsDraftCard(d) {
+  const card = bubble("card", `<h3>TEXT MESSAGE</h3><div class="cust">${esc(d.to_name ? d.to_name + " · " + d.to_number : d.to_number)}</div>
+    <div class="emailrow" style="display:block;white-space:pre-wrap;color:var(--text);max-height:190px;overflow:auto">${esc(d.body)}</div>
+    <div class="emailrow">From ${esc(d.from_number || "your business number")}</div>
+    <div class="row"><button class="btn cancel">Cancel</button><button class="btn confirm">Send text</button></div>`);
+  const btns = () => [card.querySelector(".confirm"), card.querySelector(".cancel")].filter(Boolean);
+  card.querySelector(".confirm").onclick = async () => {
+    btns().forEach((b) => b.disabled = true);
+    try {
+      const r = await api("/phone", { action: "sms-confirm", draft_id: d.draft_id });
+      cardDone(card, "✅ Sent to " + (r.sent?.to_number || d.to_number));
+    } catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+  };
+  card.querySelector(".cancel").onclick = async () => {
+    btns().forEach((b) => b.disabled = true);
+    try { await api("/phone", { action: "sms-cancel", draft_id: d.draft_id }); cardDone(card, "Draft cancelled — nothing was sent"); }
     catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
   };
 }
