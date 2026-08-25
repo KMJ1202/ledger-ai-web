@@ -2007,6 +2007,7 @@ async function renderPhone() {
       ${d.hasNumber ? phoneStatusStrip(d) : ""}
       ${d.hasNumber ? phoneNumberCard(d) : requestNumberCard(d.pendingRequest)}
       ${d.hasNumber ? frontDeskCard(d) : ""}
+      ${d.hasNumber ? `<div id="vmlane"><div class="skel"></div></div>` : ""}
       ${d.hasNumber ? phoneThreadsPanel(d) : ""}
       ${d.hasNumber ? phoneFeedPanel(d) : ""}
       ${d.hasNumber ? phoneSettingsSummary(d) : ""}
@@ -2025,6 +2026,7 @@ async function renderPhone() {
       // one-shot pattern as the iOS onboarding interview's @AppStorage flag.
       const seenKey = "ledger.phoneSetupSeen." + d.number.id;
       if (!localStorage.getItem(seenKey)) { localStorage.setItem(seenKey, "1"); phoneSetupSheet(d); }
+      loadVoicemails(d);
       loadPhoneLeads();
     }
   } catch (e) {
@@ -2290,6 +2292,82 @@ function timeLabel12(hhmm) {
   const [h, m] = (hhmm || "08:00").split(":").map(Number);
   const d = new Date(); d.setHours(h || 0, m || 0, 0, 0);
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+// ---- VOICEMAIL -----------------------------------------------------------
+// Only calls that actually left a message. Playback asks the server for a
+// fresh signed URL at press-play rather than trusting the one stored at
+// ingest, because provider media links expire.
+const VM = { heard: new Set() };
+
+async function loadVoicemails(board) {
+  const host = $("vmlane");
+  if (!host) return;
+  try {
+    const d = await api("/phone", { action: "voicemails", limit: 40 });
+    const list = d.voicemails || [];
+    const unheard = list.filter((v) => !v.voicemailHeardAt && !VM.heard.has(v.id)).length;
+    host.innerHTML = `<div class="panel">
+      <h3>&#9993; Voicemail ${unheard ? `<span class="pill live">${unheard} NEW</span>` : (list.length ? '<span class="pill">all heard</span>' : "")}</h3>
+      ${list.length ? `<div class="list">${list.map((v) => voicemailRow(v, board)).join("")}</div>`
+        : `<p class="sub">No voicemails. When a caller leaves a message it lands here — play it right on this page, transcript underneath.</p>`}
+    </div>`;
+    on("[data-vmplay]", "click", (e) => playVoicemail(e.currentTarget.dataset.vmplay), host);
+    on("[data-vmtx]", "click", (e) => {
+      const row = (board.threads || []).find((t) => t.id === e.currentTarget.dataset.vmtx);
+      if (row) phoneThreadSheet(row);
+    }, host);
+    on("[data-vmscript]", "click", (e) => {
+      const box = host.querySelector(`#vmtx-${e.currentTarget.dataset.vmscript}`);
+      if (box) box.hidden = !box.hidden;
+    }, host);
+  } catch (e) {
+    host.innerHTML = `<div class="panel"><h3>&#9993; Voicemail</h3><p class="sub">${esc(e.message)}</p></div>`;
+  }
+}
+
+function vmClock(seconds) {
+  const total = Number(seconds) || 0;
+  if (total <= 0) return "";
+  return `${Math.floor(total / 60)}:${String(Math.round(total % 60)).padStart(2, "0")}`;
+}
+
+function voicemailRow(v, board) {
+  const heard = !!v.voicemailHeardAt || VM.heard.has(v.id);
+  const length = vmClock(v.voicemailDurationSeconds);
+  const thread = (board.threads || []).find((t) => t.peerNumber === v.callerNumber);
+  return `<div class="item vmitem">
+    <div class="main">
+      <div class="ttl">${heard ? "" : "&#128309; "}${esc(v.callerName || formatE164(v.callerNumber) || "Unknown caller")}</div>
+      <div class="sub">${esc(dayLabel(v.occurredAt))} · ${esc(timeLabel(v.occurredAt))}${length ? ` · ${length}` : ""}</div>
+      <div class="rowbtns" style="margin-top:8px">
+        <button class="btn ${heard ? "" : "em"}" data-vmplay="${esc(v.id)}">&#9654; Play</button>
+        ${v.transcript ? `<button class="btn" data-vmscript="${esc(v.id)}">Transcript</button>` : ""}
+        <a class="btn" href="tel:${esc(v.callerNumber)}">Call back</a>
+        ${thread ? `<button class="btn" data-vmtx="${esc(thread.id)}">Text back</button>` : ""}
+      </div>
+      <div id="vmplayer-${esc(v.id)}"></div>
+      ${v.transcript ? `<div class="note" id="vmtx-${esc(v.id)}" hidden style="margin-top:8px">${esc(v.transcript)}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+async function playVoicemail(eventId) {
+  const slot = $(`vmplayer-${eventId}`);
+  if (!slot) return;
+  // One at a time — starting a second message stops the first.
+  document.querySelectorAll(".vmitem audio").forEach((a) => { if (a.parentElement !== slot) { a.pause(); a.remove(); } });
+  slot.innerHTML = `<div class="note">Loading…</div>`;
+  try {
+    const media = await api("/phone", { action: "voicemail-media", event_id: eventId });
+    slot.innerHTML = `<audio controls autoplay src="${esc(media.url)}" style="width:100%;margin-top:9px"></audio>`;
+    if (!VM.heard.has(eventId)) {
+      VM.heard.add(eventId);
+      api("/phone", { action: "voicemail-heard", event_id: eventId }).catch(() => {});
+    }
+  } catch (e) {
+    slot.innerHTML = `<div class="note err">${esc(e.message)}</div>`;
+  }
 }
 
 // ---- FRONT DESK ----------------------------------------------------------

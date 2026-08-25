@@ -1,5 +1,5 @@
 // Ledger AI service worker — app-shell cache, network-first for documents and assets.
-const CACHE = "ledger-ai-v42";
+const CACHE = "ledger-ai-v43";
 const SHELL = ["./app.html", "./app.js?v=25", "./index.html", "./manifest.webmanifest", "./icon.svg",
                "./icon-192.png", "./icon-512.png", "./icon-maskable-192.png", "./icon-maskable-512.png",
                "./assets/styles.css?v=31", "./assets/herodemo.js?v=1", "./assets/support-widget.css?v=1", "./assets/support-widget.js?v=1", "./assets/logo-mark-96.png", "./assets/logo-full-640.png", "./assets/icons/quickbooks.svg", "./assets/icons/gmail.svg", "./assets/icons/googlecalendar.svg", "./assets/icons/googlebusiness.svg",
