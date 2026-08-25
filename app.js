@@ -92,14 +92,39 @@ function toast(text, kind) {
 function sheet(html, wire) {
   closeSheet();
   const wrap = document.createElement("div"); wrap.id = "sheetwrap";
-  wrap.innerHTML = `<div class="sheet-back"></div><div class="sheet"><div class="grab"></div>${html}
+  wrap.innerHTML = `<div class="sheet-back"></div><div class="sheet"><div class="grab"></div>
+    <div class="kbbar"><button class="kbdone" type="button">Done</button></div>${html}
     <button class="sheet-close">Close</button></div>`;
   document.body.appendChild(wrap);
   wrap.querySelector(".sheet-back").onclick = closeSheet;
   wrap.querySelector(".sheet-close").onclick = closeSheet;
-  if (wire) wire(wrap.querySelector(".sheet"));
+  // Keyboard escape hatch (Kyle, 2026-08-24 — got trapped on the Phone tab).
+  // The sheet's own Close button sits below the keyboard once it opens, so a
+  // sticky Done bar rides the top of the sheet the whole time a field is
+  // focused. Scrolling the sheet also dismisses, matching iOS.
+  const pane = wrap.querySelector(".sheet");
+  wrap.querySelector(".kbdone").onclick = () => blurInput();
+  pane.addEventListener("focusin", (e) => { if (isTextInput(e.target)) wrap.classList.add("kbon"); });
+  pane.addEventListener("focusout", () => setTimeout(() => {
+    if (!isTextInput(document.activeElement)) wrap.classList.remove("kbon");
+  }, 60));
+  pane.addEventListener("scroll", () => { if (isTextInput(document.activeElement)) blurInput(); }, { passive: true });
+  if (wire) wire(pane);
   return wrap;
 }
+
+const isTextInput = (el) => !!el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+function blurInput() { if (isTextInput(document.activeElement)) document.activeElement.blur(); }
+
+// Tap anywhere that is not itself a field and the keyboard closes. One global
+// listener rather than per-form wiring, so a field added later can never ship
+// without an escape hatch.
+document.addEventListener("pointerdown", (e) => {
+  if (!isTextInput(document.activeElement)) return;
+  if (e.target === document.activeElement) return;
+  if (e.target.closest && e.target.closest("input,textarea,select,label")) return;
+  blurInput();
+}, true);
 function closeSheet() { const w = $("sheetwrap"); if (w) w.remove(); }
 
 /* ---------------- app shell ---------------- */
@@ -164,12 +189,12 @@ function appView() {
     <div class="mark">${logo ? `<img src="${esc(logo)}" alt="">` : "L"}</div>
     <h1 id="bizname">${esc(S.profile?.business?.name || "Ledger AI")}</h1>
     <span id="usage"></span>
+    <button class="hchat" id="hchat" title="Ask Ledger">&#128172;</button>
     <button class="avatar" id="more" title="Your business">&#9679;</button>
   </header>
   <div id="banner">💡 Advisor Mode — business guidance beyond your books, on your AI allowance</div>
   <div id="alertbar"></div>
   <main id="view"></main>
-  <button class="fab" id="fab" title="Ask Ledger">&#9679;</button>
   <nav id="tabs">${TABS.map((t) => `<button data-tab="${t.key}" class="${S.tab === t.key ? "on" : ""}">
       ${t.icon}${t.label}</button>`).join("")}</nav>
   <div id="chatwrap">
@@ -185,7 +210,7 @@ function appView() {
 
   on("#tabs button", "click", (e) => setTab(e.currentTarget.dataset.tab));
   $("more").onclick = businessSheet;
-  $("fab").onclick = () => openChat();
+  $("hchat").onclick = () => openChat();
   $("chatback").onclick = closeChat;
   $("newconv").onclick = newConversation;
   $("advisor").onclick = toggleAdvisor;
@@ -1979,29 +2004,52 @@ async function renderPhone() {
     S.phone = d;
     view().innerHTML = `<div class="sect">
       ${osHead("COM.06 · CALL LINE", "Phone")}
+      ${d.hasNumber ? phoneStatusStrip(d) : ""}
       ${d.hasNumber ? phoneNumberCard(d) : requestNumberCard(d.pendingRequest)}
       ${d.hasNumber ? phoneFeedPanel(d) : ""}
-      ${d.hasNumber ? phoneSettingsPanel(d) : ""}
+      ${d.hasNumber ? phoneSettingsSummary(d) : ""}
+      ${d.hasNumber ? `<div id="phoneleads"><div class="skel"></div></div>` : ""}
     </div>`;
-    if (d.hasNumber) wirePhoneSettings(d); else wireRequestNumber(d.pendingRequest);
+    if (!d.hasNumber) wireRequestNumber(d.pendingRequest);
     if (d.hasNumber) on("[data-pevt]", "click", (e) => phoneEventSheet(d.events.find((ev) => ev.id === e.currentTarget.dataset.pevt)));
     if (d.hasNumber) {
       $("phsetup").onclick = () => phoneSetupSheet(d);
+      $("phsettings").onclick = () => phoneSettingsSheet(d);
       // First time a number goes live, open the setup guide once — same
       // one-shot pattern as the iOS onboarding interview's @AppStorage flag.
       const seenKey = "ledger.phoneSetupSeen." + d.number.id;
       if (!localStorage.getItem(seenKey)) { localStorage.setItem(seenKey, "1"); phoneSetupSheet(d); }
+      loadPhoneLeads();
     }
   } catch (e) {
     view().innerHTML = `<div class="sect">${osHead("COM.06 · CALL LINE", "Phone")}<div class="empty">${esc(e.message)}</div></div>`;
   }
 }
 
+// Dense glanceable strip — line armed/off, the number, calls today and leads
+// captured this week (both read off the already-fetched missed-call feed, no
+// second round trip). LEADS LANE now lives under this tab, not Customers.
+function phoneStatusStrip(d) {
+  const armed = !!((d.autoReplyHours || "").trim() || (d.autoReplyAfter || "").trim());
+  const events = d.events || [];
+  const today = localDay();
+  const callsToday = events.filter((ev) => localDay(new Date(ev.occurredAt)) === today).length;
+  const cutoff = Date.now() - 7 * 86400000;
+  const leadsWeek = events.filter((ev) => ev.leadId && new Date(ev.occurredAt).getTime() >= cutoff).length;
+  return `<div class="phstrip">
+    <div class="phcell line"><span class="dot ${armed ? "on" : "off"}"></span>
+      <div><small>Line</small><b>${esc(formatE164(d.number.e164))}</b></div></div>
+    <div class="phcell"><small>Calls today</small><b>${callsToday}</b></div>
+    <div class="phcell"><small>Leads &middot; 7d</small><b>${leadsWeek}</b></div>
+    <div class="phcell"><small>Auto-reply</small><b class="${armed ? "ok" : "warn"}">${armed ? "Armed" : "Off"}</b></div>
+  </div>`;
+}
+
 function phoneNumberCard(d) {
   return `<div class="panel">
     <h3>&#128222; Business number</h3>
     <div class="bignum">${esc(formatE164(d.number.e164))}</div>
-    <p class="sub">Missed calls get a same-second auto-text, and the caller lands in your Leads list — nothing to do here but read the feed.</p>
+    <p class="sub">Missed calls get a same-second auto-text, and the caller lands in your Leads lane below — nothing to do here but read the feed.</p>
     <button class="btn ghost wide" style="margin-top:12px" id="phsetup">&#128203; Setup guide</button>
   </div>`;
 }
@@ -2086,10 +2134,29 @@ function phoneEventSheet(ev) {
     </div>`);
 }
 
-function phoneSettingsPanel(d) {
-  return `<div class="panel">
-    <h3>&#9200; Business hours</h3>
-    <p class="sub">Sets which auto-reply a missed call gets.</p>
+// Tappable summary row — opens the hours/template editor in a sheet instead
+// of an always-inline form. The inline textareas used to sit right in the
+// tab's own scroll flow with nothing to close the keyboard once open.
+function phoneSettingsSummary(d) {
+  const start = timeLabel12(d.hoursStart || "08:00"), end = timeLabel12(d.hoursEnd || "17:00");
+  return `<div class="panel phsettingsrow" id="phsettings">
+    <div class="ic">&#9200;</div>
+    <div class="m"><b>Business hours &amp; auto-reply</b><span>${esc(start)} &ndash; ${esc(end)}</span></div>
+    <span class="chev">&#8250;</span>
+  </div>`;
+}
+
+// "08:00" -> "8:00 AM", local-format only (no timezone math — the string is
+// already the shop's own clock, same contract as the input[type=time] value).
+function timeLabel12(hhmm) {
+  const [h, m] = (hhmm || "08:00").split(":").map(Number);
+  const d = new Date(); d.setHours(h || 0, m || 0, 0, 0);
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function phoneSettingsSheet(d) {
+  sheet(`<h2>Business hours &amp; templates</h2>
+    <p class="sh-sub">Sets which auto-reply a missed call gets.</p>
     <div class="timerow" style="margin-top:10px">
       <input type="time" id="phstart" value="${esc(d.hoursStart || "08:00")}">
       <span class="note">to</span>
@@ -2104,30 +2171,28 @@ function phoneSettingsPanel(d) {
     <textarea id="phauto2" rows="3">${esc(d.autoReplyAfter || "")}</textarea>
     <p class="note" style="margin-top:6px">Use <code>{business}</code> and <code>{hours}</code> — they fill in automatically.</p>
     <button class="btn em wide" style="margin-top:13px" id="phsave">Save</button>
-    <div class="note" id="phnote" style="margin-top:8px"></div>
-  </div>`;
-}
-
-function wirePhoneSettings(d) {
-  let days = new Set(d.hoursDays || []);
-  on("[data-phday]", "click", (e) => {
-    const k = e.currentTarget.dataset.phday;
-    days.has(k) ? days.delete(k) : days.add(k);
-    e.currentTarget.classList.toggle("on");
+    <div class="note" id="phnote" style="margin-top:8px"></div>`, (sh) => {
+    let days = new Set(d.hoursDays || []);
+    on("[data-phday]", "click", (e) => {
+      const k = e.currentTarget.dataset.phday;
+      days.has(k) ? days.delete(k) : days.add(k);
+      e.currentTarget.classList.toggle("on");
+    }, sh);
+    sh.querySelector("#phsave").onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      const note = sh.querySelector("#phnote");
+      try {
+        await api("/phone", {
+          action: "settings-save",
+          hoursStart: sh.querySelector("#phstart").value, hoursEnd: sh.querySelector("#phend").value,
+          hoursDays: [...days], autoReplyHours: sh.querySelector("#phauto1").value, autoReplyAfter: sh.querySelector("#phauto2").value,
+        });
+        toast("Phone settings saved");
+        closeSheet();
+        renderPhone();
+      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
+    };
   });
-  $("phsave").onclick = async (e) => {
-    e.currentTarget.disabled = true;
-    const note = $("phnote");
-    try {
-      await api("/phone", {
-        action: "settings-save",
-        hoursStart: $("phstart").value, hoursEnd: $("phend").value,
-        hoursDays: [...days], autoReplyHours: $("phauto1").value, autoReplyAfter: $("phauto2").value,
-      });
-      toast("Phone settings saved");
-    } catch (err) { note.className = "note err"; note.textContent = err.message; }
-    e.currentTarget.disabled = false;
-  };
 }
 
 function requestNumberCard(pending) {
@@ -2179,26 +2244,25 @@ const LEAD_SOURCES = [["call-in", "Call-in"], ["walk-in", "Walk-in"], ["referral
   ["website", "Website"], ["social", "Social"], ["repeat", "Repeat"], ["other", "Other"]];
 const TODO_PRIORITIES = [["low", "Low"], ["normal", "Normal"], ["high", "High"], ["urgent", "Urgent"]];
 
-const LANE_CODE = { directory: "CRM.05 · RELATIONSHIPS", leads: "CRM.05 · PIPELINE", todos: "CRM.05 · MISSION CONTROL" };
+const LANE_CODE = { directory: "CRM.05 · RELATIONSHIPS", todos: "CRM.05 · MISSION CONTROL" };
 
-// Red badge counts on the lane switcher, same rule as iOS CustomerLaneSwitcher:
-// leads whose follow-up is due, and open to-dos due by end of today.
+// Red badge count on the lane switcher, same rule as iOS CustomerLaneSwitcher:
+// open to-dos due by end of today. Leads moved to the Phone tab — see
+// phoneStatusStrip/loadPhoneLeads.
 function laneAlerts() {
   const b = S.board || {};
   const now = new Date();
   const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const leads = (b.leads || []).filter((l) =>
-    l.status !== "won" && l.status !== "lost" && l.followUpAt && new Date(l.followUpAt) <= now).length;
   const todos = (b.todos || []).filter((t) =>
     t.status === "open" && t.dueAt && new Date(t.dueAt) <= endOfToday).length;
-  return { leads, todos };
+  return { todos };
 }
 
 async function renderCustomers() {
   view().innerHTML = `<div class="sect">
-    ${osHead(LANE_CODE[S.lane] || LANE_CODE.directory, S.lane === "todos" ? "To-Do" : S.lane === "leads" ? "Leads" : "Customers")}
+    ${osHead(LANE_CODE[S.lane] || LANE_CODE.directory, S.lane === "todos" ? "To-Do" : "Customers")}
     <div class="seg">
-      ${[["directory", "Directory", 0], ["leads", "Leads", laneAlerts().leads], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
+      ${[["directory", "Directory", 0], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
         `<button class="${S.lane === k ? "on" : ""}" data-lane="${k}">${l}${n ? `<i class="badge">${n}</i>` : ""}</button>`).join("")}
     </div>
     <div id="lanebody"><div class="skel"></div><div class="skel"></div></div>
@@ -2206,7 +2270,7 @@ async function renderCustomers() {
   on("[data-lane]", "click", (e) => { S.lane = e.currentTarget.dataset.lane; renderCustomers(); });
   if (S.lane === "directory") {
     loadDirectory();
-    // iOS keeps the badges live from the same board; fetch it once so Directory shows them too.
+    // iOS keeps the To-Do badge live from the same board; fetch it once so Directory shows it too.
     if (!S.board) api("/leads", { action: "board" }).then((b) => { S.board = b; if (S.tab === "customers") renderCustomers(); }).catch(() => {});
   } else loadBoard();
 }
@@ -2609,29 +2673,81 @@ async function loadBoard() {
   const slot = $("lanebody"); if (!slot) return;
   try {
     S.board = await api("/leads", { action: "board" });
-    S.lane === "leads" ? drawLeads() : drawTodos();
+    drawTodos();
   } catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 
+// LEADS LANE — lives under the Phone tab as of 2026-08-24. Calls are where
+// leads are born, so the pipeline sits directly beneath the missed-call feed
+// instead of in a second tab the shop has to remember to open. Same /leads
+// board endpoint and same leadSheet editor as before; only the host moved.
+async function loadPhoneLeads() {
+  const slot = $("phoneleads"); if (!slot) return;
+  try { S.board = await api("/leads", { action: "board" }); drawLeads(); }
+  catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+const LEAD_FILTERS = [["active", "Active"], ["any", "All"], ["new", "New"],
+  ["contacted", "Contacted"], ["quoted", "Quoted"], ["won", "Won"], ["lost", "Lost"]];
+
+function leadStatusTag(l) {
+  if (l.status === "won") return "paid";
+  if (l.status === "lost") return "grey";
+  return l.followUpAt && new Date(l.followUpAt) <= new Date() ? "due" : "new";
+}
+
 function drawLeads() {
-  const slot = $("lanebody"); if (!slot) return;
+  const slot = $("phoneleads"); if (!slot) return;
   const leads = S.board?.leads || [];
-  const openLeads = leads.filter((l) => l.status !== "won" && l.status !== "lost");
-  const value = openLeads.reduce((t, l) => t + (l.valueEstimate || 0), 0);
-  const due = openLeads.filter((l) => l.followUpAt && new Date(l.followUpAt) <= new Date());
+  const now = new Date();
+  const open = leads.filter((l) => l.status !== "won" && l.status !== "lost");
+  const value = open.reduce((t, l) => t + (l.valueEstimate || 0), 0);
+  const due = open.filter((l) => l.followUpAt && new Date(l.followUpAt) <= now)
+    .sort((x, y) => new Date(x.followUpAt) - new Date(y.followUpAt));
+  const cutoff = Date.now() - 30 * 86400000;
+  const won = leads.filter((l) => l.status === "won" && new Date(l.updatedAt || l.createdAt).getTime() >= cutoff);
+  const wonValue = won.reduce((t, l) => t + (l.valueEstimate || 0), 0);
+
+  const filter = S.leadFilter || "active";
+  const shown = (filter === "active" ? open : filter === "any" ? leads : leads.filter((l) => l.status === filter))
+    .sort((x, y) => {
+      const dx = x.followUpAt && new Date(x.followUpAt) <= now, dy = y.followUpAt && new Date(y.followUpAt) <= now;
+      if (dx !== dy) return dx ? -1 : 1;
+      return new Date(y.createdAt) - new Date(x.createdAt);
+    });
+
   slot.innerHTML = `
-    <div class="hero"><div class="eyebrow">PIPELINE</div>
-      <div class="big">${money0(value)}</div>
-      <div class="note" style="margin-top:4px">${openLeads.length} open lead${openLeads.length === 1 ? "" : "s"}${due.length ? ` · <span style="color:var(--red)">${due.length} follow-up due</span>` : ""}</div></div>
-    <button class="btn primary wide" id="addlead">+ New lead</button>
-    ${leads.length ? `<div class="list">${leads.map((l) => `
+    <div class="lanehdr">
+      <span class="eyebrow" style="color:var(--purple,#b48cff)">LEAD PIPELINE</span>
+      <button class="chip add" id="addlead">+ New lead</button>
+    </div>
+    <div class="leadtiles">
+      <div class="leadtile cyan"><small>PIPELINE</small><b>${money0(value)}</b><i>${open.length} open</i></div>
+      <div class="leadtile ${due.length ? "red" : "dim"}"><small>FOLLOW-UP DUE</small><b>${due.length}</b><i>${due.length ? "call today" : "all clear"}</i></div>
+      <div class="leadtile emerald"><small>WON &middot; 30D</small><b>${money0(wonValue)}</b><i>${won.length} closed</i></div>
+    </div>
+    ${due.length ? `<div class="callq">
+      <div class="eyebrow" style="color:var(--red)">CALL LIST &middot; ${due.length} DUE</div>
+      <div class="list" style="margin-top:8px">${due.slice(0, 5).map((l) => `
+        <button class="item" data-lead="${esc(l.id)}">
+          <div class="main"><div class="ttl">${esc(l.name)}</div>
+            <div class="sub">${esc(l.phone || l.email || "no contact on file")} &middot; due ${esc(dayLabel(l.followUpAt))}</div></div>
+          ${l.phone ? `<span class="qcall" data-call="${esc(String(l.phone).replace(/[^0-9+]/g, ""))}">&#128222;</span>` : ""}
+        </button>`).join("")}</div></div>` : ""}
+    <div class="leadfilters">${LEAD_FILTERS.map(([k, lab]) =>
+      `<button class="chip ${filter === k ? "on" : ""}" data-lfilter="${k}">${lab}</button>`).join("")}</div>
+    ${shown.length ? `<div class="list">${shown.map((l) => `
       <button class="item" data-lead="${esc(l.id)}">
-        <div class="main"><div class="ttl">${esc(l.name)}${l.company ? " · " + esc(l.company) : ""}</div>
-          <div class="sub">${esc(l.phone || l.email || l.source || "")}${l.followUpAt ? " · follow up " + esc(dayLabel(l.followUpAt)) : ""}</div></div>
+        <div class="main"><div class="ttl">${esc(l.name)}${l.company ? " &middot; " + esc(l.company) : ""}</div>
+          <div class="sub">${esc(l.phone || l.email || l.source || "")}${l.followUpAt ? " &middot; follow up " + esc(dayLabel(l.followUpAt)) : ""}</div></div>
         <div class="amt">${l.valueEstimate ? money0(l.valueEstimate) : ""}
-          <small><span class="tag ${l.status === "won" ? "paid" : l.status === "lost" ? "grey" : l.followUpAt && new Date(l.followUpAt) <= new Date() ? "due" : "new"}">${esc(l.status)}</span></small></div>
-      </button>`).join("")}</div>` : `<div class="empty">No leads yet.<br>Snap a photo of your call list and ask Ledger to add them.</div>`}`;
+          <small><span class="tag ${leadStatusTag(l)}">${esc(l.status)}</span></small></div>
+      </button>`).join("")}</div>`
+      : `<div class="empty">${leads.length ? "No " + esc(filter) + " leads." : "The call list starts here.<br>Every missed call lands here on its own — or add one by hand."}</div>`}`;
+
   $("addlead").onclick = () => leadSheet({});
+  on("[data-lfilter]", "click", (e) => { S.leadFilter = e.currentTarget.dataset.lfilter; drawLeads(); }, slot);
+  on("[data-call]", "click", (e) => { e.stopPropagation(); location.href = "tel:" + e.currentTarget.dataset.call; }, slot);
   on("[data-lead]", "click", (e) => leadSheet(leads.find((l) => l.id === e.currentTarget.dataset.lead)), slot);
 }
 
