@@ -2006,6 +2006,7 @@ async function renderPhone() {
       ${osHead("COM.06 · CALL LINE", "Phone")}
       ${d.hasNumber ? phoneStatusStrip(d) : ""}
       ${d.hasNumber ? phoneNumberCard(d) : requestNumberCard(d.pendingRequest)}
+      ${d.hasNumber ? frontDeskCard(d) : ""}
       ${d.hasNumber ? phoneThreadsPanel(d) : ""}
       ${d.hasNumber ? phoneFeedPanel(d) : ""}
       ${d.hasNumber ? phoneSettingsSummary(d) : ""}
@@ -2017,6 +2018,9 @@ async function renderPhone() {
     if (d.hasNumber) {
       $("phsetup").onclick = () => phoneSetupSheet(d);
       $("phsettings").onclick = () => phoneSettingsSheet(d);
+      if ($("fdtoggle")) $("fdtoggle").onclick = () => toggleFrontDesk(d);
+      if ($("fdtune")) $("fdtune").onclick = () => frontDeskSheet(d);
+      if ($("fdlog")) $("fdlog").onclick = () => frontDeskLogSheet();
       // First time a number goes live, open the setup guide once — same
       // one-shot pattern as the iOS onboarding interview's @AppStorage flag.
       const seenKey = "ledger.phoneSetupSeen." + d.number.id;
@@ -2286,6 +2290,101 @@ function timeLabel12(hhmm) {
   const [h, m] = (hhmm || "08:00").split(":").map(Number);
   const d = new Date(); d.setHours(h || 0, m || 0, 0, 0);
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+// ---- FRONT DESK ----------------------------------------------------------
+// The switch that lets the AI answer a missed caller on its own. Deliberately
+// loud about what it does and does not do: an owner should never be surprised
+// by what they just turned on.
+function frontDeskCard(d) {
+  const fd = d.frontDesk || {};
+  const on = fd.enabled === true;
+  return `<div class="panel">
+    <h3>&#129302; Front Desk ${on ? '<span class="pill live">ON</span>' : '<span class="pill">OFF</span>'}</h3>
+    <p class="sub">${on
+      ? "When a missed caller texts back, Ledger answers them — quoting your real QuickBooks prices and booking real open times on your calendar. Nobody has to be watching."
+      : "Turn this on and a missed call becomes a booking on its own: Ledger texts the caller back, quotes from your QuickBooks prices, offers open times from your calendar, and books one."}</p>
+    <p class="note" style="margin-top:8px">It can never invoice, take a payment, or discuss a bill. Anything it isn't sure about goes straight to you.</p>
+    ${on ? `<p class="note" style="margin-top:6px">${fd.booking === false ? "Booking is <b>off</b> — it quotes and gathers details, you book." : "Booking is <b>on</b>."} Max ${Number(fd.maxRepliesPerCaller || 8)} texts per caller a day.${fd.instructions ? `<br>Your instructions: <i>${esc(fd.instructions)}</i>` : ""}</p>` : ""}
+    <div class="rowbtns" style="margin-top:12px">
+      <button class="btn ${on ? "" : "em"}" id="fdtoggle">${on ? "Turn off" : "Turn on Front Desk"}</button>
+      ${on ? '<button class="btn" id="fdtune">Settings</button><button class="btn" id="fdlog">What it did</button>' : ""}
+    </div>
+  </div>`;
+}
+
+async function toggleFrontDesk(d) {
+  const fd = d.frontDesk || {};
+  if (fd.enabled !== true) {
+    const ok = confirm("Turn on Front Desk?\n\nFrom now on, when someone calls, misses you, and texts back, Ledger will reply to them on its own — quoting your real QuickBooks prices and booking real times on your calendar. No one has to approve each message.\n\nIt can never invoice, take payment, or discuss a bill, and anything it's unsure about it hands straight to you.\n\nYou can turn this off any time.");
+    if (!ok) return;
+  }
+  try {
+    await api("/phone", { action: "settings-save", frontDeskEnabled: fd.enabled !== true });
+    toast(fd.enabled !== true ? "Front Desk is on" : "Front Desk is off");
+    renderPhone();
+  } catch (e) { toast(e.message); }
+}
+
+function frontDeskSheet(d) {
+  const fd = d.frontDesk || {};
+  sheet(`<h2>Front Desk settings</h2>
+    <p class="sh-sub">How Ledger handles a missed caller who texts back.</p>
+    <label class="fld" style="margin-top:14px">CAN IT BOOK APPOINTMENTS?</label>
+    <div class="rowbtns">
+      <button class="btn ${fd.booking !== false ? "em" : ""}" data-fdbook="1" type="button">Yes, book them</button>
+      <button class="btn ${fd.booking === false ? "em" : ""}" data-fdbook="0" type="button">No, just quote</button>
+    </div>
+    <label class="fld" style="margin-top:14px">YOUR STANDING INSTRUCTIONS</label>
+    <textarea id="fdinstr" rows="4" placeholder="e.g. Always ask what vehicle. Never book Saturdays before 10. We don't do alignments.">${esc(fd.instructions || "")}</textarea>
+    <p class="note" style="margin-top:6px">Written in your words, followed on every reply.</p>
+    <label class="fld" style="margin-top:14px">MAX TEXTS TO ONE CALLER PER DAY</label>
+    <input id="fdcap" type="number" min="1" max="30" value="${Number(fd.maxRepliesPerCaller || 8)}">
+    <button class="btn em wide" style="margin-top:13px" id="fdsave">Save</button>
+    <div class="note" id="fdnote" style="margin-top:8px"></div>`, (sh) => {
+    let booking = fd.booking !== false;
+    on("[data-fdbook]", "click", (e) => {
+      booking = e.currentTarget.dataset.fdbook === "1";
+      sh.querySelectorAll("[data-fdbook]").forEach((b) => b.classList.toggle("em", (b.dataset.fdbook === "1") === booking));
+    }, sh);
+    sh.querySelector("#fdsave").onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      const note = sh.querySelector("#fdnote");
+      try {
+        await api("/phone", {
+          action: "settings-save",
+          frontDeskBooking: booking,
+          frontDeskInstructions: sh.querySelector("#fdinstr").value,
+          frontDeskMaxReplies: Number(sh.querySelector("#fdcap").value || 8),
+        });
+        toast("Front Desk settings saved");
+        closeSheet();
+        renderPhone();
+      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
+    };
+  });
+}
+
+const FD_OUTCOME = { replied: "Answered", booked: "Booked them", handoff: "Handed to you", error: "Failed" };
+
+async function frontDeskLogSheet() {
+  sheet(`<h2>What Front Desk did</h2><div id="fdlogbody"><div class="skel"></div></div>`, async (sh) => {
+    try {
+      const d = await api("/phone", { action: "frontdesk-runs", limit: 40 });
+      const runs = d.runs || [];
+      sh.querySelector("#fdlogbody").innerHTML = runs.length
+        ? `<div class="list">${runs.map((r) => `
+            <div class="item">
+              <div class="main">
+                <div class="ttl">${esc(formatE164(r.peerNumber) || r.peerName || "Caller")}</div>
+                <div class="sub">${esc(r.reply || r.error || "")}</div>
+                ${r.handoffReason ? `<div class="sub">Why: ${esc(r.handoffReason)}</div>` : ""}
+              </div>
+              <div class="amt"><small>${esc(FD_OUTCOME[r.outcome] || r.outcome)}</small><br><small class="note">${esc(dayLabel(r.at))}</small></div>
+            </div>`).join("")}</div>`
+        : `<div class="empty">Front Desk hasn't answered anyone yet.</div>`;
+    } catch (e) { sh.querySelector("#fdlogbody").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  });
 }
 
 function phoneSettingsSheet(d) {
