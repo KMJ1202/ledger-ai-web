@@ -782,6 +782,7 @@ async function composerSheet() {
       <h3>INVOICE DRAFT</h3><div class="cust">${esc(d.customer)}</div>
       <table>${(d.lines || []).map((l) => `<tr><td>${esc(l.description || l.item_name)} × ${l.quantity}</td><td>${money(l.amount)}</td></tr>`).join("")}
         <tr><td class="total">Subtotal</td><td class="total">${money(d.subtotal)}</td></tr></table>
+      ${termsRow(d.terms)}
       ${d.customer_email ? `<label class="emailrow"><input type="checkbox" id="cmpem" checked> Email to ${esc(d.customer_email)}</label>` : ""}
       <label class="emailrow"><input type="checkbox" id="cmppr" ${localStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
       <div class="row"><button class="btn cancel" id="cmpcancel">Cancel</button><button class="btn confirm" id="cmpconfirm">Confirm</button></div>
@@ -794,7 +795,8 @@ async function composerSheet() {
       const sendEmail = body().querySelector("#cmpem")?.checked ?? false;
       const wantPrint = body().querySelector("#cmppr")?.checked ?? false;
       try {
-        const r = await api("/quickbooks-invoice/confirm", { draft_id: d.draft_id, send_email: sendEmail });
+        const terms = body().querySelector(".tm")?.value;
+        const r = await api("/quickbooks-invoice/confirm", { draft_id: d.draft_id, send_email: sendEmail, ...(terms ? { terms } : {}) });
         note.className = "note ok";
         note.textContent = "✅ Posted" + (r.doc_number ? " — #" + r.doc_number : "") + (r.emailed ? " · emailed " + (r.emailed_to || "") : "");
         body().querySelector(".row").remove();
@@ -3358,10 +3360,19 @@ function postedMessage(e) {
   return doc && /already_posted/i.test(e.message || "") ? `Already posted as #${doc}.` : e.message;
 }
 
+const termsRow = (v) => `<label class="emailrow">Payment due
+    <select class="tm pillbtn">
+      <option value="due_now"${v === "net30" ? "" : " selected"}>Due now</option>
+      <option value="net30"${v === "net30" ? " selected" : ""}>Net 30</option>
+    </select></label>`;
+
 function draftCard(d, label, confirmPath, cancelPath) {
   const lines = (d.lines || []).map((l) => `<tr><td>${esc(l.description || l.item_name)} × ${l.quantity}</td><td>${money(l.amount)}</td></tr>`).join("");
+  // Estimates carry an expiry, not payment terms — the control is invoices only.
+  const isInvoice = !/estimate/i.test(confirmPath);
   const card = bubble("card", `<h3>${label}</h3><div class="cust">${esc(d.customer)}</div>
     <table>${lines}<tr><td class="total">Subtotal</td><td class="total">${money(d.subtotal)}</td></tr></table>
+    ${isInvoice ? termsRow(d.terms) : ""}
     ${d.customer_email ? `<label class="emailrow"><input type="checkbox" class="em" checked> Email to ${esc(d.customer_email)}</label>` : ""}
     <label class="emailrow"><input type="checkbox" class="pr" ${localStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
     <div class="row"><button class="btn cancel">Cancel</button><button class="btn confirm">Confirm</button></div>`);
@@ -3372,7 +3383,8 @@ function draftCard(d, label, confirmPath, cancelPath) {
     try {
       const sendEmail = card.querySelector(".em")?.checked ?? false;
       const wantPrint = card.querySelector(".pr")?.checked ?? false;
-      const r = await api(confirmPath, { draft_id: d.draft_id, send_email: sendEmail });
+      const terms = card.querySelector(".tm")?.value;
+      const r = await api(confirmPath, { draft_id: d.draft_id, send_email: sendEmail, ...(terms ? { terms } : {}) });
       cardDone(card, "✅ Posted" + (r.doc_number ? " — #" + r.doc_number : "") + (r.emailed ? " · emailed " + (r.emailed_to || "") : ""));
       if (wantPrint && (r.qbo_invoice_id || r.id)) {
         printPdfById(r.qbo_invoice_id || r.id, r.doc_number, label.startsWith("ESTIMATE") ? "estimate" : "invoice");
