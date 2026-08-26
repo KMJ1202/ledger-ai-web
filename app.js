@@ -2009,6 +2009,7 @@ async function renderPhone() {
       ${d.hasNumber ? phoneStatusStrip(d) : ""}
       ${d.hasNumber ? phoneNumberCard(d) : requestNumberCard(d.pendingRequest)}
       ${d.hasNumber ? frontDeskCard(d) : ""}
+      ${d.hasNumber ? apptReminderCard(d) : ""}
       ${d.hasNumber ? `<div id="vmlane"><div class="skel"></div></div>` : ""}
       ${d.hasNumber ? phoneThreadsPanel(d) : ""}
       ${d.hasNumber ? phoneFeedPanel(d) : ""}
@@ -2022,6 +2023,9 @@ async function renderPhone() {
       $("phsetup").onclick = () => phoneSetupSheet(d);
       $("phsettings").onclick = () => phoneSettingsSheet(d);
       if ($("fdtoggle")) $("fdtoggle").onclick = () => toggleFrontDesk(d);
+      if ($("remtoggle")) $("remtoggle").onclick = () => toggleApptReminders(d);
+      if ($("remtune")) $("remtune").onclick = () => apptReminderSheet(d);
+      if ($("rempreview")) $("rempreview").onclick = () => apptReminderPreviewSheet();
       if ($("fdtune")) $("fdtune").onclick = () => frontDeskSheet(d);
       if ($("fdlog")) $("fdlog").onclick = () => frontDeskLogSheet();
       // First time a number goes live, open the setup guide once — same
@@ -2376,6 +2380,95 @@ async function playVoicemail(eventId) {
 // The switch that lets the AI answer a missed caller on its own. Deliberately
 // loud about what it does and does not do: an owner should never be surprised
 // by what they just turned on.
+// Night-before appointment reminders. The reminder is not the valuable half —
+// the reply is: a cancellation at 6pm the night before is a bay that can still
+// be refilled, where the same cancellation at 9am is an hour that is gone.
+function apptReminderCard(d) {
+  const r = d.reminders || {};
+  const on = r.enabled === true;
+  const when = apptPrettyTime(r.time || "18:00");
+  const ahead = Number(r.daysAhead || 1);
+  const aheadLabel = ahead === 1 ? "the night before" : `${ahead} days ahead`;
+  return `<div class="panel">
+    <h3>&#128276; Appointment reminders ${on ? '<span class="pill live">ON</span>' : '<span class="pill">OFF</span>'}</h3>
+    <p class="sub">${on
+      ? `Every day at <b>${esc(when)}</b>, everyone booked ${esc(aheadLabel)} gets a text asking them to confirm or tell you they need to move it.`
+      : "Text tomorrow's customers automatically and ask them to confirm. The ones who can't make it tell you the night before, while you can still fill the slot."}</p>
+    <p class="note" style="margin-top:8px">Each customer is texted <b>once per appointment</b>, ever. Anyone whose appointment has no phone number on it is reported to you, never skipped quietly.</p>
+    ${on && r.lastRunAt ? `<p class="note" style="margin-top:6px">Last run ${esc(new Date(r.lastRunAt).toLocaleString())}.</p>` : ""}
+    <div class="rowbtns" style="margin-top:12px">
+      <button class="btn" id="rempreview">See tonight's list</button>
+      <button class="btn ${on ? "" : "em"}" id="remtoggle">${on ? "Turn off" : "Turn on reminders"}</button>
+      ${on ? '<button class="btn" id="remtune">Change time</button>' : ""}
+    </div>
+  </div>`;
+}
+
+function apptPrettyTime(hhmm) {
+  const [h, m] = String(hhmm || "18:00").split(":").map(Number);
+  const hour = ((h + 11) % 12) + 1;
+  return `${hour}:${String(m || 0).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
+}
+
+// Nothing is ever turned on without the owner having seen the actual list and
+// the actual wording first — so the dry run is offered right here in the
+// confirm, not buried behind a settings screen.
+async function toggleApptReminders(d) {
+  const r = d.reminders || {};
+  if (r.enabled !== true) {
+    const ok = confirm(`Turn on appointment reminders?\n\nEvery day at ${apptPrettyTime(r.time || "18:00")}, Ledger will text everyone booked in for the next day from your business number, asking them to reply Y to confirm or C to change it.\n\nEach customer is texted once per appointment, ever. Nobody is texted twice.\n\nIf you haven't already, check "See tonight's list" first — it shows you exactly who would get a text and exactly what it says, and sends nothing.\n\nYou can turn this off any time.`);
+    if (!ok) return;
+  }
+  try {
+    await api("/phone", { action: "settings-save", reminderEnabled: r.enabled !== true });
+    toast(r.enabled !== true ? "Reminders are on" : "Reminders are off");
+    renderPhone();
+  } catch (err) { toast(err.message); }
+}
+
+function apptReminderSheet(d) {
+  const r = d.reminders || {};
+  sheet(`<h2>Reminder settings</h2>
+    <label class="lab">What time to send</label>
+    <input class="inp" id="remtime" type="time" value="${esc(r.time || "18:00")}">
+    <p class="note">Your local time. Evening works best — late enough that the day is settled, early enough not to bother anyone.</p>
+    <label class="lab" style="margin-top:12px">How far ahead</label>
+    <select class="inp" id="remahead">
+      ${[1, 2, 3].map((n) => `<option value="${n}" ${Number(r.daysAhead || 1) === n ? "selected" : ""}>${n === 1 ? "The night before" : `${n} days ahead`}</option>`).join("")}
+    </select>
+    <div class="rowbtns" style="margin-top:16px"><button class="btn em" id="remsave">Save</button></div>`, (sh) => {
+    sh.querySelector("#remsave").onclick = async () => {
+      try {
+        await api("/phone", {
+          action: "settings-save",
+          reminderTime: sh.querySelector("#remtime").value || "18:00",
+          reminderDaysAhead: Number(sh.querySelector("#remahead").value || 1),
+        });
+        toast("Saved"); closeSheet(); renderPhone();
+      } catch (err) { toast(err.message); }
+    };
+  });
+}
+
+// The dry run. Shows the real recipients and the real wording, sends nothing.
+async function apptReminderPreviewSheet() {
+  sheet(`<h2>Tonight's reminders</h2><div id="rembody"><div class="skel"></div></div>`, async (sh) => {
+    let d;
+    try { d = await api("/phone", { action: "reminder-preview" }); }
+    catch (err) { sh.querySelector("#rembody").innerHTML = `<p class="note">${esc(err.message)}</p>`; return; }
+    if (d.error) { sh.querySelector("#rembody").innerHTML = `<p class="note">${esc(d.error)}</p>`; return; }
+    const items = d.items || [];
+    const label = { will_send: '<span class="pill live">WILL SEND</span>', already_sent: '<span class="pill">ALREADY SENT</span>', no_number: '<span class="pill" style="color:var(--red)">NO PHONE NUMBER</span>' };
+    sh.querySelector("#rembody").innerHTML = `
+      <p class="sub">${d.appointments} appointment${d.appointments === 1 ? "" : "s"} on ${esc(d.day)} — <b>${d.would_send}</b> would get a text.${d.no_number ? ` <b>${d.no_number}</b> have no phone number on the appointment and would need you to text them yourself.` : ""}</p>
+      <p class="note">Nothing has been sent. This is exactly what would go out.</p>
+      ${items.length ? items.map((it) => `<div class="kv" style="display:block"><div>${label[it.state] || ""} <b>${esc(it.title)}</b></div>
+        <div><small style="color:var(--dim)">${esc(it.when)}${it.to ? " · " + esc(it.to) : ""}</small></div>
+        ${it.message ? `<div style="margin-top:6px;padding:9px 11px;border-radius:10px;background:rgba(255,255,255,.05)"><small>${esc(it.message)}</small></div>` : ""}</div>`).join("")
+        : '<p class="note">Nothing booked for that day.</p>'}`;
+  });
+}
+
 function frontDeskCard(d) {
   const fd = d.frontDesk || {};
   const on = fd.enabled === true;
