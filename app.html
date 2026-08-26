@@ -30,6 +30,16 @@
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
   --tabh:86px;
 }
+/* Phone tab zones — what needs you / what's running / what you set once. */
+.zonehead{font:800 10px/1 var(--mono);letter-spacing:1.7px;color:var(--dim2);margin:20px 4px 9px}
+.zonehead.hot{color:var(--red)}
+.needsrow,.autorow{display:flex;gap:11px;align-items:flex-start;padding:12px 13px;border-radius:14px;
+ background:var(--card);border:1px solid var(--line);margin-bottom:8px;cursor:pointer}
+.autorow{margin:0;border-radius:0;border:0;border-top:1px solid var(--line2);align-items:center}
+.needsdot{width:8px;height:8px;border-radius:99px;margin-top:5px;flex:0 0 8px}
+.needst{font-size:13.4px;font-weight:700;margin:0 0 3px}
+.needsm{font-size:12px;color:var(--dim);margin:0;line-height:1.4}
+.needsw{font-size:10.5px;color:var(--dim2);margin:4px 0 0;font-family:var(--mono);letter-spacing:.3px}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overscroll-behavior-y:none}
 body{

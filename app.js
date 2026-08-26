@@ -2007,14 +2007,17 @@ async function renderPhone() {
     view().innerHTML = `<div class="sect">
       ${osHead("COM.06 · CALL LINE", "Phone")}
       ${d.hasNumber ? phoneStatusStrip(d) : ""}
-      ${d.hasNumber ? phoneNumberCard(d) : requestNumberCard(d.pendingRequest)}
-      ${d.hasNumber ? frontDeskCard(d) : ""}
-      ${d.hasNumber ? apptReminderCard(d) : ""}
+      ${d.hasNumber ? "" : requestNumberCard(d.pendingRequest)}
+      ${d.hasNumber ? needsYouZone(d) : ""}
+      ${d.hasNumber ? automationsZone(d) : ""}
+      ${d.hasNumber ? `<p class="zonehead">EVERYTHING ELSE</p>` : ""}
       ${d.hasNumber ? `<div id="vmlane"><div class="skel"></div></div>` : ""}
       ${d.hasNumber ? phoneThreadsPanel(d) : ""}
       ${d.hasNumber ? phoneFeedPanel(d) : ""}
-      ${d.hasNumber ? phoneSettingsSummary(d) : ""}
       ${d.hasNumber ? `<div id="phoneleads"><div class="skel"></div></div>` : ""}
+      ${d.hasNumber ? `<p class="zonehead">SET ONCE</p>` : ""}
+      ${d.hasNumber ? phoneNumberCard(d) : ""}
+      ${d.hasNumber ? phoneSettingsSummary(d) : ""}
     </div>`;
     if (!d.hasNumber) wireRequestNumber(d.pendingRequest);
     if (d.hasNumber) on("[data-pevt]", "click", (e) => phoneEventSheet(d.events.find((ev) => ev.id === e.currentTarget.dataset.pevt)));
@@ -2022,6 +2025,8 @@ async function renderPhone() {
     if (d.hasNumber) {
       $("phsetup").onclick = () => phoneSetupSheet(d);
       $("phsettings").onclick = () => phoneSettingsSheet(d);
+      on("[data-needs]", "click", (e) => openNeedsYou(d, e.currentTarget.dataset.needs));
+      on("[data-auto]", "click", (e) => openAutomation(d, e.currentTarget.dataset.auto));
       if ($("fdtoggle")) $("fdtoggle").onclick = () => toggleFrontDesk(d);
       if ($("remtoggle")) $("remtoggle").onclick = () => toggleApptReminders(d);
       if ($("remtune")) $("remtune").onclick = () => apptReminderSheet(d);
@@ -2383,6 +2388,104 @@ async function playVoicemail(eventId) {
 // Night-before appointment reminders. The reminder is not the valuable half —
 // the reply is: a cancellation at 6pm the night before is a bay that can still
 // be refilled, where the same cancellation at 9am is an hour that is gone.
+// ---------------------------------------------------------------------------
+// The two new zones. Everything the old tab did is still here — this only
+// changes what is loud.
+// ---------------------------------------------------------------------------
+//
+// Nine cards laid out by system component meant an owner had to read all nine
+// to find out a voicemail arrived 20 minutes ago. NEEDS YOU answers the
+// question people actually open this tab with; RUNNING FOR YOU replaces two
+// fat marketing cards with three measured lines.
+
+const NEEDS_TONE = { urgent: "var(--red)", warn: "var(--gold)", info: "var(--cyan)" };
+
+function needsYouZone(d) {
+  const items = d.needsYou || [];
+  if (!items.length) {
+    return `<p class="zonehead">NEEDS YOU</p>
+      <div class="panel" style="text-align:center;padding:22px">
+        <p class="sub" style="margin:0">Nothing waiting on you. Every call, text and voicemail has been handled.</p>
+      </div>`;
+  }
+  return `<p class="zonehead hot">NEEDS YOU · ${items.length}</p>
+    ${items.map((it) => `<div class="needsrow" data-needs="${esc(it.id)}">
+      <span class="needsdot" style="background:${NEEDS_TONE[it.tone] || "var(--cyan)"}"></span>
+      <div style="min-width:0">
+        <div class="needst">${esc(it.title)}</div>
+        ${it.detail ? `<div class="needsm">${esc(it.detail)}</div>` : ""}
+        <div class="needsw">${esc(it.meta)}</div>
+      </div></div>`).join("")}`;
+}
+
+function automationsZone(d) {
+  const rows = d.automations || [];
+  if (!rows.length) return "";
+  // The result line carries **bold** for the number that should land first.
+  const render = (text) => esc(text).replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--gold)">$1</b>');
+  return `<p class="zonehead">RUNNING FOR YOU</p>
+    <div class="panel" style="padding:0;overflow:hidden">
+      ${rows.map((a, i) => `<div class="autorow" data-auto="${esc(a.key)}" style="${i ? "" : "border-top:0"}">
+        <span class="needsdot" style="margin-top:6px;background:${a.enabled ? "var(--emerald)" : "#4a5563"}"></span>
+        <div style="flex:1;min-width:0">
+          <div class="needst">${esc(a.title)} <span class="pill ${a.enabled ? "live" : ""}">${a.enabled ? "ON" : "OFF"}</span></div>
+          <div class="needsm">${render(a.result)}</div>
+        </div>
+        <span style="color:var(--dim2)">&rsaquo;</span></div>`).join("")}
+    </div>`;
+}
+
+// A row is a shortcut to the thing it is about, never a dead end.
+function openNeedsYou(d, id) {
+  const item = (d.needsYou || []).find((x) => x.id === id);
+  if (!item) return;
+  if (item.kind === "voicemail") { const ev = (d.events || []).find((e) => "vm:" + e.id === id); if (ev) phoneEventSheet(ev); return; }
+  if (item.kind === "missed") { const ev = (d.events || []).find((e) => "mc:" + e.id === id); if (ev) phoneEventSheet(ev); return; }
+  if (item.kind === "text") { const t = (d.threads || []).find((x) => "tx:" + x.id === id); if (t) phoneThreadSheet(t); return; }
+  if (item.kind === "unconfirmed") apptReminderPreviewSheet();
+}
+
+// Tapping a row opens the whole automation — what it did, the on/off switch,
+// and its own settings. The switch has to live here now that the two fat cards
+// that used to carry it are gone.
+function openAutomation(d, key) {
+  const a = (d.automations || []).find((x) => x.key === key);
+  if (!a) return;
+  const render = (text) => esc(text).replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--gold)">$1</b>');
+  const extra = {
+    frontdesk: '<button class="btn" id="autoset">Settings</button><button class="btn" id="autolog">What it did</button>',
+    reminders: '<button class="btn" id="autoprev">See tonight\'s list</button><button class="btn" id="autoset">Change time</button>',
+    autoreply: '<button class="btn" id="autoset">Wording &amp; hours</button>',
+  }[key] || "";
+  const blurb = {
+    frontdesk: "When a missed caller texts back, Ledger answers them — quoting your real QuickBooks prices and offering real open times. It can never invoice, take a payment or discuss a bill.",
+    reminders: "The night before, everyone booked in gets a text asking them to confirm or say they need to move it. Each customer is texted once per appointment, ever.",
+    autoreply: "A missed call gets an instant text back so the caller knows you exist and can reply.",
+  }[key] || "";
+  sheet(`<h2>${esc(a.title)} ${a.enabled ? '<span class="pill live">ON</span>' : '<span class="pill">OFF</span>'}</h2>
+    <p class="sub">${render(a.result)}</p>
+    <p class="note" style="margin-top:10px">${esc(blurb)}</p>
+    <div class="rowbtns" style="margin-top:16px">${extra}</div>
+    <div class="rowbtns" style="margin-top:8px">
+      <button class="btn ${a.enabled ? "" : "em"}" id="autotoggle">${a.enabled ? "Turn off" : "Turn on"}</button>
+    </div>`, (sh) => {
+    const set = sh.querySelector("#autoset"), log = sh.querySelector("#autolog"), prev = sh.querySelector("#autoprev");
+    if (set) set.onclick = () => { closeSheet(); key === "frontdesk" ? frontDeskSheet(d) : key === "reminders" ? apptReminderSheet(d) : phoneSettingsSheet(d); };
+    if (log) log.onclick = () => { closeSheet(); frontDeskLogSheet(); };
+    if (prev) prev.onclick = () => { closeSheet(); apptReminderPreviewSheet(); };
+    sh.querySelector("#autotoggle").onclick = async () => {
+      closeSheet();
+      if (key === "frontdesk") return toggleFrontDesk(d);
+      if (key === "reminders") return toggleApptReminders(d);
+      try {
+        await api("/phone", { action: "settings-save", autoReplyEnabled: d.autoReplyEnabled === false });
+        toast(d.autoReplyEnabled === false ? "Auto text-back is on" : "Auto text-back is off");
+        renderPhone();
+      } catch (err) { toast(err.message); }
+    };
+  });
+}
+
 function apptReminderCard(d) {
   const r = d.reminders || {};
   const on = r.enabled === true;
