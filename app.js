@@ -2006,18 +2006,9 @@ async function renderPhone() {
     S.phone = d;
     view().innerHTML = `<div class="sect">
       ${osHead("COM.06 · CALL LINE", "Phone")}
-      ${d.hasNumber ? phoneStatusStrip(d) : ""}
       ${d.hasNumber ? "" : requestNumberCard(d.pendingRequest)}
-      ${d.hasNumber ? needsYouZone(d) : ""}
-      ${d.hasNumber ? automationsZone(d) : ""}
-      ${d.hasNumber ? `<p class="zonehead">EVERYTHING ELSE</p>` : ""}
-      ${d.hasNumber ? `<div id="vmlane"><div class="skel"></div></div>` : ""}
-      ${d.hasNumber ? phoneThreadsPanel(d) : ""}
-      ${d.hasNumber ? phoneFeedPanel(d) : ""}
-      ${d.hasNumber ? `<div id="phoneleads"><div class="skel"></div></div>` : ""}
-      ${d.hasNumber ? `<p class="zonehead">SET ONCE</p>` : ""}
-      ${d.hasNumber ? phoneNumberCard(d) : ""}
-      ${d.hasNumber ? phoneSettingsSummary(d) : ""}
+      ${d.hasNumber ? phoneLaneSwitcher(d) : ""}
+      ${d.hasNumber ? phoneLaneBody(d) : ""}
     </div>`;
     if (!d.hasNumber) wireRequestNumber(d.pendingRequest);
     if (d.hasNumber) on("[data-pevt]", "click", (e) => phoneEventSheet(d.events.find((ev) => ev.id === e.currentTarget.dataset.pevt)));
@@ -2025,6 +2016,8 @@ async function renderPhone() {
     if (d.hasNumber) {
       $("phsetup").onclick = () => phoneSetupSheet(d);
       $("phsettings").onclick = () => phoneSettingsSheet(d);
+      on("[data-plane]", "click", (e) => { S.phoneLane = e.currentTarget.dataset.plane; renderPhone(); });
+      if ($("remindall")) $("remindall").onclick = () => apptReminderPreviewSheet();
       on("[data-needs]", "click", (e) => openNeedsYou(d, e.currentTarget.dataset.needs));
       on("[data-auto]", "click", (e) => openAutomation(d, e.currentTarget.dataset.auto));
       if ($("fdtoggle")) $("fdtoggle").onclick = () => toggleFrontDesk(d);
@@ -2037,8 +2030,8 @@ async function renderPhone() {
       // one-shot pattern as the iOS onboarding interview's @AppStorage flag.
       const seenKey = "ledger.phoneSetupSeen." + d.number.id;
       if (!localStorage.getItem(seenKey)) { localStorage.setItem(seenKey, "1"); phoneSetupSheet(d); }
-      loadVoicemails(d);
-      loadPhoneLeads();
+      if (phoneLane() === "inbox") loadVoicemails(d);
+      if (phoneLane() === "activity") loadPhoneLeads();
     }
   } catch (e) {
     view().innerHTML = `<div class="sect">${osHead("COM.06 · CALL LINE", "Phone")}<div class="empty">${esc(e.message)}</div></div>`;
@@ -2397,6 +2390,82 @@ async function playVoicemail(eventId) {
 // to find out a voicemail arrived 20 minutes ago. NEEDS YOU answers the
 // question people actually open this tab with; RUNNING FOR YOU replaces two
 // fat marketing cards with three measured lines.
+
+const PHONE_LANES = [["inbox", "INBOX"], ["autopilot", "AUTOPILOT"], ["activity", "ACTIVITY"]];
+function phoneLane() { return PHONE_LANES.some(([k]) => k === S.phoneLane) ? S.phoneLane : "inbox"; }
+
+// Same three-lane shape Finance uses, for the same reason: one screen per
+// question. What needs me / what is running for me / what happened.
+function phoneLaneSwitcher(d) {
+  const lane = phoneLane();
+  const need = (d.needsYou || []).length;
+  return `<div class="plane">${PHONE_LANES.map(([k, label]) => `
+    <button class="${lane === k ? "on" : ""}" data-plane="${k}">${label}${k === "inbox" && need ? `<i class="badge">${need}</i>` : ""}</button>`).join("")}</div>`;
+}
+
+function phoneLaneBody(d) {
+  const lane = phoneLane();
+  if (lane === "autopilot") return phoneAutopilotLane(d);
+  if (lane === "activity") return phoneActivityLane(d);
+  return phoneInboxLane(d);
+}
+
+function heroStrip(cells) {
+  return `<div class="panel hero">${cells.map(([n, l]) =>
+    `<div><p class="n">${esc(String(n))}</p><p class="l">${esc(l)}</p></div>`).join("")}</div>`;
+}
+
+function phoneInboxLane(d) {
+  const items = (d.needsYou || []).filter((i) => i.kind !== "unconfirmed");
+  const appt = (d.needsYou || []).find((i) => i.kind === "unconfirmed");
+  return `
+    ${items.length ? `<div class="panel flush">${items.map((it) => `
+      <div class="prow" data-needs="${esc(it.id)}">
+        <span class="needsdot" style="background:${NEEDS_TONE[it.tone] || "var(--cyan)"}"></span>
+        <div style="flex:1;min-width:0">
+          <div class="needst">${esc(it.title)}</div>
+          ${it.detail ? `<div class="needsm">${esc(it.detail)}</div>` : ""}
+          <div class="needsw">${esc(it.meta || "")}</div>
+        </div><span class="pchev">&rsaquo;</span></div>`).join("")}</div>`
+      : `<div class="panel" style="text-align:center;padding:26px">
+           <p class="sub" style="margin:0">Nothing waiting on you. Every call, text and voicemail has been handled.</p></div>`}
+    ${appt ? `<p class="zonehead">TOMORROW</p>
+      <div class="panel flush"><div class="prow" style="cursor:default">
+        <span class="needsdot" style="background:var(--cyan)"></span>
+        <div style="flex:1;min-width:0">
+          <div class="needst">${esc(appt.title)}</div>
+          <div class="needsm">${esc(appt.detail || "")}</div>
+          <button class="btn em" id="remindall" style="margin-top:11px">Send them all a confirmation text</button>
+        </div></div></div>` : ""}
+    <div id="vmlane"></div>`;
+}
+
+function phoneAutopilotLane(d) {
+  const a = d.autopilot || {};
+  const render = (text) => esc(text).replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--gold)">$1</b>');
+  return `
+    ${heroStrip([[a.textedBack ?? 0, "TEXTED BACK"], [a.replied ?? 0, "ANSWERED"], [a.booked ?? 0, "BOOKED"]])}
+    <p class="zonehead">THIS WEEK, WITHOUT YOU TOUCHING IT</p>
+    <div class="panel flush">${(d.automations || []).map((x) => `
+      <div class="prow" data-auto="${esc(x.key)}">
+        <span class="needsdot" style="background:${x.enabled ? "var(--emerald)" : "#39424f"};${x.enabled ? "box-shadow:0 0 9px rgba(47,224,160,.6)" : ""}"></span>
+        <div style="flex:1;min-width:0">
+          <div class="needst">${esc(x.title)} <span class="pill ${x.enabled ? "live" : ""}">${x.enabled ? "ON" : "OFF"}</span></div>
+          <div class="needsm">${render(x.result)}</div>
+        </div><span class="pchev">&rsaquo;</span></div>`).join("")}</div>`;
+}
+
+function phoneActivityLane(d) {
+  const m = d.metrics || {};
+  return `
+    ${heroStrip([[m.callsToday ?? 0, "CALLS TODAY"], [m.textsToday ?? 0, "TEXTS"], [m.leads7d ?? 0, "NEW LEADS"]])}
+    ${phoneThreadsPanel(d)}
+    ${phoneFeedPanel(d)}
+    <div id="phoneleads"><div class="skel"></div></div>
+    <p class="zonehead">YOUR LINE</p>
+    ${phoneNumberCard(d)}
+    ${phoneSettingsSummary(d)}`;
+}
 
 const NEEDS_TONE = { urgent: "var(--red)", warn: "var(--gold)", info: "var(--cyan)" };
 
