@@ -2007,6 +2007,11 @@ async function renderPhone() {
     view().innerHTML = `<div class="sect">
       ${osHead("COM.06 · CALL LINE", "Phone")}
       ${d.hasNumber ? "" : requestNumberCard(d.pendingRequest)}
+      ${/* The number and its setup guide sit ABOVE the lane switcher, not in a
+            lane. Call forwarding is the thing that has to be working before any
+            of this tab means anything, and a setup guide found at the bottom of
+            a third sub-tab is a setup guide nobody reads. */""}
+      ${d.hasNumber ? phoneNumberCard(d) : ""}
       ${d.hasNumber ? phoneLaneSwitcher(d) : ""}
       ${d.hasNumber ? phoneLaneBody(d) : ""}
     </div>`;
@@ -2463,7 +2468,6 @@ function phoneActivityLane(d) {
     ${phoneFeedPanel(d)}
     <div id="phoneleads"><div class="skel"></div></div>
     <p class="zonehead">YOUR LINE</p>
-    ${phoneNumberCard(d)}
     ${phoneSettingsSummary(d)}`;
 }
 
