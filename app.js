@@ -568,15 +568,285 @@ async function emailSheet(m) {
 
 /* ---------------- FINANCE ---------------- */
 const FINANCE_CODE = { invoices: "FIN.02 · REVENUE GRID", profit: "FIN.02 · PROFIT & LOSS", receipts: "EXP.04 · EXPENSE INTAKE" };
+/* ---------------- native books (built-in ledger, no QuickBooks) ---------------- */
+// Workspaces with books_provider="native" run on the books edge fn instead of
+// QBO. The Finance tab swaps its invoices lane for these screens; Profit (a QBO
+// P&L board) is hidden, Receipts stays — the receipt pipeline is native already.
+
+async function booksApi(body) { return api("/books", body); }
+
+async function loadNativeInvoices() {
+  const slot = $("finbody"); if (!slot) return;
+  let data, summary, connect;
+  try {
+    [data, summary, connect] = await Promise.all([
+      booksApi({ action: "invoices" }),
+      booksApi({ action: "summary" }),
+      booksApi({ action: "connect-status" }),
+    ]);
+  } catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  const invoices = data.invoices || [];
+  const filtered = invoices.filter((i) => !S.invoiceSearch ||
+    (i.customer + " " + i.number).toLowerCase().includes(S.invoiceSearch));
+  const chargesOn = connect?.charges_enabled === true;
+  slot.innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><span>Open invoices</span><b>${summary.open_invoices ?? 0}</b></div>
+      <div class="kpi"><span>Outstanding</span><b>${money(summary.open_balance || 0)}</b></div>
+      <div class="kpi"><span>Overdue 31+ days</span><b>${money((summary.aging?.days_31_60 || 0) + (summary.aging?.days_61_plus || 0))}</b></div>
+    </div>
+    <button class="cta" id="newinv">
+      <span class="ic">&#43;</span>
+      <span><b>Create Invoice</b><span>Numbered, taxed, with a payment link</span></span>
+    </button>
+    <div class="searchwrap"><span class="mag">${MAG}</span>
+      <input id="invsearch" placeholder="Customer or invoice number" value="${esc(S.invoiceSearch || "")}"></div>
+    <div class="opsgrid">
+      <button class="opcard ${chargesOn ? "em" : "purple"}" data-op="stripe"><span class="ic">&#128179;</span>
+        <b>Card payments</b><span>${chargesOn ? "ON — customers can pay online" : "Set up Stripe to get paid online"}</span>
+        <em>${chargesOn ? "MANAGE" : "SET UP"} &#8599;</em></button>
+      <button class="opcard" data-op="bsettings"><span class="ic">&#9881;</span><b>Books settings</b>
+        <span>Tax, numbering, payment info</span><em>OPEN &#8599;</em></button>
+      <button class="opcard em" data-op="receipts"><span class="ic">&#128229;</span><b>Receipt Queue</b>
+        <span>Review &amp; batch</span><em>OPEN &#8599;</em></button>
+      <button class="opcard" data-op="bexport"><span class="ic">&#128228;</span><b>Export CSV</b>
+        <span>Invoices, payments, customers</span><em>EXPORT &#8599;</em></button>
+    </div>
+    <div class="lanehead"><span class="eyebrow" style="color:var(--dim)">${S.invoiceSearch ? "Matching invoices" : "Recent invoices"}</span>
+      <span class="note">${filtered.length}</span></div>
+    ${filtered.length ? `<div class="list">${filtered.slice(0, 120).map((i) => `
+      <button class="item" data-binv="${esc(i.id)}">
+        <div class="main"><div class="ttl">${esc(i.customer || "—")}</div>
+          <div class="sub">${esc(i.number)} · ${esc(dateShort(i.issue_date))}</div></div>
+        <div class="amt">${money(i.total)}
+          <small><span class="tag ${i.status === "paid" ? "paid" : i.status === "void" ? "" : "open"}">${esc(i.status)}</span></small></div>
+      </button>`).join("")}</div>`
+      : `<div class="empty">${S.invoiceSearch ? "No matches." : "No invoices yet — create your first, or ask Ledger in chat."}</div>`}`;
+  $("newinv").onclick = () => nativeComposerSheet();
+  const search = $("invsearch");
+  if (search) search.oninput = () => { S.invoiceSearch = search.value.trim().toLowerCase(); loadNativeInvoices(); };
+  on("[data-binv]", "click", (e) => nativeInvoiceSheet(e.currentTarget.dataset.binv), slot);
+  on("[data-op]", "click", async (e) => {
+    const op = e.currentTarget.dataset.op;
+    if (op === "receipts") { S.financeLane = "receipts"; renderFinance(); }
+    else if (op === "bsettings") booksSettingsSheet();
+    else if (op === "bexport") {
+      try {
+        const ex = await booksApi({ action: "export" });
+        const blob = new Blob([
+          "== CUSTOMERS ==\n" + ex.customers_csv + "\n\n== INVOICES ==\n" + ex.invoices_csv +
+          "\n\n== LINES ==\n" + ex.lines_csv + "\n\n== PAYMENTS ==\n" + ex.payments_csv,
+        ], { type: "text/csv" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob); a.download = "ledger-books-export.csv"; a.click();
+        toast("Export downloaded");
+      } catch (err) { toast(err.message, "err"); }
+    } else if (op === "stripe") {
+      try {
+        const r = await booksApi({ action: "connect-onboard" });
+        if (r.url) window.open(r.url, "_blank");
+      } catch (err) { toast(err.message, "err"); }
+    }
+  }, slot);
+}
+
+async function nativeInvoiceSheet(id) {
+  const wrap = sheet(`<h2>Invoice</h2><div id="binvbody"><div class="skel"></div><div class="skel"></div></div>`);
+  const body = () => wrap.querySelector("#binvbody");
+  let inv;
+  try { inv = (await booksApi({ action: "invoice-get", id })).invoice; }
+  catch (e) { body().innerHTML = `<p class="note err">${esc(e.message)}</p>`; return; }
+  const paint = () => {
+    body().innerHTML = `
+      <div class="lanehead"><span class="eyebrow">${esc(inv.number)}</span>
+        <span class="tag ${inv.status === "paid" ? "paid" : "open"}">${esc(inv.status)}</span></div>
+      <p class="note">${esc(inv.customer?.name || "")}${inv.customer?.email ? " · " + esc(inv.customer.email) : ""}<br>
+        Issued ${esc(inv.issue_date)}${inv.due_date ? " · Due " + esc(inv.due_date) : ""}</p>
+      <table class="dtable"><tbody>
+        ${(inv.lines || []).map((l) => `<tr><td>${esc(l.name)} × ${l.quantity}</td><td style="text-align:right">${money(l.amount)}</td></tr>`).join("")}
+        <tr><td>Subtotal</td><td style="text-align:right">${money(inv.subtotal)}</td></tr>
+        ${Number(inv.tax_total) > 0 ? `<tr><td>${esc(inv.tax_name || "Tax")}</td><td style="text-align:right">${money(inv.tax_total)}</td></tr>` : ""}
+        <tr><td><b>Total</b></td><td style="text-align:right"><b>${money(inv.total)}</b></td></tr>
+        ${Number(inv.balance) > 0 && Number(inv.balance) < Number(inv.total)
+          ? `<tr><td>Balance due</td><td style="text-align:right">${money(inv.balance)}</td></tr>` : ""}
+      </tbody></table>
+      ${(inv.payments || []).length ? `<p class="note">${inv.payments.map((p) =>
+        `Paid ${money(p.amount)} · ${esc(p.method)} · ${esc(String(p.received_at).slice(0, 10))}`).join("<br>")}</p>` : ""}
+      <button class="pillbtn" id="blink">Copy payment link</button>
+      <button class="pillbtn" id="bopen">Open invoice page</button>
+      ${Number(inv.balance) > 0 ? `
+        <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Record a payment</span></div>
+        <div class="f" style="display:flex;gap:8px">
+          <input id="bamt" type="number" min="0.01" step="0.01" class="cmpinput" style="flex:1" value="${inv.balance}">
+          <select id="bmethod" class="pillbtn"><option value="etransfer">E-transfer</option><option value="cash">Cash</option>
+            <option value="cheque">Cheque</option><option value="other">Other</option></select>
+        </div>
+        <button class="pillbtn" id="bpay" style="margin-top:8px"><b>Mark paid</b></button>` : ""}
+      ${inv.status === "sent" && !(inv.payments || []).length ? `<button class="linkbtn" id="bvoid" style="color:var(--red);margin-top:10px">Void this invoice</button>` : ""}
+      <p class="note err" id="berr"></p>`;
+    const link = inv.link || "";
+    wrap.querySelector("#blink").onclick = async () => {
+      try { await navigator.clipboard.writeText(link); toast("Payment link copied"); }
+      catch { prompt("Payment link:", link); }
+    };
+    wrap.querySelector("#bopen").onclick = () => window.open(link, "_blank");
+    const pay = wrap.querySelector("#bpay");
+    if (pay) pay.onclick = async () => {
+      pay.disabled = true;
+      try {
+        const amount = Number(wrap.querySelector("#bamt").value);
+        const r = await booksApi({ action: "payment-record", invoice_id: inv.id, amount, method: wrap.querySelector("#bmethod").value });
+        inv = { ...inv, ...r.invoice, link };
+        toast(r.invoice.status === "paid" ? "Invoice paid in full" : "Payment recorded");
+        paint(); loadNativeInvoices();
+      } catch (e) { wrap.querySelector("#berr").textContent = e.message; pay.disabled = false; }
+    };
+    const voidBtn = wrap.querySelector("#bvoid");
+    if (voidBtn) voidBtn.onclick = async () => {
+      if (!confirm(`Void ${inv.number}? The number is never reused.`)) return;
+      try { await booksApi({ action: "invoice-void", id: inv.id }); toast(`${inv.number} voided`); closeSheet(); loadNativeInvoices(); }
+      catch (e) { wrap.querySelector("#berr").textContent = e.message; }
+    };
+  };
+  paint();
+}
+
+async function nativeComposerSheet() {
+  const C = { customer: null, customers: [], query: "", lines: [], memo: "", terms: "due_now", newCust: false, busy: false };
+  const wrap = sheet(`<h2>New Invoice</h2><div id="bcmp"><div class="skel"></div></div>`);
+  const body = () => wrap.querySelector("#bcmp");
+  try { C.customers = (await booksApi({ action: "customers" })).customers || []; } catch { C.customers = []; }
+  const subtotal = () => C.lines.reduce((t, l) => t + Math.round((Number(l.quantity) || 0) * (Number(l.rate) || 0) * 100) / 100, 0);
+  const paint = () => {
+    const hits = C.query
+      ? C.customers.filter((c) => (`${c.first_name} ${c.last_name} ${c.company || ""} ${c.email || ""}`).toLowerCase().includes(C.query.toLowerCase())).slice(0, 8)
+      : C.customers.slice(0, 6);
+    body().innerHTML = `
+      <div class="lanehead"><span class="eyebrow">Customer</span></div>
+      ${C.customer ? `<div class="cmpsel"><span class="av">${esc((C.customer.first_name || "?").slice(0, 1).toUpperCase())}</span>
+          <span class="m"><b>${esc(`${C.customer.first_name} ${C.customer.last_name}`.trim())}</b>${C.customer.email ? `<span>${esc(C.customer.email)}</span>` : ""}</span>
+          <button class="x" id="bclear">&#10005;</button></div>`
+        : C.newCust ? `
+          <div class="f" style="display:flex;gap:8px">
+            <input id="ncf" class="cmpinput" placeholder="First name" style="flex:1">
+            <input id="ncl" class="cmpinput" placeholder="Last name" style="flex:1"></div>
+          <input id="nce" class="cmpinput sm" placeholder="Email">
+          <input id="ncp" class="cmpinput sm" placeholder="Phone">
+          <input id="ncc" class="cmpinput sm" placeholder="Company (optional)">
+          <button class="pillbtn" id="ncsave">Save customer</button>
+          <button class="linkbtn" id="ncback">Back to search</button>`
+        : `<input id="bq" class="cmpinput" placeholder="Search customers…" value="${esc(C.query)}" autocomplete="off">
+          ${hits.map((c) => `<button class="cmprow" data-bpick="${esc(c.id)}">
+            <span class="av sm">${esc((c.first_name || "?").slice(0, 1).toUpperCase())}</span>
+            <span class="m"><b>${esc(`${c.first_name} ${c.last_name}`.trim() || c.company || "")}</b>${c.email ? `<span>${esc(c.email)}</span>` : ""}</span>
+            <span class="plus">+</span></button>`).join("")}
+          <button class="linkbtn" id="bnewc">+ New customer</button>`}
+      <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Lines</span></div>
+      ${C.lines.map((l, i) => `<div class="cmpline">
+        <div class="t"><input class="cmpinput sm" data-bname="${i}" placeholder="Service or product" value="${esc(l.name)}" style="flex:1">
+          <button class="del" data-bdel="${i}">&#128465;</button></div>
+        <div class="f"><label>Qty<input type="number" min="1" step="1" data-bqty="${i}" value="${l.quantity}"></label>
+          <label>Rate<input type="number" min="0" step="0.01" data-brate="${i}" value="${l.rate}"></label></div>
+      </div>`).join("") || `<p class="note">Add what's being billed — free-form, priced by you.</p>`}
+      <button class="pillbtn" id="baddline">+ Add line</button>
+      <label class="emailrow">Payment due
+        <select id="bterms" class="pillbtn">
+          <option value="due_now"${C.terms === "due_now" ? " selected" : ""}>Due now</option>
+          <option value="net30"${C.terms === "net30" ? " selected" : ""}>Net 30</option>
+        </select></label>
+      <input id="bmemo" class="cmpinput sm" placeholder="Note to customer (optional)" value="${esc(C.memo)}">
+      <div class="lanehead" style="margin-top:10px"><span class="eyebrow">Subtotal before tax</span><b>${money(subtotal())}</b></div>
+      <button class="cta" id="bcreate" ${C.busy || !C.customer || !C.lines.length ? "disabled" : ""}>
+        <span><b>${C.busy ? "Creating…" : "Create invoice"}</b><span>Numbered + payment link, tax applied</span></span></button>
+      <p class="note err" id="bcerr"></p>`;
+    const q = wrap.querySelector("#bq");
+    if (q) { q.oninput = () => { C.query = q.value; paint(); wrap.querySelector("#bq").focus(); const el = wrap.querySelector("#bq"); el.setSelectionRange(el.value.length, el.value.length); }; }
+    on("[data-bpick]", "click", (e) => { C.customer = C.customers.find((c) => c.id === e.currentTarget.dataset.bpick); paint(); }, body());
+    const clear = wrap.querySelector("#bclear"); if (clear) clear.onclick = () => { C.customer = null; paint(); };
+    const newc = wrap.querySelector("#bnewc"); if (newc) newc.onclick = () => { C.newCust = true; paint(); };
+    const back = wrap.querySelector("#ncback"); if (back) back.onclick = () => { C.newCust = false; paint(); };
+    const save = wrap.querySelector("#ncsave");
+    if (save) save.onclick = async () => {
+      try {
+        const r = await booksApi({ action: "customer-save", customer: {
+          first_name: wrap.querySelector("#ncf").value.trim(), last_name: wrap.querySelector("#ncl").value.trim(),
+          email: wrap.querySelector("#nce").value.trim(), phone: wrap.querySelector("#ncp").value.trim(),
+          company: wrap.querySelector("#ncc").value.trim(),
+        } });
+        C.customers.unshift(r.customer); C.customer = r.customer; C.newCust = false; paint();
+      } catch (e) { wrap.querySelector("#bcerr").textContent = e.message; }
+    };
+    wrap.querySelector("#baddline").onclick = () => { C.lines.push({ name: "", quantity: 1, rate: 0 }); paint(); };
+    on("[data-bdel]", "click", (e) => { C.lines.splice(Number(e.currentTarget.dataset.bdel), 1); paint(); }, body());
+    on("[data-bname]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.bname)].name = e.currentTarget.value; }, body());
+    on("[data-bqty]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.bqty)].quantity = e.currentTarget.value; }, body());
+    on("[data-brate]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.brate)].rate = e.currentTarget.value; }, body());
+    wrap.querySelector("#bterms").onchange = (e) => { C.terms = e.target.value; };
+    wrap.querySelector("#bmemo").oninput = (e) => { C.memo = e.target.value; };
+    const create = wrap.querySelector("#bcreate");
+    if (create) create.onclick = async (e, force) => {
+      C.busy = true; paint();
+      try {
+        const r = await booksApi({ action: "invoice-create", customer_id: C.customer.id,
+          lines: C.lines.filter((l) => l.name.trim()).map((l) => ({ name: l.name.trim(), quantity: Number(l.quantity) || 1, rate: Number(l.rate) || 0 })),
+          memo: C.memo, due_in_days: C.terms === "net30" ? 30 : null, force: force === true });
+        toast(`${r.invoice.number} created`);
+        closeSheet(); loadNativeInvoices(); nativeInvoiceSheet(r.invoice.id);
+      } catch (err) {
+        C.busy = false; paint();
+        if (err.status === 409 && err.data?.duplicate_of) {
+          if (confirm(err.message + "\n\nCreate anyway?")) return create.onclick(null, true);
+        } else wrap.querySelector("#bcerr").textContent = err.message;
+      }
+    };
+  };
+  paint();
+}
+
+async function booksSettingsSheet() {
+  const wrap = sheet(`<h2>Books settings</h2><div id="bset"><div class="skel"></div></div>`);
+  const body = () => wrap.querySelector("#bset");
+  let s;
+  try { s = await booksApi({ action: "settings" }); }
+  catch (e) { body().innerHTML = `<p class="note err">${esc(e.message)}</p>`; return; }
+  body().innerHTML = `
+    <label class="emailrow">Tax name<input id="stax" class="cmpinput" value="${esc(s.tax.name)}"></label>
+    <label class="emailrow">Tax rate %<input id="srate" type="number" min="0" max="100" step="0.01" class="cmpinput" value="${(Number(s.tax.rate) * 100).toFixed(2)}"></label>
+    <label class="emailrow">Tax registration # (shown on invoices)<input id="sreg" class="cmpinput" value="${esc(s.tax.registration_number || "")}"></label>
+    <label class="emailrow">Invoice prefix<input id="spre" class="cmpinput" value="${esc(s.numbering.prefix)}"></label>
+    <p class="note">Next invoice: ${esc(s.numbering.prefix)}${s.numbering.next_number}</p>
+    <label class="emailrow">How customers pay you (shown on unpaid invoices when card payments are off)
+      <textarea id="spay" class="cmpinput" rows="3">${esc(s.payment_instructions || "")}</textarea></label>
+    <button class="cta" id="ssave"><span><b>Save settings</b></span></button>
+    <p class="note err" id="serr"></p>`;
+  wrap.querySelector("#ssave").onclick = async () => {
+    try {
+      await booksApi({ action: "settings-save",
+        tax_name: wrap.querySelector("#stax").value, tax_rate: Number(wrap.querySelector("#srate").value) / 100,
+        registration_number: wrap.querySelector("#sreg").value, prefix: wrap.querySelector("#spre").value,
+        payment_instructions: wrap.querySelector("#spay").value });
+      toast("Settings saved"); closeSheet();
+    } catch (e) { wrap.querySelector("#serr").textContent = e.message; }
+  };
+}
+
 const FINANCE_TITLE = { invoices: "Finance", profit: "Profit", receipts: "Receipts" };
 
 async function renderFinance() {
-  const lane = S.financeLane === "profit" || S.financeLane === "receipts" ? S.financeLane : "invoices";
+  // Which ledger this workspace runs on decides the whole tab: native books
+  // hides the Profit lane (a QuickBooks P&L board) and swaps the invoice
+  // screens. Cached for the session; a connect/disconnect reloads the app.
+  if (S.booksProvider === undefined) {
+    try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
+    catch { S.booksProvider = "quickbooks"; }
+  }
+  const native = S.booksProvider === "native";
+  const lane = (S.financeLane === "profit" && !native) || S.financeLane === "receipts" ? S.financeLane : "invoices";
   view().innerHTML = `<div class="sect">
     ${osHead(FINANCE_CODE[lane], FINANCE_TITLE[lane])}
     <div class="seg">
       <button class="${lane === "invoices" ? "on" : ""}" data-fl="invoices">Invoices</button>
-      <button class="${lane === "profit" ? "on" : ""}" data-fl="profit">Profit &amp; Loss</button>
+      ${native ? "" : `<button class="${lane === "profit" ? "on" : ""}" data-fl="profit">Profit &amp; Loss</button>`}
       <button class="${lane === "receipts" ? "on" : ""}" data-fl="receipts">Receipts</button>
     </div>
     <div id="finbody"><div class="skel"></div><div class="skel"></div></div>
@@ -584,6 +854,7 @@ async function renderFinance() {
   on("[data-fl]", "click", (e) => { S.financeLane = e.currentTarget.dataset.fl; renderFinance(); });
   if (lane === "profit") loadProfit();
   else if (lane === "receipts") loadReceipts();
+  else if (native) loadNativeInvoices();
   else loadInvoices();
 }
 
