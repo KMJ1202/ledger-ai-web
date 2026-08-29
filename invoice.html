@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07090d">
+<meta name="robots" content="noindex">
+<title>Invoice</title>
+<style>
+:root{--bg:#07090d;--card:#10151c;--line:#1f2833;--text:#f3f5f7;--dim:#93a1af;--cyan:#22d3ee;--purple:#a855f7;--emerald:#34d399;--red:#f87171;--amber:#fbbf24}
+*{box-sizing:border-box}
+body{margin:0;min-height:100dvh;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;align-items:center}
+body::before{content:"";position:fixed;inset:-40%;background:
+  radial-gradient(42% 34% at 22% 12%, rgba(34,211,238,.13), transparent 60%),
+  radial-gradient(40% 34% at 82% 18%, rgba(168,85,247,.12), transparent 60%);
+  pointer-events:none;z-index:0}
+.wrap{position:relative;z-index:1;width:100%;max-width:560px;padding:34px 20px calc(env(safe-area-inset-bottom) + 44px)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px}
+.biz{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.biz img{width:44px;height:44px;border-radius:10px;object-fit:cover}
+.biz .name{font-size:18px;font-weight:700}
+.head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+h1{font-size:22px;margin:0}
+.chip{font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;border:1px solid var(--line)}
+.chip.paid{color:var(--emerald);border-color:rgba(52,211,153,.4)}
+.chip.due{color:var(--amber);border-color:rgba(251,191,36,.4)}
+.chip.partial{color:var(--cyan);border-color:rgba(34,211,238,.4)}
+.meta{color:var(--dim);font-size:13px;margin-bottom:16px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:8px 0;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+td.num,th.num{text-align:right;white-space:nowrap}
+.desc{color:var(--dim);font-size:12px}
+.totals td{border-bottom:none;padding:4px 0}
+.totals .grand td{font-size:17px;font-weight:800;padding-top:10px}
+.balance{color:var(--amber)}
+.memo{margin-top:14px;color:var(--dim);font-size:13px;white-space:pre-wrap}
+.paybtn{display:block;width:100%;margin-top:20px;padding:15px;border:0;border-radius:13px;font-size:16px;font-weight:800;color:#03242b;background:linear-gradient(135deg,var(--cyan),#67e8f9);cursor:pointer}
+.paybtn:disabled{opacity:.55}
+.instructions{margin-top:16px;padding:13px;border:1px dashed var(--line);border-radius:12px;font-size:13px;color:var(--dim);white-space:pre-wrap}
+.paidbanner{margin-top:18px;padding:14px;border-radius:12px;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.4);color:var(--emerald);font-weight:700;text-align:center}
+.err{color:var(--red);text-align:center;padding:40px 0}
+.foot{margin-top:22px;text-align:center;color:var(--dim);font-size:11px}
+.pays{margin-top:12px;font-size:12px;color:var(--dim)}
+@media print{body{background:#fff;color:#000}body::before{display:none}.card{border:1px solid #ccc;background:#fff}.paybtn,.foot{display:none}.chip,.meta,.desc,.memo,.instructions,.pays{color:#444}}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card" id="card"><div class="err">Loading…</div></div>
+<div class="foot">Powered by Ledger AI</div></div>
+<script>
+const FN = "https://lbzkyyehmgudlxmfpzzh.supabase.co/functions/v1/books";
+const params = new URLSearchParams(location.search);
+const token = params.get("t") || "";
+const sessionId = params.get("session_id") || "";
+const card = document.getElementById("card");
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const cur = (n, c) => new Intl.NumberFormat("en-CA", {style:"currency", currency:c||"CAD"}).format(Number(n)||0);
+
+function render(data, justPaid){
+  const inv = data.invoice, biz = data.business;
+  const c = inv.currency;
+  const chip = inv.status === "paid" ? ["paid","PAID"] : inv.status === "partial" ? ["partial","PARTIALLY PAID"] : inv.status === "void" ? ["due","VOID"] : ["due","DUE"];
+  card.innerHTML = `
+    <div class="biz">${biz.logo_url ? `<img src="${esc(biz.logo_url)}" alt="">` : ""}<div class="name">${esc(biz.name)}</div></div>
+    <div class="head"><h1>Invoice ${esc(inv.number)}</h1><span class="chip ${chip[0]}">${chip[1]}</span></div>
+    <div class="meta">${inv.customer ? esc(inv.customer.name) + (inv.customer.company ? " · " + esc(inv.customer.company) : "") + " · " : ""}Issued ${esc(inv.issue_date)}${inv.due_date ? " · Due " + esc(inv.due_date) : ""}</div>
+    <table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead><tbody>
+    ${inv.lines.map((l) => `<tr><td>${esc(l.name)}${l.description ? `<div class="desc">${esc(l.description)}</div>` : ""}</td><td class="num">${esc(l.quantity)}</td><td class="num">${cur(l.rate, c)}</td><td class="num">${cur(l.amount, c)}</td></tr>`).join("")}
+    </tbody></table>
+    <table class="totals"><tbody>
+      <tr><td>Subtotal</td><td class="num">${cur(inv.subtotal, c)}</td></tr>
+      ${inv.tax_total > 0 ? `<tr><td>${esc(inv.tax_name || "Tax")} (${(inv.tax_rate*100).toFixed(inv.tax_rate*100 % 1 ? 2 : 0)}%)</td><td class="num">${cur(inv.tax_total, c)}</td></tr>` : ""}
+      <tr class="grand"><td>Total</td><td class="num">${cur(inv.total, c)}</td></tr>
+      ${inv.balance > 0 && inv.balance < inv.total ? `<tr><td class="balance">Balance due</td><td class="num balance">${cur(inv.balance, c)}</td></tr>` : ""}
+    </tbody></table>
+    ${inv.payments.length ? `<div class="pays">${inv.payments.map((p) => `Payment ${cur(p.amount, c)} · ${esc(p.method)} · ${esc(String(p.received_at).slice(0,10))}`).join("<br>")}</div>` : ""}
+    ${inv.memo ? `<div class="memo">${esc(inv.memo)}</div>` : ""}
+    ${justPaid ? `<div class="paidbanner">✓ Payment received — thank you!</div>` : ""}
+    ${!justPaid && inv.balance > 0 && data.can_pay ? `<button class="paybtn" id="pay">Pay ${cur(inv.balance, c)}</button>` : ""}
+    ${!justPaid && inv.balance > 0 && !data.can_pay && data.payment_instructions ? `<div class="instructions"><b>How to pay</b>\n${esc(data.payment_instructions)}</div>` : ""}
+  `;
+  const btn = document.getElementById("pay");
+  if (btn) btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = "Opening secure checkout…";
+    try {
+      const r = await fetch(FN, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({action:"pay", token})});
+      const d = await r.json();
+      if (d.url) location.href = d.url;
+      else { btn.textContent = d.error || "Payment unavailable"; }
+    } catch { btn.disabled = false; btn.textContent = "Try again"; }
+  };
+}
+
+(async () => {
+  try {
+    let justPaid = false;
+    if (sessionId) {
+      // Server-side confirmation — the return URL alone proves nothing.
+      const r = await fetch(FN, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({action:"pay-confirm", token, session_id: sessionId})});
+      const d = await r.json().catch(() => ({}));
+      justPaid = d.paid === true;
+      history.replaceState(null, "", location.pathname + "?t=" + encodeURIComponent(token));
+    }
+    const r = await fetch(`${FN}?action=public&t=${encodeURIComponent(token)}`);
+    if (!r.ok) throw new Error();
+    render(await r.json(), justPaid);
+  } catch {
+    card.innerHTML = `<div class="err">This invoice link isn't valid anymore.</div>`;
+  }
+})();
+</script>
+</body>
+</html>
