@@ -734,11 +734,31 @@ async function nativeInvoiceSheet(id) {
   paint();
 }
 
+// Initials of the line name make the offered code: "Medium truck flat repair"
+// suggests MTFR. Single-word names fall back to their first four letters.
+function suggestShortcutCode(name, taken) {
+  const words = String(name).toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+  let code = words.length >= 2 ? words.map((w) => w[0]).join("").slice(0, 8) : (words[0] || "").slice(0, 4);
+  if (!code) return "";
+  const exists = (c) => (taken || []).some((s) => s.code.toUpperCase() === c);
+  for (let n = 2; exists(code) && n < 10; n++) code = code.replace(/\d+$/, "") + n;
+  return code;
+}
+
 async function nativeComposerSheet() {
-  const C = { customer: null, customers: [], query: "", lines: [], memo: "", terms: "due_now", newCust: false, busy: false };
+  const C = { customer: null, customers: [], query: "", lines: [], memo: "", termsDays: 0, newCust: false, busy: false, shortcuts: [] };
   const wrap = sheet(`<h2>New Invoice</h2><div id="bcmp"><div class="skel"></div></div>`);
   const body = () => wrap.querySelector("#bcmp");
-  try { C.customers = (await booksApi({ action: "customers" })).customers || []; } catch { C.customers = []; }
+  try {
+    const [cust, sc, set] = await Promise.all([
+      booksApi({ action: "customers" }),
+      booksApi({ action: "shortcuts" }).catch(() => ({ shortcuts: [] })),
+      booksApi({ action: "settings" }).catch(() => null),
+    ]);
+    C.customers = cust.customers || [];
+    C.shortcuts = sc.shortcuts || [];
+    C.termsDays = set?.default_terms_days ?? 0;
+  } catch { C.customers = []; }
   const subtotal = () => C.lines.reduce((t, l) => t + Math.round((Number(l.quantity) || 0) * (Number(l.rate) || 0) * 100) / 100, 0);
   const paint = () => {
     const hits = C.query
@@ -766,17 +786,18 @@ async function nativeComposerSheet() {
           <button class="linkbtn" id="bnewc">+ New customer</button>`}
       <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Lines</span></div>
       ${C.lines.map((l, i) => `<div class="cmpline">
-        <div class="t"><input class="cmpinput sm" data-bname="${i}" placeholder="Service or product" value="${esc(l.name)}" style="flex:1">
+        <div class="t"><input class="cmpinput sm" data-bname="${i}" placeholder="Service or product — or a shortcut like MTFR" value="${esc(l.name)}" style="flex:1" autocomplete="off">
           <button class="del" data-bdel="${i}">&#128465;</button></div>
+        <div id="bsug${i}" class="scsug"></div>
         <div class="f"><label>Qty<input type="number" min="1" step="1" data-bqty="${i}" value="${l.quantity}"></label>
           <label>Rate<input type="number" min="0" step="0.01" data-brate="${i}" value="${l.rate}"></label></div>
-      </div>`).join("") || `<p class="note">Add what's being billed — free-form, priced by you.</p>`}
+      </div>`).join("") || `<p class="note">Add what's being billed — free-form, priced by you.${C.shortcuts.length ? " Type a shortcut code to fill a line instantly." : ""}</p>`}
       <button class="pillbtn" id="baddline">+ Add line</button>
-      <label class="emailrow">Payment due
-        <select id="bterms" class="pillbtn">
-          <option value="due_now"${C.terms === "due_now" ? " selected" : ""}>Due now</option>
-          <option value="net30"${C.terms === "net30" ? " selected" : ""}>Net 30</option>
-        </select></label>
+      <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Payment terms</span></div>
+      <div class="seg" id="btermseg">
+        ${[[0, "COD"], [15, "Net 15"], [30, "Net 30"], [60, "Net 60"]].map(([d, lbl]) =>
+          `<button class="${C.termsDays === d ? "on" : ""}" data-bterm="${d}">${lbl}</button>`).join("")}
+      </div>
       <input id="bmemo" class="cmpinput sm" placeholder="Note to customer (optional)" value="${esc(C.memo)}">
       <div class="lanehead" style="margin-top:10px"><span class="eyebrow">Subtotal before tax</span><b>${money(subtotal())}</b></div>
       <button class="cta" id="bcreate" ${C.busy || !C.customer || !C.lines.length ? "disabled" : ""}>
@@ -784,7 +805,11 @@ async function nativeComposerSheet() {
       <p class="note err" id="bcerr"></p>`;
     const q = wrap.querySelector("#bq");
     if (q) { q.oninput = () => { C.query = q.value; paint(); wrap.querySelector("#bq").focus(); const el = wrap.querySelector("#bq"); el.setSelectionRange(el.value.length, el.value.length); }; }
-    on("[data-bpick]", "click", (e) => { C.customer = C.customers.find((c) => c.id === e.currentTarget.dataset.bpick); paint(); }, body());
+    on("[data-bpick]", "click", (e) => {
+      C.customer = C.customers.find((c) => c.id === e.currentTarget.dataset.bpick);
+      if (C.customer?.default_terms_days != null) C.termsDays = C.customer.default_terms_days;
+      paint();
+    }, body());
     const clear = wrap.querySelector("#bclear"); if (clear) clear.onclick = () => { C.customer = null; paint(); };
     const newc = wrap.querySelector("#bnewc"); if (newc) newc.onclick = () => { C.newCust = true; paint(); };
     const back = wrap.querySelector("#ncback"); if (back) back.onclick = () => { C.newCust = false; paint(); };
@@ -801,20 +826,50 @@ async function nativeComposerSheet() {
     };
     wrap.querySelector("#baddline").onclick = () => { C.lines.push({ name: "", quantity: 1, rate: 0 }); paint(); };
     on("[data-bdel]", "click", (e) => { C.lines.splice(Number(e.currentTarget.dataset.bdel), 1); paint(); }, body());
-    on("[data-bname]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.bname)].name = e.currentTarget.value; }, body());
+    // Shortcut chips paint under the line being typed in — no full repaint, so
+    // the input never loses focus mid-word.
+    const paintSuggestions = (i, value) => {
+      const box = wrap.querySelector(`#bsug${i}`);
+      if (!box) return;
+      const q = value.trim().toUpperCase();
+      const hits = q.length < 1 ? [] : C.shortcuts.filter((s) =>
+        s.code.toUpperCase().startsWith(q) || s.name.toUpperCase().includes(q)).slice(0, 4);
+      box.innerHTML = hits.map((s) =>
+        `<button class="pillbtn sm" data-bsc="${esc(s.code)}" data-bscline="${i}"><b>${esc(s.code)}</b> ${esc(s.name)} · ${money(s.rate)}</button>`).join("");
+      box.querySelectorAll("[data-bsc]").forEach((btn) => btn.onclick = () => {
+        const s = C.shortcuts.find((x) => x.code === btn.dataset.bsc);
+        if (!s) return;
+        C.lines[i] = { name: s.name, description: s.description || "", quantity: C.lines[i].quantity || 1, rate: s.rate, code: s.code };
+        paint();
+      });
+    };
+    on("[data-bname]", "input", (e) => {
+      const i = Number(e.currentTarget.dataset.bname);
+      C.lines[i].name = e.currentTarget.value;
+      delete C.lines[i].code;
+      paintSuggestions(i, e.currentTarget.value);
+    }, body());
     on("[data-bqty]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.bqty)].quantity = e.currentTarget.value; }, body());
     on("[data-brate]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.brate)].rate = e.currentTarget.value; }, body());
-    wrap.querySelector("#bterms").onchange = (e) => { C.terms = e.target.value; };
+    on("[data-bterm]", "click", (e) => { C.termsDays = Number(e.currentTarget.dataset.bterm); paint(); }, body());
     wrap.querySelector("#bmemo").oninput = (e) => { C.memo = e.target.value; };
     const create = wrap.querySelector("#bcreate");
     if (create) create.onclick = async (e, force) => {
       C.busy = true; paint();
       try {
+        const kept = C.lines.filter((l) => l.name.trim());
         const r = await booksApi({ action: "invoice-create", customer_id: C.customer.id,
-          lines: C.lines.filter((l) => l.name.trim()).map((l) => ({ name: l.name.trim(), quantity: Number(l.quantity) || 1, rate: Number(l.rate) || 0 })),
-          memo: C.memo, due_in_days: C.terms === "net30" ? 30 : null, force: force === true });
+          lines: kept.map((l) => ({ name: l.name.trim(), description: l.description || undefined, quantity: Number(l.quantity) || 1, rate: Number(l.rate) || 0 })),
+          memo: C.memo, terms_days: C.termsDays,
+          shortcut_codes: kept.map((l) => l.code).filter(Boolean), force: force === true });
         toast(`${r.invoice.number} created`);
-        closeSheet(); loadNativeInvoices(); nativeInvoiceSheet(r.invoice.id);
+        closeSheet(); loadNativeInvoices();
+        // First-use shortcut offer: hand-typed lines the owner might want as a
+        // one-tap code next time. Lines filled from a shortcut are skipped.
+        const offer = kept.filter((l) => !l.code && l.name.trim() && Number(l.rate) > 0 &&
+          !C.shortcuts.some((s) => s.name.toLowerCase() === l.name.trim().toLowerCase()));
+        if (offer.length) shortcutOfferSheet(offer, C.shortcuts, () => nativeInvoiceSheet(r.invoice.id));
+        else nativeInvoiceSheet(r.invoice.id);
       } catch (err) {
         C.busy = false; paint();
         if (err.status === 409 && err.data?.duplicate_of) {
@@ -826,13 +881,97 @@ async function nativeComposerSheet() {
   paint();
 }
 
+// "Would you like a shortcut for that?" — shown once per new hand-typed line
+// right after its first invoice. Yes = the code fills a line on every future
+// invoice; the owner's item catalog builds itself while they work.
+function shortcutOfferSheet(offerLines, knownShortcuts, done) {
+  const taken = [...knownShortcuts];
+  const wrap = sheet(`<h2>Save as shortcuts?</h2>
+    <p class="note">Next time, type the code and the whole line fills in.</p>
+    <div id="scoffer">${offerLines.map((l, i) => `
+      <div class="cmpline" data-scrow="${i}">
+        <div class="t"><span style="flex:1"><b>${esc(l.name)}</b> · ${money(Number(l.rate) || 0)}</span></div>
+        <div class="f" style="display:flex;gap:8px;align-items:center">
+          <input class="cmpinput sm" data-sccode="${i}" value="${esc(suggestShortcutCode(l.name, taken))}" style="max-width:120px;text-transform:uppercase" autocomplete="off">
+          <button class="pillbtn sm" data-scyes="${i}"><b>Save</b></button>
+          <button class="linkbtn" data-scno="${i}">No thanks</button>
+        </div>
+        <p class="note err" data-scerr="${i}"></p>
+      </div>`).join("")}</div>
+    <button class="cta" id="scdone"><span><b>Done</b></span></button>`);
+  let open = offerLines.length;
+  const finish = () => { closeSheet(); done && done(); };
+  const resolveRow = (i) => {
+    const row = wrap.querySelector(`[data-scrow="${i}"]`);
+    if (row) row.remove();
+    if (--open <= 0) finish();
+  };
+  offerLines.forEach((l, i) => {
+    wrap.querySelector(`[data-scyes="${i}"]`).onclick = async (e) => {
+      const code = wrap.querySelector(`[data-sccode="${i}"]`).value.trim().toUpperCase();
+      e.currentTarget.disabled = true;
+      try {
+        await booksApi({ action: "shortcut-save", code, name: l.name.trim(), description: l.description || "", rate: Number(l.rate) || 0 });
+        toast(`${code} saved`);
+        resolveRow(i);
+      } catch (err) {
+        e.currentTarget.disabled = false;
+        wrap.querySelector(`[data-scerr="${i}"]`).textContent = err.message;
+      }
+    };
+    wrap.querySelector(`[data-scno="${i}"]`).onclick = () => resolveRow(i);
+  });
+  wrap.querySelector("#scdone").onclick = finish;
+}
+
 async function booksSettingsSheet() {
   const wrap = sheet(`<h2>Books settings</h2><div id="bset"><div class="skel"></div></div>`);
   const body = () => wrap.querySelector("#bset");
   let s;
   try { s = await booksApi({ action: "settings" }); }
   catch (e) { body().innerHTML = `<p class="note err">${esc(e.message)}</p>`; return; }
+  let shortcuts = [];
+  try { shortcuts = (await booksApi({ action: "shortcuts" })).shortcuts || []; } catch {}
+  const br = s.branding || {};
+  const template = { v: br.template || "classic" };
+  const termsDefault = { v: Number(s.default_terms_days) || 0 };
+  const paintShortcuts = () => {
+    const box = wrap.querySelector("#sclist");
+    if (!box) return;
+    box.innerHTML = shortcuts.length ? shortcuts.map((sc) => `
+      <div class="cmpline"><div class="t">
+        <span style="flex:1"><b>${esc(sc.code)}</b> ${esc(sc.name)} · ${money(sc.rate)}</span>
+        <button class="del" data-scdel="${esc(sc.id)}">&#128465;</button></div></div>`).join("")
+      : `<p class="note">No shortcuts yet — you'll be offered one after each invoice with a new line item.</p>`;
+    box.querySelectorAll("[data-scdel]").forEach((btn) => btn.onclick = async () => {
+      await booksApi({ action: "shortcut-delete", id: btn.dataset.scdel }).catch(() => {});
+      shortcuts = shortcuts.filter((x) => x.id !== btn.dataset.scdel);
+      paintShortcuts();
+    });
+  };
   body().innerHTML = `
+    <div class="lanehead"><span class="eyebrow">Your brand</span></div>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px">
+      ${br.logo_url ? `<img src="${esc(br.logo_url)}" alt="" style="width:46px;height:46px;border-radius:11px;object-fit:cover" id="slogoimg">` : ""}
+      <button class="pillbtn" id="slogo">${br.logo_url ? "Replace logo" : "Upload logo"}</button>
+      <input type="file" id="slogofile" accept="image/jpeg,image/png,image/webp" hidden>
+    </div>
+    <label class="emailrow">Accent color (buttons and totals on your invoices)
+      <input id="saccent" type="color" value="${/^#[0-9a-fA-F]{6}$/.test(br.accent_color || "") ? esc(br.accent_color) : "#22d3ee"}" style="width:64px;height:36px;border:0;background:none;padding:0"></label>
+    <div class="lanehead"><span class="eyebrow">Invoice layout</span></div>
+    <div class="seg" id="stmpl">
+      ${["classic", "modern", "minimal"].map((t) => `<button class="${template.v === t ? "on" : ""}" data-stm="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}
+    </div>
+    <label class="emailrow">Business phone (shown on invoices)<input id="sphone" class="cmpinput" value="${esc(br.phone || "")}"></label>
+    <label class="emailrow">Invoice footer note (thank-you line, warranty, terms & conditions)
+      <textarea id="sfoot" class="cmpinput" rows="2">${esc(br.footer_note || "")}</textarea></label>
+    <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Default payment terms</span></div>
+    <div class="seg" id="sterms">
+      ${[[0, "COD"], [15, "Net 15"], [30, "Net 30"], [60, "Net 60"]].map(([d, lbl]) => `<button class="${termsDefault.v === d ? "on" : ""}" data-std="${d}">${lbl}</button>`).join("")}
+    </div>
+    <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Line-item shortcuts</span></div>
+    <div id="sclist"></div>
+    <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Tax &amp; numbering</span></div>
     <label class="emailrow">Tax name<input id="stax" class="cmpinput" value="${esc(s.tax.name)}"></label>
     <label class="emailrow">Tax rate %<input id="srate" type="number" min="0" max="100" step="0.01" class="cmpinput" value="${(Number(s.tax.rate) * 100).toFixed(2)}"></label>
     <label class="emailrow">Tax registration # (shown on invoices)<input id="sreg" class="cmpinput" value="${esc(s.tax.registration_number || "")}"></label>
@@ -842,12 +981,39 @@ async function booksSettingsSheet() {
       <textarea id="spay" class="cmpinput" rows="3">${esc(s.payment_instructions || "")}</textarea></label>
     <button class="cta" id="ssave"><span><b>Save settings</b></span></button>
     <p class="note err" id="serr"></p>`;
+  paintShortcuts();
+  on("[data-stm]", "click", (e) => {
+    template.v = e.currentTarget.dataset.stm;
+    wrap.querySelectorAll("[data-stm]").forEach((b) => b.classList.toggle("on", b.dataset.stm === template.v));
+  }, body());
+  on("[data-std]", "click", (e) => {
+    termsDefault.v = Number(e.currentTarget.dataset.std);
+    wrap.querySelectorAll("[data-std]").forEach((b) => b.classList.toggle("on", Number(b.dataset.std) === termsDefault.v));
+  }, body());
+  wrap.querySelector("#slogo").onclick = () => wrap.querySelector("#slogofile").click();
+  wrap.querySelector("#slogofile").onchange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const btn = wrap.querySelector("#slogo");
+    btn.disabled = true; btn.textContent = "Uploading…";
+    try {
+      const dataUrl = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file); });
+      const detail = await api("/workspace-profile", { action: "logo", image: { data: dataUrl, media_type: file.type } });
+      if (S.profile?.business) S.profile.business.logo_url = detail?.business?.logo_url ?? S.profile.business.logo_url;
+      btn.disabled = false; btn.textContent = "Replace logo"; toast("Logo updated");
+    } catch (err) { btn.disabled = false; btn.textContent = "Upload logo"; wrap.querySelector("#serr").textContent = err.message; }
+  };
   wrap.querySelector("#ssave").onclick = async () => {
     try {
       await booksApi({ action: "settings-save",
         tax_name: wrap.querySelector("#stax").value, tax_rate: Number(wrap.querySelector("#srate").value) / 100,
         registration_number: wrap.querySelector("#sreg").value, prefix: wrap.querySelector("#spre").value,
-        payment_instructions: wrap.querySelector("#spay").value });
+        payment_instructions: wrap.querySelector("#spay").value,
+        accent_color: wrap.querySelector("#saccent").value,
+        template: template.v,
+        business_phone: wrap.querySelector("#sphone").value,
+        footer_note: wrap.querySelector("#sfoot").value,
+        default_terms_days: termsDefault.v });
       toast("Settings saved"); closeSheet();
     } catch (e) { wrap.querySelector("#serr").textContent = e.message; }
   };
