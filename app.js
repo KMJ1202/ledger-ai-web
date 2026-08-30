@@ -659,11 +659,21 @@ async function loadNativeInvoices() {
   const filtered = invoices.filter((i) => !S.invoiceSearch ||
     (i.customer + " " + i.number).toLowerCase().includes(S.invoiceSearch));
   const chargesOn = connect?.charges_enabled === true;
+  // iOS Overview parity: the 2x2 KPI tile grid renders every time — zeros on
+  // a fresh workspace beat a blank screen. THIS MONTH / YTD come from the
+  // summary's monthly income series (payments received).
+  const nowKey = new Date().toISOString().slice(0, 7);
+  const thisMonth = (summary.months || []).find((m) => m.month === nowKey)?.income || 0;
+  const ytd = (summary.months || []).filter((m) => m.month.slice(0, 4) === nowKey.slice(0, 4))
+    .reduce((s, m) => s + Number(m.income || 0), 0);
+  const nums = invoices.map((i) => parseInt(String(i.number).replace(/\D/g, ""), 10)).filter(Number.isFinite);
+  const nextNum = nums.length ? Math.max(...nums) + 1 : 1041;
   slot.innerHTML = `
-    <div class="kpis">
-      <div class="kpi"><span>Open invoices</span><b>${summary.open_invoices ?? 0}</b></div>
-      <div class="kpi"><span>Outstanding</span><b>${money(summary.open_balance || 0)}</b></div>
-      <div class="kpi"><span>Overdue 31+ days</span><b>${money((summary.aging?.days_31_60 || 0) + (summary.aging?.days_61_plus || 0))}</b></div>
+    <div class="fintiles">
+      <div class="fintile"><small>THIS MONTH</small><b>${money(thisMonth)}</b></div>
+      <div class="fintile"><small>YEAR TO DATE</small><b>${money(ytd)}</b></div>
+      <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#36;</span><small>OUTSTANDING</small><b>${money(summary.open_balance || 0)}</b></div>
+      <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#128196;</span><span class="nextchip">Next #${esc(String(nextNum))}</span><small>OPEN INVOICES</small><b>${summary.open_invoices ?? 0}</b></div>
     </div>
     <button class="cta" id="newinv">
       <span class="ic">&#43;</span>
