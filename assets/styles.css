@@ -253,6 +253,29 @@ nav.sitenav .links .menu svg.mico{width:17px;height:17px;flex-shrink:0}
 .price li em svg{width:13px;height:13px}
 .price li b{color:var(--text)}
 .price .fine{margin-top:16px;color:var(--dim2);font-size:12.5px}
+/* pricing: every pillar as a colored icon row (site == app icon language) */
+.price .pillrows{display:flex;flex-direction:column;gap:7px;margin:28px 0 0;text-align:left}
+.price .prow{display:flex;align-items:center;gap:13px;padding:11px 13px;border-radius:14px;background:var(--glass);border:1px solid var(--line2);transition:border-color .18s ease,transform .18s ease}
+.price .prow:hover{transform:translateY(-1px)}
+.price .prow .pic{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.price .prow .pic svg{width:19px;height:19px;display:block}
+.price .prow .pt{font-size:13.5px;color:var(--dim);line-height:1.45}
+.price .prow .pt b{color:var(--text)}
+.price .prow.gold .pic{background:rgba(251,191,36,.14);color:var(--gold)}
+.price .prow.cyan .pic{background:rgba(58,200,245,.14);color:var(--cyan)}
+.price .prow.purple .pic{background:rgba(168,85,247,.16);color:var(--magenta)}
+.price .prow.emerald .pic{background:rgba(47,224,160,.15);color:var(--emerald)}
+.price .prow.orange .pic{background:rgba(251,146,60,.15);color:var(--orange)}
+.price .prow.blue .pic{background:rgba(59,130,246,.15);color:var(--blue)}
+.price .prow.magenta .pic{background:rgba(224,92,240,.16);color:var(--magenta)}
+.price .prow.gold:hover{border-color:rgba(251,191,36,.45)}
+.price .prow.cyan:hover{border-color:rgba(58,200,245,.45)}
+.price .prow.purple:hover{border-color:rgba(168,85,247,.45)}
+.price .prow.emerald:hover{border-color:rgba(47,224,160,.45)}
+.price .prow.orange:hover{border-color:rgba(251,146,60,.45)}
+.price .prow.blue:hover{border-color:rgba(59,130,246,.45)}
+.price .prow.magenta:hover{border-color:rgba(224,92,240,.45)}
+.price .pillrows + ul{margin:18px 0 26px;padding-top:14px;border-top:1px dashed var(--line)}
 
 /* ---------- how-it-works numbered steps ---------- */
 .steps{display:flex;flex-direction:column;gap:0;counter-reset:step}
