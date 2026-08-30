@@ -186,7 +186,7 @@ function appView() {
   const logo = S.profile?.business?.logo_url;
   root.innerHTML = `
   <header>
-    <div class="mark">${logo ? `<img src="${esc(logo)}" alt="">` : "L"}</div>
+    <div class="mark">${logo ? `<img src="${esc(logo)}" alt="">` : '<img src="assets/logo-mark-96.png" alt="">'}</div>
     <h1 id="bizname">${esc(S.profile?.business?.name || "Ledger AI")}</h1>
     <span id="usage"></span>
     <button class="hchat" id="hchat" title="Ask Ledger">&#128172;</button>
@@ -293,7 +293,7 @@ async function renderHome() {
     <div class="sect">
       ${osHead("CORE.01 · COMMAND", "Ledger")}
       <div class="brandcard">
-        <div class="tile">${logo ? `<img src="${esc(logo)}" alt="">` : "L"}</div>
+        <div class="tile">${logo ? `<img src="${esc(logo)}" alt="">` : '<img src="assets/logo-mark-96.png" alt="">'}</div>
         <div class="who"><b>Ledger AI</b><span>Intelligence.<br>Accuracy. Control.</span></div>
         <span class="status"><i></i>READY</span>
       </div>
@@ -1236,7 +1236,7 @@ async function renderFinance() {
   view().innerHTML = `<div class="sect">
     ${osHead(FINANCE_CODE[lane], FINANCE_TITLE[lane])}
     <div class="seg">
-      <button class="${lane === "invoices" ? "on" : ""}" data-fl="invoices">Invoices</button>
+      <button class="${lane === "invoices" ? "on" : ""}" data-fl="invoices">Overview</button>
       ${native ? "" : `<button class="${lane === "profit" ? "on" : ""}" data-fl="profit">Profit &amp; Loss</button>`}
       <button class="${lane === "receipts" ? "on" : ""}" data-fl="receipts">Receipts</button>
     </div>
@@ -5158,7 +5158,7 @@ function supportChatSheet() {
 
 /* ---------------- AUTH / SETUP / JOIN ---------------- */
 function loginView(sent) {
-  root.innerHTML = `<div class="login"><div class="mark">L</div><h2>Ledger AI</h2>
+  root.innerHTML = `<div class="login"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>Ledger AI</h2>
     <p>${sent ? "Check your email — tap the sign-in link and you'll land right back here." : "Your business copilot. Sign in with your work email."}</p>
     ${sent ? "" : '<input id="email" type="email" placeholder="you@business.com" autocomplete="email"><button class="btn" id="go">Send sign-in link</button>'}
     <p style="margin-top:18px;font-size:12.5px"><a href="privacy.html" style="color:var(--dim)">Privacy</a> &middot; <a href="support.html" style="color:var(--dim)">Support</a></p></div>`;
@@ -5173,7 +5173,7 @@ function loginView(sent) {
 }
 
 function setupView() {
-  root.innerHTML = `<div class="login"><div class="mark">L</div><h2>Welcome to Ledger AI</h2>
+  root.innerHTML = `<div class="login"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>Welcome to Ledger AI</h2>
     <p>Let's set up your business. Your 14-day free trial starts now — no card needed.</p>
     <input id="bizname" placeholder="Business name" maxlength="160" autocomplete="organization">
     <select id="bizcur" style="margin-bottom:11px">
@@ -5204,7 +5204,7 @@ const ONBOARD_QUESTIONS = [
 ];
 
 function onboardInterview(bizName) {
-  root.innerHTML = `<div class="login" style="max-width:440px"><div class="mark">L</div><h2>Tell Ledger about ${esc(bizName)}</h2>
+  root.innerHTML = `<div class="login" style="max-width:440px"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>Tell Ledger about ${esc(bizName)}</h2>
     <p>Answer what you like, skip what you don't — Ledger remembers all of it and starts day one already knowing your business.</p>
     ${ONBOARD_QUESTIONS.map((o) => `<label class="fld" style="text-align:left;display:block;margin-top:12px">${esc(o.q).toUpperCase()}</label>
       <input id="${o.id}" placeholder="${esc(o.ph)}" maxlength="400">`).join("")}
@@ -5230,7 +5230,7 @@ function onboardInterview(bizName) {
 }
 
 function joinView(businessName) {
-  root.innerHTML = `<div class="login"><div class="mark">L</div><h2>You're invited ✨</h2>
+  root.innerHTML = `<div class="login"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>You're invited ✨</h2>
     <p><b>${esc(businessName)}</b> invited you to their Ledger AI team. Enter the 6-digit join code the owner gave you.</p>
     <input id="joincode" placeholder="6-digit code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="text-align:center;letter-spacing:8px;font-size:22px;font-weight:800">
     <button class="btn" id="joingo">Join the team →</button>
