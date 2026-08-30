@@ -2771,7 +2771,7 @@ async function renderPhone() {
         try { await api("/phone", { action: "quo-disconnect" }); toast("Quo disconnected"); renderPhone(); }
         catch (err) { cqd.disabled = false; toast(err.message); }
       };
-      $("phsettings").onclick = () => phoneSettingsSheet(d);
+      if ($("phsettings")) $("phsettings").onclick = () => phoneSettingsSheet(d);
       on("[data-plane]", "click", (e) => { S.phoneLane = e.currentTarget.dataset.plane; renderPhone(); });
       if ($("remindall")) $("remindall").onclick = () => apptReminderPreviewSheet();
       on("[data-needs]", "click", (e) => openNeedsYou(d, e.currentTarget.dataset.needs));
