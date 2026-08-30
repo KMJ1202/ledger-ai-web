@@ -1242,18 +1242,18 @@ async function renderFinance() {
     catch { S.booksProvider = "quickbooks"; }
   }
   const native = S.booksProvider === "native";
-  const lane = (S.financeLane === "profit" && !native) || S.financeLane === "receipts" ? S.financeLane : "invoices";
+  const lane = S.financeLane === "profit" || S.financeLane === "receipts" ? S.financeLane : "invoices";
   view().innerHTML = `<div class="sect">
     ${osHead(FINANCE_CODE[lane], FINANCE_TITLE[lane])}
     <div class="seg">
       <button class="${lane === "invoices" ? "on" : ""}" data-fl="invoices">Overview</button>
-      ${native ? "" : `<button class="${lane === "profit" ? "on" : ""}" data-fl="profit">Profit &amp; Loss</button>`}
+      <button class="${lane === "profit" ? "on" : ""}" data-fl="profit">Profit &amp; Loss</button>
       <button class="${lane === "receipts" ? "on" : ""}" data-fl="receipts">Receipts</button>
     </div>
     <div id="finbody"><div class="skel"></div><div class="skel"></div></div>
   </div>`;
   on("[data-fl]", "click", (e) => { S.financeLane = e.currentTarget.dataset.fl; renderFinance(); });
-  if (lane === "profit") loadProfit();
+  if (lane === "profit") { if (native) loadNativeProfit(); else loadProfit(); }
   else if (lane === "receipts") loadReceipts();
   else if (native) loadNativeInvoices();
   else loadInvoices();
@@ -1615,6 +1615,38 @@ async function withPdf(inv, sh, fn) {
 }
 
 /* ---------------- PROFIT ---------------- */
+// Built-in books P&L — income is payments received, expenses are logged
+// costs, straight off the books summary. Rendered even when empty: a new
+// shop should see the board it is about to fill, not a blank lane.
+async function loadNativeProfit() {
+  const slot = $("finbody"); if (!slot) return;
+  let summary;
+  try { summary = await booksApi({ action: "summary" }); }
+  catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  const months = (summary.months || []).slice(-12).reverse();
+  const nowKey = new Date().toISOString().slice(0, 7);
+  const cur = months.find((m) => m.month === nowKey) || { income: 0, expenses: 0, net: 0 };
+  const ytdRows = months.filter((m) => m.month.slice(0, 4) === nowKey.slice(0, 4));
+  const ytdNet = ytdRows.reduce((s, m) => s + Number(m.net || 0), 0);
+  const monthLabel = (k) => new Date(k + "-15").toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  slot.innerHTML = `
+    <div class="fintiles">
+      <div class="fintile"><small>THIS MONTH NET</small><b>${money(cur.net || 0)}</b></div>
+      <div class="fintile"><small>YEAR TO DATE NET</small><b>${money(ytdNet)}</b></div>
+    </div>
+    <div class="panel">
+      <h3>&#128200; Month by month</h3>
+      <p class="sub">Income is payments received; expenses are the costs you've logged on jobs and receipts.</p>
+    </div>
+    ${months.length ? `<div class="list">${months.map((m) => `
+      <div class="item">
+        <div class="main"><div class="ttl">${esc(monthLabel(m.month))}</div>
+          <div class="sub">${money(m.income || 0)} in &middot; ${money(m.expenses || 0)} out</div></div>
+        <div class="amt" style="color:${Number(m.net || 0) >= 0 ? "var(--emerald)" : "var(--red)"}">${money(m.net || 0)}</div>
+      </div>`).join("")}</div>`
+    : `<div class="panel" style="text-align:center"><p class="sub" style="margin:0">No activity yet — your first paid invoice starts this board.</p></div>`}`;
+}
+
 async function loadProfit() {
   const slot = $("finbody"); if (!slot) return;
   let refreshError = null;
@@ -2471,13 +2503,6 @@ async function loadReceipts() {
       ((r.vendor || "") + " " + (r.category || "") + " " + (r.received_at || "") + " " + (r.subject || "") + " " + (r.summary || ""))
         .toLowerCase().includes(rq));
     slot.innerHTML = `
-      <button class="queue" id="batchqueue">
-        <div class="ic">&#128229;</div>
-        <div class="m"><small>QuickBooks batch queue</small>
-          <b>${ready.length} queued · ${money(queueTotal)}</b>
-          <span>Categorised receipts waiting to post as expenses.</span></div>
-        <div class="chev">&#8250;</div>
-      </button>
       <div class="panel">
         <h3>&#128247; Photograph a receipt</h3>
         <p class="sub">Snap the paper. Ledger reads the vendor, date and total, then it queues like any other receipt.</p>
@@ -2485,6 +2510,13 @@ async function loadReceipts() {
           <button class="btn primary" id="rcptshoot">Take photo</button>
           <button class="btn ghost" id="rcptpick">Choose from library</button>
         </div>
+      <button class="queue" id="batchqueue">
+        <div class="ic">&#128229;</div>
+        <div class="m"><small>QuickBooks batch queue</small>
+          <b>${ready.length} queued · ${money(queueTotal)}</b>
+          <span>Categorised receipts waiting to post as expenses.</span></div>
+        <div class="chev">&#8250;</div>
+      </button>
         <input type="file" id="rcptcam" accept="image/*" capture="environment" hidden>
         <input type="file" id="rcptlib" accept="image/*" hidden>
         <p class="note" id="rcptcamnote" style="margin-top:8px"></p>
