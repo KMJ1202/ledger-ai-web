@@ -86,3 +86,19 @@
   activate(0);
   start();
 })();
+
+// Scroll-triggered replay panels (.revplay): play the line-in animation once when visible.
+(function () {
+  var panels = Array.prototype.slice.call(document.querySelectorAll(".revplay"));
+  if (!panels.length) return;
+  if (!("IntersectionObserver" in window)) {
+    panels.forEach(function (p) { p.classList.add("play"); });
+    return;
+  }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) { e.target.classList.add("play"); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.35 });
+  panels.forEach(function (p) { io.observe(p); });
+})();

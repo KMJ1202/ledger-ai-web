@@ -33,8 +33,8 @@ a{color:inherit}
 header.site{position:sticky;top:0;z-index:40;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);background:rgba(5,7,11,.72);border-bottom:1px solid var(--line2)}
 nav.sitenav{display:flex;align-items:center;gap:10px;padding:16px 0;position:relative}
 nav.sitenav .brand{display:flex;align-items:center;gap:11px;text-decoration:none;flex-shrink:0}
-nav.sitenav .brand img{width:36px;height:36px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.5)}
-nav.sitenav .brand b{font-size:17px;font-weight:800;letter-spacing:-.2px;color:#fff}
+nav.sitenav .brand img{width:44px;height:44px;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.5),0 0 22px rgba(58,200,245,.18)}
+nav.sitenav .brand b{font-size:19px;font-weight:800;letter-spacing:-.3px;color:#fff}
 nav.sitenav .links{display:flex;align-items:center;gap:26px;margin-left:34px;flex:1}
 nav.sitenav .links a{color:var(--dim);text-decoration:none;font-size:14.5px;font-weight:600}
 nav.sitenav .links a:hover{color:var(--text)}
@@ -90,9 +90,22 @@ section.tight{padding:56px 0}
 
 /* ---------- hero ---------- */
 .hero{padding:96px 0 40px;text-align:center}
-.hero .mark-hero{width:112px;margin:0 auto 30px;filter:drop-shadow(0 18px 44px rgba(58,200,245,.22))}
+.hero .mark-hero{width:176px;margin:0 auto 32px;filter:drop-shadow(0 18px 44px rgba(58,200,245,.22));animation:heroGlow 5.5s ease-in-out infinite}
+@keyframes heroGlow{
+  0%,100%{filter:drop-shadow(0 18px 44px rgba(58,200,245,.2))}
+  50%{filter:drop-shadow(0 24px 64px rgba(168,85,247,.42))}
+}
 .hero h1{font-size:clamp(38px,7vw,70px);font-weight:900;letter-spacing:-2px;line-height:1.05}
-.hero h1 .grad{background:linear-gradient(135deg,var(--cyan),var(--purple) 60%,var(--magenta));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero h1 .grad{
+  background:linear-gradient(120deg,var(--cyan),var(--purple) 38%,var(--magenta) 58%,var(--purple) 78%,var(--cyan));
+  background-size:240% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:gradShift 8s ease-in-out infinite;
+}
+@keyframes gradShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+@media (prefers-reduced-motion:reduce){
+  .hero .mark-hero{animation:none}
+  .hero h1 .grad{animation:none}
+}
 .hero .say{font-family:var(--mono);font-size:13px;letter-spacing:2.2px;color:var(--emerald);text-transform:uppercase;font-weight:700;display:inline-flex;align-items:center;gap:8px;margin-bottom:18px}
 .hero .say .dot{width:7px;height:7px;border-radius:50%;background:var(--emerald);box-shadow:0 0 8px var(--emerald)}
 .hero p.lead{color:var(--dim);font-size:19px;max-width:640px;margin:20px auto 34px;line-height:1.6}
@@ -198,10 +211,15 @@ section.tight{padding:56px 0}
 .intcard .top{display:flex;align-items:center;gap:14px;position:relative}
 .intcard .ic{width:52px;height:52px;border-radius:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .intcard .ic img{width:26px;height:26px;display:block}
+.intcard .ic svg{width:26px;height:26px;display:block}
 .card .ic svg{width:24px;height:24px;display:block}
 .grid.two.intgrid{grid-template-columns:repeat(2,1fr)}
 @media (max-width:720px){.grid.two.intgrid{grid-template-columns:1fr}}
 nav.sitenav .links .menu img.mico{width:18px;height:18px;flex-shrink:0}
+nav.sitenav .links .menu svg.mico{width:17px;height:17px;flex-shrink:0}
+.intcard.gold{border-color:rgba(251,191,36,.28)}.intcard.gold .ic{background:rgba(251,191,36,.15);color:var(--gold)}.intcard.gold .glow{background:var(--gold)}
+.intcard.red{border-color:rgba(248,113,113,.28)}.intcard.red .ic{background:rgba(248,113,113,.15);color:var(--red)}.intcard.red .glow{background:var(--red)}
+.introhero .icobig svg{width:36px;height:36px;display:block}
 .intcard h3{font-size:18px;font-weight:800;letter-spacing:-.2px}
 .intcard p{color:var(--dim);font-size:14px;line-height:1.55;position:relative}
 .intcard .go{margin-left:auto;color:var(--dim2);font-size:18px}
@@ -210,6 +228,8 @@ nav.sitenav .links .menu img.mico{width:18px;height:18px;flex-shrink:0}
 .intcard.emerald{border-color:rgba(47,224,160,.28)}.intcard.emerald .ic{background:rgba(47,224,160,.16);color:var(--emerald)}.intcard.emerald .glow{background:var(--emerald)}
 .intcard.purple{border-color:rgba(168,85,247,.3)}.intcard.purple .ic{background:rgba(168,85,247,.17);color:var(--magenta)}.intcard.purple .glow{background:var(--purple)}
 .intcard.blue{border-color:rgba(59,130,246,.3)}.intcard.blue .ic{background:rgba(59,130,246,.17);color:var(--blue)}.intcard.blue .glow{background:var(--blue)}
+.intcard.magenta{border-color:rgba(224,92,240,.3)}.intcard.magenta .ic{background:rgba(224,92,240,.16);color:var(--magenta)}.intcard.magenta .glow{background:var(--magenta)}
+.intcard:hover.magenta{border-color:rgba(224,92,240,.6)}
 .intcard:hover.cyan{border-color:rgba(58,200,245,.6)}
 .intcard:hover.orange{border-color:rgba(251,146,60,.55)}
 .intcard:hover.emerald{border-color:rgba(47,224,160,.55)}
@@ -270,6 +290,24 @@ nav.sitenav .links .menu img.mico{width:18px;height:18px;flex-shrink:0}
 }
 .introhero h1{font-size:clamp(32px,5.6vw,52px);font-weight:900;letter-spacing:-1.4px;line-height:1.08}
 .introhero p.lead{color:var(--dim);font-size:17.5px;max-width:600px;margin:18px auto 0;line-height:1.6}
+
+/* ---------- showcase: copy + live demo panel side by side ---------- */
+.showcase{display:grid;grid-template-columns:1fr 1fr;gap:52px;align-items:center}
+@media (max-width:880px){.showcase{grid-template-columns:1fr;gap:36px}}
+.showcase .sectitle{text-align:left;font-size:clamp(26px,3.6vw,38px)}
+.showcase .subtext{text-align:left;margin:16px 0 0;max-width:none}
+.showcase .chatdemo{margin:0;max-width:none}
+.showcase .cta-row{justify-content:flex-start;margin-top:26px}
+.showcase .caplist{margin-top:18px}
+/* scroll-triggered replay panels: lines type in when the panel scrolls into view */
+.revplay .rline,.revplay .rrow,.revplay .rfoot,.revplay .rsep{opacity:0}
+.revplay.play .rline,.revplay.play .rrow,.revplay.play .rfoot,.revplay.play .rsep{
+  animation:lineIn .5s cubic-bezier(.2,.7,.3,1) both;
+  animation-delay:calc(var(--d,0) * 150ms + 100ms);
+}
+@media (prefers-reduced-motion:reduce){
+  .revplay .rline,.revplay .rrow,.revplay .rfoot,.revplay .rsep{opacity:1;animation:none}
+}
 
 /* ---------- final CTA band ---------- */
 .ctaband{
@@ -335,4 +373,5 @@ footer.site .copy{color:var(--dim2);font-size:12.5px}
   .intcard.gold:hover{border-color:rgba(251,191,36,.5)}
   .intcard.red:hover{border-color:rgba(248,113,113,.5)}
   .intcard.blue:hover{border-color:rgba(59,130,246,.5)}
+  .intcard.magenta:hover{border-color:rgba(224,92,240,.5)}
 }
