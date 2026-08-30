@@ -3580,6 +3580,8 @@ function requestNumberCard(pending) {
     <input id="rnbiz" placeholder="Your business name">
     <label class="fld" style="margin-top:10px">PREFERRED AREA CODE</label>
     <input id="rnarea" placeholder="e.g. 587" inputmode="numeric" maxlength="3">
+    <label class="fld" style="margin-top:10px">YOUR CELL — CALLS FORWARD HERE</label>
+    <input id="rncell" placeholder="e.g. 587 555 0123" inputmode="tel">
     <label class="fld" style="margin-top:10px">BUSINESS HOURS</label>
     <input id="rnhours" placeholder="e.g. Mon–Fri 8am–5pm">
     <label class="fld" style="margin-top:10px">AUTO-REPLY TEXT (OPTIONAL)</label>
@@ -3599,7 +3601,8 @@ function wireRequestNumber(pending) {
     try {
       const res = await api("/phone", {
         action: "request-number", businessName,
-        areaCode: $("rnarea").value.trim(), hoursNote: $("rnhours").value.trim(),
+        areaCode: $("rnarea").value.trim(), forwardTo: $("rncell").value.trim(),
+        hoursNote: $("rnhours").value.trim(),
         autoReplyTemplate: $("rntemplate").value.trim(),
       });
       // Managed lane provisions instantly; the fallback queue answers with a
