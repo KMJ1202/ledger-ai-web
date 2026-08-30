@@ -3597,12 +3597,15 @@ function wireRequestNumber(pending) {
     if (businessName.length < 2) { note.className = "note err"; note.textContent = "Business name is required"; return; }
     e.currentTarget.disabled = true;
     try {
-      await api("/phone", {
+      const res = await api("/phone", {
         action: "request-number", businessName,
         areaCode: $("rnarea").value.trim(), hoursNote: $("rnhours").value.trim(),
         autoReplyTemplate: $("rntemplate").value.trim(),
       });
-      toast("Request sent — we'll text you when your number is live");
+      // Managed lane provisions instantly; the fallback queue answers with a
+      // pending request instead. Same endpoint, two possible outcomes.
+      if (res?.hasNumber && res?.number?.e164) toast(`Your business number is live: ${formatE164(res.number.e164)}`);
+      else toast("Request sent — we'll text you when your number is live");
       renderPhone();
     } catch (err) { e.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
   };
