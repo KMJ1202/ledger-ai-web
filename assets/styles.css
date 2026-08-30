@@ -572,3 +572,35 @@ footer.site .fbase .noseat{font-family:var(--mono);font-size:10px;letter-spacing
   animation-delay:calc(var(--d,0) * 160ms + 80ms);
 }
 @media (prefers-reduced-motion:reduce){.hscene .anim{opacity:1;animation:none}}
+
+/* ---------- app-true reviews screen (Customers → Reviews lane, from app.html) ---------- */
+.phoneframe .seg{display:flex;background:rgba(255,255,255,.05);border:1px solid var(--line2);border-radius:15px;padding:4px;gap:4px;margin:12px 14px 0}
+.phoneframe .seg span{flex:1;text-align:center;font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--dim);padding:8px 4px;border-radius:12px}
+.phoneframe .seg span.on{background:rgba(255,255,255,.13);color:var(--cyan);font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.phoneframe .appbody2{padding:12px 14px 4px;text-align:left}
+.phoneframe .revhero{border:1px solid rgba(251,191,36,.28);border-radius:20px;padding:15px;background:linear-gradient(165deg,rgba(251,191,36,.06),rgba(255,255,255,.012))}
+.phoneframe .revhero .t{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.phoneframe .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:1.6px;font-weight:800;color:var(--gold);text-transform:uppercase}
+.phoneframe .livechip{font-family:var(--mono);font-size:8.5px;font-weight:800;letter-spacing:1.2px;color:var(--emerald);padding:3px 8px;border-radius:99px;background:rgba(47,224,160,.12);border:1px solid rgba(47,224,160,.35);flex-shrink:0}
+.phoneframe .revhero .score{display:flex;align-items:center;gap:13px;margin:11px 0}
+.phoneframe .revhero .score>b{font-size:44px;font-weight:900;letter-spacing:-2px;background:linear-gradient(180deg,#fbbf24,#f97316);-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1}
+.phoneframe .starrow{color:var(--gold);font-size:15px;letter-spacing:2px}
+.phoneframe .revhero .score small{display:block;font-size:11.5px;font-weight:700;color:var(--dim);margin-top:4px}
+.phoneframe .revhero .pulse{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
+.phoneframe .revhero .pm{border-radius:13px;padding:9px}
+.phoneframe .revhero .pm small{display:block;font-family:var(--mono);font-size:8px;font-weight:800;letter-spacing:1px;color:var(--dim)}
+.phoneframe .revhero .pm b{display:block;font-size:17px;font-weight:900;margin-top:3px}
+.phoneframe .revhero .pm i{display:block;font-style:normal;font-size:8.5px;color:var(--dim);margin-top:2px}
+.phoneframe .revhero .pm.gold{background:rgba(251,191,36,.09);border:1px solid rgba(251,191,36,.26)}.phoneframe .revhero .pm.gold b{color:var(--gold)}
+.phoneframe .revhero .pm.cyan{background:rgba(58,200,245,.09);border:1px solid rgba(58,200,245,.24)}.phoneframe .revhero .pm.cyan b{color:var(--cyan)}
+.phoneframe .revhero .pm.em{background:rgba(47,224,160,.09);border:1px solid rgba(47,224,160,.24)}.phoneframe .revhero .pm.em b{color:var(--emerald)}
+.phoneframe .revhero .bizname{font-family:var(--mono);font-size:9px;font-weight:800;letter-spacing:1.7px;color:var(--dim2);margin-top:10px}
+.phoneframe .revintel{border:1px solid rgba(58,200,245,.22);border-radius:18px;padding:14px;margin-top:12px;background:linear-gradient(165deg,rgba(58,200,245,.04),rgba(255,255,255,.01))}
+.phoneframe .cihead{font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:1.6px;color:var(--cyan);margin-bottom:10px}
+.phoneframe .cibar{display:flex;align-items:center;gap:8px;margin:6px 0}
+.phoneframe .cibar b{font-family:var(--mono);font-size:9px;font-weight:800;color:var(--gold);width:26px;flex-shrink:0}
+.phoneframe .cibar .track{flex:1;height:7px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden}
+.phoneframe .cibar .track i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#fbbf24,#fb923c)}
+.phoneframe .cibar em{font-style:normal;font-size:11px;font-weight:800;color:var(--dim);width:20px;text-align:right}
+.phoneframe .ciline{display:flex;gap:9px;font-size:12px;margin:9px 0 0;align-items:flex-start;line-height:1.5;color:var(--text)}
+.phoneframe .ciline .icx{flex-shrink:0}

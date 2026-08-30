@@ -12,7 +12,7 @@
 <meta property="og:image" content="https://heyledger.ai//assets/logo-full-640.png">
 <meta property="og:type" content="website">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/assets/styles.css?v=35">
+<link rel="stylesheet" href="/assets/styles.css?v=36">
 <title>Ledger AI — Your business, on speaking terms</title>
 <link rel="canonical" href="https://heyledger.ai/">
 <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "Organization", "@id": "https://heyledger.ai/#org", "name": "Ledger AI", "url": "https://heyledger.ai/", "logo": "https://heyledger.ai//assets/logo-full-640.png", "email": "supportteam@heyledger.ai", "address": {"@type": "PostalAddress", "addressLocality": "Calgary", "addressRegion": "AB", "addressCountry": "CA"}, "description": "Ledger AI is the AI business platform for small service businesses: live QuickBooks answers, AI-drafted invoicing, crew dispatch with live job links and time cards, customer portals, and booking — with no per-seat fees."}, {"@type": "WebSite", "@id": "https://heyledger.ai/#website", "url": "https://heyledger.ai/", "name": "Ledger AI", "publisher": {"@id": "https://heyledger.ai/#org"}}, {"@type": "SoftwareApplication", "@id": "https://heyledger.ai/#app", "name": "Ledger AI", "operatingSystem": "iOS, Web", "applicationCategory": "BusinessApplication", "url": "https://heyledger.ai/", "publisher": {"@id": "https://heyledger.ai/#org"}, "offers": {"@type": "Offer", "price": "699", "priceCurrency": "CAD", "description": "One plan, everything included. $699/month USD or CAD, no per-seat fees for crew or customers."}, "description": "An AI copilot that runs a service business on QuickBooks Online or its own built-in books, wired into Gmail and Google Calendar: conversational answers from live books, invoice and estimate drafting with tap-to-confirm, crew dispatch with no-app live job links, punch-clock time cards with overtime, customer Client Hub portals with one-tap quote approval, and a public booking page.", "featureList": ["AI copilot with live QuickBooks answers (text and voice)", "Invoice and estimate drafting with tap-to-confirm posting", "Built-in books: numbered, taxed invoicing without QuickBooks", "Online card payments via Stripe with hosted payment pages", "Estimate share pages customers accept or decline in one tap", "Night-before appointment reminder texts", "Mark invoices paid, print invoices, send payment reminders", "Receipt Radar: automatic receipt capture from Gmail plus photo receipts", "Crew dispatch: roster, one-tap dispatch emails, morning day sheets", "Crew live links: job status taps, turn-by-turn navigation, no app install", "Punch-clock time cards: server-stamped hours, Alberta overtime, payroll CSV export", "Client Hub: personal customer portals with live balance, invoices, one-tap quote approval, service history", "Public booking page with calendar conflict checking", "Leads pipeline with follow-up call list", "Dedicated business phone number with same-second missed-call auto-text and automatic lead capture", "Google review reply drafting with owner approval", "Business memory and Advisor Mode", "No per-seat fees for crew members or customers"]}]}</script>
@@ -77,7 +77,7 @@
           <div class="appchat">
             <div class="acard anim" style="--d:0"><h4>Missed call · 2:41 PM</h4><div class="cust">(403) 555-0148</div>
               <table><tr><td>Rang out</td><td>4 rings · voicemail</td></tr><tr><td>Auto-text</td><td>sent 0:04 later</td></tr></table></div>
-            <div class="amsg ai anim" style="--d:1">"Sorry we missed you! This is KMJ Tire — we'll call you right back. Text us here anytime."</div>
+            <div class="amsg ai anim" style="--d:1">"Sorry we missed you! We'll call you right back — text us here anytime."</div>
             <div class="acard anim" style="--d:2"><h4>Lead saved</h4><div class="cust">"Needs 4 tires for an F-150, wants Friday."</div>
               <div class="arow"><span class="ab confirm">Call back</span><span class="ab cancel">Open lead</span></div></div>
           </div>
@@ -184,20 +184,35 @@
         </div>
         <div class="cta-row"><a class="btn ghost" href="/integrations/google-business/">How review replies work →</a></div>
       </div>
-      <div class="chatdemo revplay">
-        <div class="chead"><span class="hicon" style="color:var(--magenta)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.7 5.6 6.3.8-4.6 4.3 1.2 6.1L12 16.9l-5.6 2.9 1.2-6.1L3 9.4l6.3-.8z"/></svg></span><b>Review watch</b><span class="live"><i></i><span>Drafted — waiting on you</span></span></div>
-        <div class="q"><span class="hicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.7 5.6 6.3.8-4.6 4.3 1.2 6.1L12 16.9l-5.6 2.9 1.2-6.1L3 9.4l6.3-.8z"/></svg></span>New Google review — ★★★★★ · 8:41 PM</div>
-        <div class="readout">
-          <div class="rline" style="--d:0"><span class="k">REVIEWER</span><span class="v">Mike D.</span><span class="k2">first-time customer</span></div>
-          <div class="rrow" style="--d:1"><span class="doc">Wrote</span><span class="due">"In and out in 40 minutes, four new tires, fair price. These guys hustle."</span></div>
-          <div class="rsep" style="--d:2"></div>
-          <div class="rline sum" style="--d:3"><span class="k">DRAFT</span><span class="v">Ready</span><span class="k2">written in your voice</span></div>
-          <div class="rrow" style="--d:4"><span class="doc">Reply</span><span class="due">"Thanks Mike — 40 minutes is the goal every time. See you at the next rotation!"</span></div>
-          <div class="rsep" style="--d:5"></div>
-          <div class="rline" style="--d:6"><span class="k">STATUS</span><span class="v">Awaiting approval</span><span class="k2">publishes only when you approve</span></div>
-          <div class="rfoot" style="--d:7">Approve, edit, or toss — your call<span class="cursor"></span></div>
+      <div class="phoneframe"><div class="screen">
+        <div class="apphead"><div class="aposhead"><span class="dash"></span><span class="code">LEDGER OS // CRM.05 · RELATIONSHIPS</span><span class="eq"><i></i><i></i><i></i></span></div>
+        <h3 class="apostitle">Customers</h3><div class="aposrule"></div></div>
+        <div class="seg" aria-hidden="true"><span>Directory</span><span class="on">Reviews</span><span>To-do</span></div>
+        <div class="appbody2">
+          <div class="revhero">
+            <div class="t"><span class="eyebrow">&#128737; Reputation command</span><span class="livechip">LIVE · GOOGLE</span></div>
+            <div class="score"><b>4.9</b><div class="m"><span class="starrow">★★★★★</span><small>214 Google reviews</small></div></div>
+            <div class="pulse">
+              <div class="pm gold"><small>RATING</small><b>4.90</b><i>public average</i></div>
+              <div class="pm cyan"><small>REVIEWS</small><b>214</b><i>all time</i></div>
+              <div class="pm em"><small>UNANSWERED</small><b>0</b><i>all replied — elite</i></div>
+            </div>
+            <div class="bizname">YOUR SHOP&nbsp;&nbsp;|&nbsp;&nbsp;YOUR CITY</div>
+          </div>
+          <div class="revintel">
+            <div class="cihead">&#129504; REVIEW INTELLIGENCE</div>
+            <div class="cibar"><b>5★</b><div class="track"><i style="width:90%"></i></div><em>9</em></div>
+            <div class="cibar"><b>4★</b><div class="track"><i style="width:10%"></i></div><em>1</em></div>
+            <div class="cibar"><b>3★</b><div class="track"><i style="width:0%"></i></div><em>0</em></div>
+            <div class="cibar"><b>2★</b><div class="track"><i style="width:0%"></i></div><em>0</em></div>
+            <div class="cibar"><b>1★</b><div class="track"><i style="width:0%"></i></div><em>0</em></div>
+            <p class="ciline"><span class="icx" style="color:var(--emerald)">&#10024;</span>9 of your last 10 reviews are five-star.</p>
+            <p class="ciline"><span class="icx" style="color:var(--emerald)">&#9989;</span>Every recent review has an owner reply. That consistency is rare and customers notice.</p>
+            <p class="ciline"><span class="icx" style="color:var(--magenta)">&#128337;</span>Newest review landed 2d ago.</p>
+          </div>
         </div>
-      </div>
+        <div class="apptabs" aria-hidden="true"><span><svg viewBox="0 0 24 24"><path d="M12 2.6l1.9 4.4 4.4 1.9-4.4 1.9L12 15.2l-1.9-4.4L5.7 8.9l4.4-1.9L12 2.6zm6.4 11.1l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1zm-12 1.2l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7L4 18l1.7-.7.7-1.7z"/></svg>Ledger</span><span><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm.9 15.4v1.2h-1.6v-1.2c-1.6-.2-2.8-1.1-3-2.7h1.8c.1.8.8 1.3 2 1.3 1.1 0 1.8-.5 1.8-1.2 0-.7-.5-1-2-1.4-2.1-.5-3.3-1.2-3.3-2.9 0-1.5 1.1-2.5 2.7-2.7V6.6h1.6v1.2c1.6.3 2.6 1.3 2.7 2.7h-1.8c-.1-.8-.7-1.3-1.7-1.3-1 0-1.7.5-1.7 1.1 0 .7.6 1 2 1.3 2.2.5 3.3 1.3 3.3 3 0 1.5-1.1 2.6-2.8 2.8z"/></svg>Finance</span><span><svg viewBox="0 0 24 24"><path d="M7 2v2H5.5A2.5 2.5 0 003 6.5v13A2.5 2.5 0 005.5 22h13a2.5 2.5 0 002.5-2.5v-13A2.5 2.5 0 0018.5 4H17V2h-2v2H9V2H7zm12 8v9.2c0 .4-.3.8-.8.8H5.8a.8.8 0 01-.8-.8V10h14zM7.5 12a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zM7.5 16a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2z"/></svg>Calendar</span><span><svg viewBox="0 0 24 24"><path d="M6.6 2.6l3.6.6.9 4.2-2.3 1.8c.9 2.3 2.7 4.1 5 5l1.8-2.3 4.2.9.6 3.6c0 1.4-1.1 2.6-2.6 2.6C9.8 19 5 14.2 5 5.2c0-1.4 1.2-2.6 1.6-2.6z"/></svg>Phone</span><span class="on"><svg viewBox="0 0 24 24"><path d="M9 4.5a3.4 3.4 0 110 6.8 3.4 3.4 0 010-6.8zm7.6 1a2.7 2.7 0 110 5.4 2.7 2.7 0 010-5.4zM9 13c3.1 0 6 1.5 6 3.4V19H3v-2.6C3 14.5 5.9 13 9 13zm7.6.6c2.6 0 4.4 1.2 4.4 2.7V19h-4.6v-2.6c0-1.1-.5-2-1.3-2.7h1.5z"/></svg>Customers</span></div>
+      </div></div>
     </div>
   </div>
 </section>
@@ -292,7 +307,7 @@
   <div class="wrap">
     <div class="proofband">
       <div class="pquote">Ledger wasn't designed in a boardroom. <span class="hl">It runs our own tire shop.</span> Every invoice, every missed-call text, every review reply on this page is exactly how our Calgary shop operates today.</div>
-      <div class="pwho"><img src="/assets/logo-mark-96.png" alt=""><span><b>Built inside KMJ Tire</b> — Calgary, Alberta, Canada</span></div>
+      <div class="pwho"><img src="/assets/logo-mark-96.png" alt=""><span><b>Built inside a working tire shop</b> — Calgary, Alberta, Canada</span></div>
       <div class="pstats">
         <div class="stat"><b>0:04</b><span>from missed call to text-back</span></div>
         <div class="stat"><b>100%</b><span>of actions confirmed by the owner</span></div>
@@ -345,7 +360,7 @@
       <div class="amount">$699</div>
       <div class="per">per month · USD or CAD</div>
       <div class="pillrows">
-        <div class="prow gold"><span class="pic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 13.9 8.6 19 10.5l-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="m18.5 15.5.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg></span><span class="pt"><b>The AI Copilot</b> — unlimited conversations on your live books, plus Advisor Mode &amp; Receipt Radar</span></div>
+        <div class="prow gold"><span class="pic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 13.9 8.6 19 10.5l-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="m18.5 15.5.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg></span><span class="pt"><b>The AI Copilot</b> — conversations with your live books, plus Advisor Mode &amp; Receipt Radar</span></div>
         <div class="prow cyan"><span class="pic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span><span class="pt"><b>Crew Command</b> — dispatch, live links, day sheets, punch clock &amp; time cards, unlimited crew</span></div>
         <div class="prow purple"><span class="pic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h12L22 9 12 20.5 2 9z"/><path d="M2 9h20M9.5 3.5 12 9l2.5-5.5M12 20.5 9.5 9M12 20.5 14.5 9"/></svg></span><span class="pt"><b>Client Hub</b> — a personal portal for every customer, one-tap quote approvals included</span></div>
         <div class="prow emerald"><span class="pic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 16.5h6"/></svg></span><span class="pt"><b>Invoicing &amp; Getting Paid</b> — drafting with tap-to-confirm, Stripe card payments, hosted pay pages, reminders</span></div>
