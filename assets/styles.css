@@ -354,7 +354,9 @@ footer.site .copy{color:var(--dim2);font-size:12.5px}
 @media(max-width:640px){
   section{padding:56px 0}
   .hero{padding:56px 0 24px}
-  .step{flex-direction:column;gap:10px}
+  .step{gap:14px;padding:22px 0}
+  .step .num{width:34px;height:34px;border-radius:10px;font-size:14px;margin-top:2px}
+  .step .m h4{margin-top:5px}
 }
 
 /* ---------- card depth (all widths — mobile gets the glow too) ---------- */
