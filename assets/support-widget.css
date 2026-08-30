@@ -16,6 +16,7 @@
 .lsw-launcher-ic{font-size:16px;line-height:1}
 .lsw-launcher.lsw-launcher-open{background:rgba(255,255,255,.06);color:var(--text);box-shadow:none;border:1px solid var(--line)}
 
+.lsw-panel[hidden]{display:none}
 .lsw-panel{
   position:absolute;right:0;bottom:64px;width:368px;max-width:calc(100vw - 32px);
   height:520px;max-height:calc(100vh - 120px);display:flex;flex-direction:column;

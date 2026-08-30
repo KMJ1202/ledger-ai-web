@@ -379,6 +379,13 @@ footer.site .copy{color:var(--dim2);font-size:12.5px}
   .card .ic svg{width:26px;height:26px}
   .card h3{font-size:18.5px}
 }
+/* capability cards: icon and title share one row (matches pillar cards) */
+.grid>.card{display:grid;grid-template-columns:auto 1fr;align-items:center;align-content:start;column-gap:14px}
+.grid>.card .ic{margin:0}
+.grid>.card h3{margin:0}
+.grid>.card .ic+h3{grid-column:2}
+.grid>.card h3:first-child{grid-column:1/-1}
+.grid>.card p{grid-column:1/-1;margin-top:13px}
 
 /* ---------- desktop polish (≥900px) ---------- */
 @media (min-width: 900px){
