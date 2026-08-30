@@ -941,7 +941,7 @@ async function nativeComposerSheet(kind) {
   // kind "estimate": EST numbering, VALID FOR instead of payment terms, and the
   // create posts nothing to the books — money moves only on convert-to-invoice.
   const isEst = kind === "estimate";
-  const C = { customer: null, customers: [], query: "", lines: [], memo: "", termsDays: 0, validDays: 14, newCust: false, busy: false, shortcuts: [] };
+  const C = { customer: null, customers: [], query: "", lines: [{ name: "", quantity: 1, rate: 0 }], memo: "", termsDays: 0, validDays: 14, newCust: false, busy: false, shortcuts: [] };
   const wrap = sheet(`<h2>${isEst ? "New Estimate" : "New Invoice"}</h2><div id="bcmp"><div class="skel"></div></div>`);
   const body = () => wrap.querySelector("#bcmp");
   try {
