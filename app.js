@@ -208,7 +208,9 @@ function appView() {
   root.innerHTML = `
   <header>
     <div class="mark">${logo ? `<img src="${esc(logo)}" alt="">` : '<img src="assets/logo-mark-96.png" alt="">'}</div>
-    <h1 class="brandttl">Ledger AI</h1>
+    <h1 class="brandttl chrome" id="bizname">${esc(S.profile?.business?.name || "Ledger AI")}</h1>
+    <span id="usage"></span>
+    <button class="hchat" id="hchat" title="Ask Ledger">&#128172;</button>
     <button class="avatar" id="more" title="Your business"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.6" fill="currentColor"/><path d="M5.5 19.4c.9-3.2 3.5-5 6.5-5s5.6 1.8 6.5 5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
   </header>
   <div id="banner">💡 Advisor Mode — business guidance beyond your books, on your AI allowance</div>
@@ -229,6 +231,7 @@ function appView() {
 
   on("#tabs button", "click", (e) => setTab(e.currentTarget.dataset.tab));
   $("more").onclick = businessSheet;
+  $("hchat").onclick = () => openChat();
   $("chatback").onclick = closeChat;
   $("newconv").onclick = newConversation;
   $("advisor").onclick = toggleAdvisor;
@@ -331,7 +334,7 @@ async function renderHome() {
       ${osHead("CORE.01 · COMMAND", "Ledger")}
       <div class="brandcard">
         <div class="tile">${logo ? `<img src="${esc(logo)}" alt="">` : '<img src="assets/logo-mark-96.png" alt="">'}</div>
-        <div class="who"><b>Ledger AI</b><span>Your business, answered.</span></div>
+        <div class="who"><b class="chrome">Ledger AI</b><span>Your business, answered.</span></div>
         <span class="status"><i></i>READY</span>
       </div>
 
@@ -5257,6 +5260,8 @@ async function businessSheet() {
       try {
         const detail = await api("/workspace-profile", { action: "update", name: sh.querySelector("#bn").value.trim(), address: sh.querySelector("#ba").value.trim() });
         S.profile.business = { ...S.profile.business, ...detail };
+        const hdr = $("bizname");
+        if (hdr) hdr.textContent = S.profile.business.name || "Ledger AI";
         toast("Saved");
       } catch (err) { toast(err.message, "err"); }
       e.currentTarget.disabled = false;
