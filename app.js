@@ -3781,6 +3781,13 @@ const markReviewAsked = (id) => { const s = reviewAsked(); s.add(id); localStora
 
 async function loadDirectory() {
   const slot = $("lanebody"); if (!slot) return;
+  // Same branch iOS makes: built-in books gets its own directory off
+  // books_customers — the QuickBooks wall only belongs to QuickBooks shops.
+  if (S.booksProvider === undefined) {
+    try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
+    catch { S.booksProvider = "quickbooks"; }
+  }
+  if (S.booksProvider === "native") return loadNativeDirectory();
   try {
     if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
     const all = (S.qbo?.qbo?.customers || []).filter((c) => c.active !== false);
@@ -3951,6 +3958,141 @@ async function reviewSheet(c, already) {
 // duplicate-match guard: a 409 lists the existing matches before anything is created.
 // `prefill` is a lead row (iOS NewCustomerSheet(prefill:)); `onCreated` fires with
 // the created customer so the caller can mark that lead won and link it.
+// Built-in books directory: the same intelligence hero, review queue and
+// customer cards as the QuickBooks lane, fed by books_customers/invoices.
+async function loadNativeDirectory() {
+  const slot = $("lanebody"); if (!slot) return;
+  try {
+    const [cd, inv] = await Promise.all([
+      booksApi({ action: "customers" }),
+      booksApi({ action: "invoices" }).catch(() => ({ invoices: [] })),
+    ]);
+    const invoices = inv.invoices || [];
+    const balanceBy = {}, lastPaid = {}, lastInvoice = {};
+    const todayISO = localDay();
+    const overdueIds = new Set();
+    for (const i of invoices) {
+      if (!i.customer_id) continue;
+      balanceBy[i.customer_id] = (balanceBy[i.customer_id] || 0) + Number(i.balance || 0);
+      if (!lastInvoice[i.customer_id] || (i.issue_date || "") > lastInvoice[i.customer_id]) lastInvoice[i.customer_id] = i.issue_date || "";
+      if (Number(i.balance) === 0 && (!lastPaid[i.customer_id] || (i.issue_date || "") > lastPaid[i.customer_id])) lastPaid[i.customer_id] = i.issue_date || "";
+      if (Number(i.balance) > 0 && i.due_date && i.due_date < todayISO) overdueIds.add(i.customer_id);
+    }
+    const all = (cd.customers || []).map((c) => ({
+      id: c.id,
+      name: [c.first_name, c.last_name].filter(Boolean).join(" ") || c.company || "\u2014",
+      company: c.company || "", email: c.email || "", phone: c.phone || "",
+      balance: balanceBy[c.id] || 0, active: true, raw: c,
+    }));
+    const asked = reviewAsked();
+    const q = (S.custSearch || "").toLowerCase();
+    const sort = S.custSort || "name";
+    const reachable = all.filter((c) => c.phone || c.email).length;
+    const buyers = new Set(invoices.map((i) => i.customer_id).filter(Boolean)).size;
+    const lifetime = invoices.reduce((tt, i) => tt + (Number(i.total) || 0), 0);
+    const reviewQueue = all.filter((c) => (c.phone || c.email) && !asked.has(c.id) && lastPaid[c.id])
+      .sort((a, b) => (lastPaid[b.id] || "").localeCompare(lastPaid[a.id] || ""));
+    const qHead = reviewQueue.slice(0, 5);
+    let list = all.filter((c) => !q || (c.name + " " + c.email + " " + c.phone + " " + c.company).toLowerCase().includes(q));
+    if (S.custBalancesOnly) list = list.filter((c) => c.balance > 0);
+    list = list.slice().sort((a, b) =>
+      sort === "owing" ? b.balance - a.balance
+      : sort === "recent" ? (lastInvoice[b.id] || "").localeCompare(lastInvoice[a.id] || "")
+      : a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+
+    slot.innerHTML = `
+      <div class="cihero">
+        <div class="t"><div><span class="eyebrow">Customer intelligence</span>
+          <b>Relationships, revenue &amp; reputation</b></div><span class="ic">&#128101;</span></div>
+        <div class="pulse">
+          <div class="pm cyan"><small>On file</small><b>${all.length}</b></div>
+          <div class="pm em"><small>Reachable</small><b>${reachable}</b></div>
+          <div class="pm purple"><small>Buyers</small><b>${buyers}</b></div>
+        </div>
+        <div class="split"><div><small>Customer revenue</small><b>${money0(lifetime)}</b></div>
+          <div class="r"><small>Reviews asked</small><b class="em">${asked.size}</b></div></div>
+      </div>
+      <div class="searchwrap"><span class="mag">${MAG}</span>
+        <input id="csearch" placeholder="Customer, email or phone" value="${esc(S.custSearch || "")}"></div>
+      <div class="dirbar">
+        <span class="eyebrow">Customer directory</span>
+        <button class="pillbtn em" id="cadd">+ Add</button>
+        <select class="pillbtn" id="csort">
+          ${[["name", "A\u2013Z"], ["owing", "Owing"], ["recent", "Recent"]].map(([k, l]) =>
+            `<option value="${k}" ${sort === k ? "selected" : ""}>${l}</option>`).join("")}
+        </select>
+        <button class="pillbtn ${S.custBalancesOnly ? "hot" : ""}" id="cbal">${S.custBalancesOnly ? "Balances" : "All"}</button>
+      </div>
+      ${list.length ? list.slice(0, S.custShowAll ? list.length : 120).map((c) => {
+        const contact = [c.email, c.phone].filter(Boolean).join(" \u00b7 ");
+        const od = overdueIds.has(c.id);
+        return `<div class="ccard">
+          <div class="top">
+            <div class="avaw"><div class="ava ${od ? "od" : c.balance > 0 ? "ow" : ""}">${sigilMark(c.name)}<i class="rail"></i></div></div>
+            <div class="who"><b>${esc(c.name)}</b>
+              ${contact ? `<span>${esc(contact)}</span>` : ""}
+              <i>${c.balance > 0
+                ? `<span style="color:${od ? "var(--red)" : "var(--orange)"}">${money(c.balance)} ${od ? "overdue" : "owing"}</span>`
+                : "Active"}</i></div>
+          </div>
+          <div class="acts">
+            <button class="actbtn" data-ncust="${esc(c.id)}">&#128100;&nbsp; Edit Details</button>
+            <button class="actbtn p" data-review="${esc(c.id)}">${asked.has(c.id) ? "&#10003;&nbsp; Review Asked" : "&#11088;&nbsp; Ask for Review"}</button>
+          </div>
+        </div>`;
+      }).join("")
+      : `<div class="panel" style="text-align:center"><p class="sub" style="margin:0">No customers yet \u2014 add your first one, or create an invoice and Ledger saves the customer with it.</p></div>`}`;
+    const sb = $("csearch");
+    sb.addEventListener("input", () => { S.custSearch = sb.value; clearTimeout(S._c); S._c = setTimeout(loadDirectory, 220); });
+    $("csort").onchange = (e) => { S.custSort = e.target.value; loadDirectory(); };
+    $("cbal").onclick = () => { S.custBalancesOnly = !S.custBalancesOnly; loadDirectory(); };
+    $("cadd").onclick = () => nativeCustomerSheet(null);
+    on("[data-ncust]", "click", (e) => nativeCustomerSheet(all.find((c) => c.id === e.currentTarget.dataset.ncust)?.raw), slot);
+    on("[data-review]", "click", (e) => {
+      const c = all.find((x) => x.id === e.currentTarget.dataset.review);
+      if (c) reviewSheet(c, asked.has(c.id));
+    }, slot);
+  } catch (e) {
+    slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+  }
+}
+
+// Add or edit a built-in-books customer — same fields as the iOS
+// NewCustomerSheet's native mode, saved through books customer-save.
+function nativeCustomerSheet(existing) {
+  const c = existing || {};
+  sheet(`<h2>${existing ? "Edit Customer" : "New Customer"}</h2>
+    <div class="eyebrow">Name</div>
+    <div class="cmpsect">
+      <input id="ncFirst" class="cmpinput" placeholder="First name" value="${esc(c.first_name || "")}">
+      <input id="ncLast" class="cmpinput" placeholder="Last name" value="${esc(c.last_name || "")}">
+      <input id="ncCompany" class="cmpinput" placeholder="Company (optional)" value="${esc(c.company || "")}">
+    </div>
+    <div class="eyebrow">Contact</div>
+    <div class="cmpsect">
+      <input id="ncEmail" class="cmpinput" inputmode="email" placeholder="Email" value="${esc(c.email || "")}">
+      <input id="ncPhone" class="cmpinput" inputmode="tel" placeholder="Phone" value="${esc(c.phone || "")}">
+    </div>
+    <button class="btn em wide" style="margin-top:14px" id="ncSave">${existing ? "Save changes" : "Add customer"}</button>
+    <p class="note err" id="ncErr" style="margin-top:8px"></p>`, (sh) => {
+    sh.querySelector("#ncSave").onclick = async (e) => {
+      const v = (id) => sh.querySelector("#" + id).value.trim();
+      const first = v("ncFirst"), last = v("ncLast"), company = v("ncCompany");
+      if (!first && !last && !company) { sh.querySelector("#ncErr").textContent = "A name or company is required"; return; }
+      e.currentTarget.disabled = true;
+      try {
+        await booksApi({ action: "customer-save", customer: {
+          ...(existing ? { id: existing.id } : {}),
+          first_name: first, last_name: last, company, email: v("ncEmail"), phone: v("ncPhone"),
+        } });
+        closeSheet();
+        toast(existing ? "Customer updated" : "Customer added");
+        loadDirectory();
+      } catch (err) { e.currentTarget.disabled = false; sh.querySelector("#ncErr").textContent = err.message; }
+    };
+  });
+}
+
 function newCustomerSheet(prefill, onCreated) {
   const pre = prefill || {};
   const form = (force) => `<h2>New Customer</h2>
