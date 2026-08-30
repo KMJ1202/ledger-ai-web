@@ -3252,9 +3252,9 @@ function phoneActivityLane(d) {
   const m = d.metrics || {};
   return `
     ${heroStrip([[m.callsToday ?? 0, "CALLS TODAY"], [m.textsToday ?? 0, "TEXTS"], [m.leads7d ?? 0, "NEW LEADS"]])}
+    <div id="phoneleads"><div class="skel"></div></div>
     ${phoneThreadsPanel(d)}
     ${phoneFeedPanel(d)}
-    <div id="phoneleads"><div class="skel"></div></div>
     <p class="zonehead">YOUR LINE</p>
     ${phoneSettingsSummary(d)}`;
 }
