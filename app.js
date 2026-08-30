@@ -314,6 +314,28 @@ async function renderHome() {
           `<button class="askchip c${i}" data-ask="${esc(c.prompt)}"><em>${c.icon}</em>${esc(c.label)}</button>`).join("")}</div>
       </div>
 
+      <button class="bizrow" id="bizsettings">
+        <span class="ic">&#9881;</span>
+        <span class="m"><b>Business profile &amp; settings</b><small>CONNECTIONS · BRANDING · BOOKS</small></span>
+        <span class="go">&#8599;</span>
+      </button>
+
+      <div class="lanehead" style="margin-top:4px"><span class="eyebrow"><span class="gticon">&#9638;</span> Go to</span></div>
+      <div class="gotogrid">
+        ${[
+          ["finance", "em", "&#128200;", "Finance", "INVOICES · PROFIT"],
+          ["calendar", "purple", "&#128197;", "Calendar", "BOOKINGS"],
+          ["phone", "cyan", "&#128222;", "Phone", "CALLS · LEADS"],
+          ["customers", "red", "&#128101;", "Customers", "DIRECTORY"],
+          ["receipts", "orange", "&#128247;", "Receipts", "SNAP · FILE"],
+          ["reviews", "gold", "&#11088;", "Reviews", "WIN 5 STARS"],
+        ].map(([k, tint, icon, label, sub]) => `<button class="gotile ${tint}" data-goto="${k}">
+          <span class="ictile">${icon}</span><span class="arrow">&#8599;</span>
+          <b>${label}</b><small>${sub}</small></button>`).join("")}
+      </div>
+
+      <div class="lanehead"><span class="eyebrow">&#9889; Today</span>
+        <span class="note">SYNC ${new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span></div>
       <div id="homekpis"><div class="skel"></div></div>
       <div id="homemail"></div>
       <div id="homenext"></div>
@@ -331,11 +353,55 @@ async function renderHome() {
   // Ledger Live (realtime voice) is an iPhone capability — say so rather than fake an orb.
   $("livebtn").onclick = () => toast("Ledger Live voice runs in the iPhone app");
   $("askcam").onclick = () => { S.financeLane = "receipts"; setTab("finance"); };
+  $("bizsettings").onclick = () => bizSettingsSheet();
+  on("[data-goto]", "click", (e) => {
+    const k = e.currentTarget.dataset.goto;
+    if (k === "receipts") { S.financeLane = "receipts"; setTab("finance"); }
+    else if (k === "reviews") { S.lane = "reviews"; setTab("customers"); }
+    else if (k === "finance") { S.financeLane = "invoices"; setTab("finance"); }
+    else if (k === "customers") { S.lane = "directory"; setTab("customers"); }
+    else setTab(k);
+  });
   on("[data-ask]", "click", (e) => { openChat(); $("box").value = e.currentTarget.dataset.ask; send(); });
   loadHomeKpis();
   loadHomeMail();
   loadHomeNext();
   loadHomeAttention();
+}
+
+// Business profile & settings hub — the web twin of the iOS settings row (build 41).
+// Each row deep-links to the surface that already owns that setting.
+async function bizSettingsSheet() {
+  if (S.booksProvider === undefined) {
+    try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
+    catch { S.booksProvider = "quickbooks"; }
+  }
+  const native = S.booksProvider === "native";
+  const row = (id, icon, title, detail) => `<button class="revbtn" id="${id}">
+      <span class="ic">${icon}</span><span class="m"><b>${esc(title)}</b><span>${esc(detail)}</span></span>
+      <span class="chev">&#8250;</span></button>`;
+  sheet(`<h2>Business profile &amp; settings</h2>
+    <p class="sh-sub">${esc(S.profile?.business?.name || "Your business")}</p>
+    <div class="cmpsect">
+      ${native ? row("bzbooks", "&#9881;", "Books settings", "Tax, numbering, branding, payment info")
+        : row("bzbooks", "&#9881;", "Books connection", "This workspace runs on QuickBooks Online")}
+      ${native ? row("bzcard", "&#128179;", "Card payments", "Stripe setup — get paid online") : ""}
+      ${row("bzphone", "&#128222;", "Phone & Front Desk", "Number, reminders, auto-replies")}
+      ${row("bzconn", "&#128279;", "Connected services", "QuickBooks, Calendar, Gmail, Reviews")}
+    </div>`, (sh) => {
+    sh.querySelector("#bzbooks").onclick = () => {
+      closeSheet();
+      if (native) booksSettingsSheet();
+      else { S.financeLane = "invoices"; setTab("finance"); }
+    };
+    const card = sh.querySelector("#bzcard");
+    if (card) card.onclick = async () => {
+      try { const r = await booksApi({ action: "connect-onboard" }); if (r.url) window.open(r.url, "_blank"); }
+      catch (e) { toast(e.message, "err"); }
+    };
+    sh.querySelector("#bzphone").onclick = () => { closeSheet(); setTab("phone"); };
+    sh.querySelector("#bzconn").onclick = () => { closeSheet(); S.lane = "reviews"; setTab("customers"); };
+  });
 }
 
 function kpiBlock(k) {
@@ -577,15 +643,19 @@ async function booksApi(body) { return api("/books", body); }
 
 async function loadNativeInvoices() {
   const slot = $("finbody"); if (!slot) return;
-  let data, summary, connect;
+  let data, summary, connect, estData;
   try {
-    [data, summary, connect] = await Promise.all([
+    [data, summary, connect, estData] = await Promise.all([
       booksApi({ action: "invoices" }),
       booksApi({ action: "summary" }),
       booksApi({ action: "connect-status" }),
+      booksApi({ action: "estimates" }).catch(() => ({ estimates: [] })),
     ]);
   } catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   const invoices = data.invoices || [];
+  const estimates = estData.estimates || [];
+  // Same split as iOS: open/accepted estimates are live work; the rest is history.
+  const liveEst = estimates.filter((x) => x.status === "open" || x.status === "accepted");
   const filtered = invoices.filter((i) => !S.invoiceSearch ||
     (i.customer + " " + i.number).toLowerCase().includes(S.invoiceSearch));
   const chargesOn = connect?.charges_enabled === true;
@@ -599,6 +669,19 @@ async function loadNativeInvoices() {
       <span class="ic">&#43;</span>
       <span><b>Create Invoice</b><span>Numbered, taxed, with a payment link</span></span>
     </button>
+    <button class="cta ghost" id="newest">
+      <span class="ic">&#128221;</span>
+      <span><b>Create Estimate</b><span>EST-numbered quote with a share page — posts nothing</span></span>
+    </button>
+    ${liveEst.length ? `<div class="lanehead"><span class="eyebrow" style="color:var(--dim)">Open estimates</span>
+      <span class="note">${liveEst.length}</span></div>
+    <div class="list">${liveEst.slice(0, 40).map((x) => `
+      <button class="item" data-best="${esc(x.id)}">
+        <div class="main"><div class="ttl">${esc(x.customer || "—")}</div>
+          <div class="sub">${esc(x.number || "EST")} · ${esc(dateShort(x.issue_date))}${x.expiry_date ? " · expires " + esc(dateShort(x.expiry_date)) : ""}</div></div>
+        <div class="amt">${money(x.total)}
+          <small><span class="tag ${x.status === "accepted" ? "paid" : "open"}">${esc(x.status)}</span></small></div>
+      </button>`).join("")}</div>` : ""}
     <div class="searchwrap"><span class="mag">${MAG}</span>
       <input id="invsearch" placeholder="Customer or invoice number" value="${esc(S.invoiceSearch || "")}"></div>
     <div class="opsgrid">
@@ -623,9 +706,11 @@ async function loadNativeInvoices() {
       </button>`).join("")}</div>`
       : `<div class="empty">${S.invoiceSearch ? "No matches." : "No invoices yet — create your first, or ask Ledger in chat."}</div>`}`;
   $("newinv").onclick = () => nativeComposerSheet();
+  $("newest").onclick = () => nativeComposerSheet("estimate");
   const search = $("invsearch");
   if (search) search.oninput = () => { S.invoiceSearch = search.value.trim().toLowerCase(); loadNativeInvoices(); };
   on("[data-binv]", "click", (e) => nativeInvoiceSheet(e.currentTarget.dataset.binv), slot);
+  on("[data-best]", "click", (e) => nativeEstimateSheet(e.currentTarget.dataset.best), slot);
   on("[data-op]", "click", async (e) => {
     const op = e.currentTarget.dataset.op;
     if (op === "receipts") { S.financeLane = "receipts"; renderFinance(); }
@@ -734,6 +819,103 @@ async function nativeInvoiceSheet(id) {
   paint();
 }
 
+// Native estimate detail — the web twin of iOS NativeEstimateDetailSheet.
+// An estimate becomes money only through Convert; everything else here is
+// status housekeeping on the quote itself.
+async function nativeEstimateSheet(id) {
+  const wrap = sheet(`<h2>Estimate</h2><div id="bestbody"><div class="skel"></div><div class="skel"></div></div>`);
+  const body = () => wrap.querySelector("#bestbody");
+  let est;
+  try { est = (await booksApi({ action: "estimate-get", id })).estimate; }
+  catch (e) { body().innerHTML = `<p class="note err">${esc(e.message)}</p>`; return; }
+  const tagCls = (s) => s === "accepted" || s === "converted" ? "paid" : s === "declined" || s === "void" ? "" : "open";
+  const paint = () => {
+    const live = est.status === "open" || est.status === "accepted";
+    body().innerHTML = `
+      <div class="lanehead"><span class="eyebrow">${esc(est.number || "ESTIMATE")}</span>
+        <span class="tag ${tagCls(est.status)}">${esc(est.status)}</span></div>
+      <p class="note">${esc(est.customer?.name || "")}${est.customer?.email ? " · " + esc(est.customer.email) : ""}<br>
+        Issued ${esc(est.issue_date)}${est.expiry_date ? " · Valid until " + esc(est.expiry_date) : " · No expiry"}</p>
+      <table class="dtable"><tbody>
+        ${(est.lines || []).map((l) => `<tr><td>${esc(l.name)} × ${l.quantity}</td><td style="text-align:right">${money(l.amount)}</td></tr>`).join("")}
+        <tr><td>Subtotal</td><td style="text-align:right">${money(est.subtotal)}</td></tr>
+        ${Number(est.tax_total) > 0 ? `<tr><td>${esc(est.tax_name || "Tax")}</td><td style="text-align:right">${money(est.tax_total)}</td></tr>` : ""}
+        <tr><td><b>Total</b></td><td style="text-align:right"><b>${money(est.total)}</b></td></tr>
+      </tbody></table>
+      ${est.converted_invoice_number ? `<p class="note ok">Converted to invoice ${esc(est.converted_invoice_number)}</p>` : ""}
+      ${est.email_enabled && live ? `<button class="pillbtn" id="estemail"><b>Email estimate</b></button>` : ""}
+      ${est.email_sent_at ? `<p class="note">Emailed to ${esc(est.email_sent_to)} · ${esc(String(est.email_sent_at).slice(0, 10))}</p>` : ""}
+      ${est.link ? `<button class="pillbtn" id="estlink">Copy share link</button>
+      <button class="pillbtn" id="estopen">Open estimate page</button>` : ""}
+      ${est.status === "open" ? `
+        <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Customer decision</span></div>
+        <div class="f" style="display:flex;gap:8px">
+          <button class="pillbtn" id="estaccept" style="flex:1"><b>Mark accepted</b></button>
+          <button class="pillbtn" id="estdecline" style="flex:1">Mark declined</button>
+        </div>` : ""}
+      ${est.status === "accepted" ? `<button class="cta" id="estconvert" style="margin-top:12px">
+        <span class="ic">&#8594;</span>
+        <span><b>Convert to invoice</b><span>Numbered invoice + payment link, tax applied</span></span></button>` : ""}
+      ${live ? `<button class="linkbtn" id="estvoid" style="color:var(--red);margin-top:10px">Void this estimate</button>` : ""}
+      <p class="note err" id="esterr"></p>`;
+    const err = (m) => { wrap.querySelector("#esterr").textContent = m; };
+    const link = est.link || "";
+    const lb = wrap.querySelector("#estlink");
+    if (lb) lb.onclick = async () => {
+      try { await navigator.clipboard.writeText(link); toast("Share link copied"); }
+      catch { prompt("Estimate link:", link); }
+    };
+    const ob = wrap.querySelector("#estopen");
+    if (ob) ob.onclick = () => window.open(link, "_blank");
+    const emailBtn = wrap.querySelector("#estemail");
+    if (emailBtn) emailBtn.onclick = async () => {
+      const to = (prompt("Email this estimate to:", est.customer?.email || "") || "").trim();
+      if (!to) return;
+      emailBtn.disabled = true;
+      const doSend = async (force) => {
+        const r = await booksApi({ action: "estimate-send", id: est.id, to, ...(force ? { force: true } : {}) });
+        toast(`Estimate emailed to ${r.to}`);
+        est = { ...est, email_sent_at: new Date().toISOString(), email_sent_to: r.to };
+        paint();
+      };
+      try { await doSend(false); }
+      catch (e) {
+        if (/already emailed/i.test(e.message)) {
+          if (confirm(`${est.number} was already emailed to ${to}. Send it again?`)) {
+            try { await doSend(true); return; } catch (e2) { err(e2.message); }
+          }
+        } else err(e.message);
+        emailBtn.disabled = false;
+      }
+    };
+    const setStatus = (status) => async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        est = (await booksApi({ action: "estimate-status", id: est.id, status })).estimate;
+        toast(`Marked ${status}`); paint(); loadNativeInvoices();
+      } catch (e2) { err(e2.message); e.currentTarget.disabled = false; }
+    };
+    const acc = wrap.querySelector("#estaccept"); if (acc) acc.onclick = setStatus("accepted");
+    const dec = wrap.querySelector("#estdecline"); if (dec) dec.onclick = setStatus("declined");
+    const conv = wrap.querySelector("#estconvert");
+    if (conv) conv.onclick = async () => {
+      conv.disabled = true;
+      try {
+        const r = await booksApi({ action: "estimate-convert", id: est.id });
+        toast(`Invoice ${r.invoice.number} created from ${est.number}`);
+        closeSheet(); loadNativeInvoices(); nativeInvoiceSheet(r.invoice.id);
+      } catch (e) { err(e.message); conv.disabled = false; }
+    };
+    const vb = wrap.querySelector("#estvoid");
+    if (vb) vb.onclick = async () => {
+      if (!confirm(`Void ${est.number}? The number is never reused.`)) return;
+      try { await booksApi({ action: "estimate-void", id: est.id }); toast(`${est.number} voided`); closeSheet(); loadNativeInvoices(); }
+      catch (e) { err(e.message); }
+    };
+  };
+  paint();
+}
+
 // Initials of the line name make the offered code: "Medium truck flat repair"
 // suggests MTFR. Single-word names fall back to their first four letters.
 function suggestShortcutCode(name, taken) {
@@ -745,9 +927,12 @@ function suggestShortcutCode(name, taken) {
   return code;
 }
 
-async function nativeComposerSheet() {
-  const C = { customer: null, customers: [], query: "", lines: [], memo: "", termsDays: 0, newCust: false, busy: false, shortcuts: [] };
-  const wrap = sheet(`<h2>New Invoice</h2><div id="bcmp"><div class="skel"></div></div>`);
+async function nativeComposerSheet(kind) {
+  // kind "estimate": EST numbering, VALID FOR instead of payment terms, and the
+  // create posts nothing to the books — money moves only on convert-to-invoice.
+  const isEst = kind === "estimate";
+  const C = { customer: null, customers: [], query: "", lines: [], memo: "", termsDays: 0, validDays: 14, newCust: false, busy: false, shortcuts: [] };
+  const wrap = sheet(`<h2>${isEst ? "New Estimate" : "New Invoice"}</h2><div id="bcmp"><div class="skel"></div></div>`);
   const body = () => wrap.querySelector("#bcmp");
   try {
     const [cust, sc, set] = await Promise.all([
@@ -793,15 +978,22 @@ async function nativeComposerSheet() {
           <label>Rate<input type="number" min="0" step="0.01" data-brate="${i}" value="${l.rate}"></label></div>
       </div>`).join("") || `<p class="note">Add what's being billed — free-form, priced by you.${C.shortcuts.length ? " Type a shortcut code to fill a line instantly." : ""}</p>`}
       <button class="pillbtn" id="baddline">+ Add line</button>
+      ${isEst ? `
+      <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Valid for</span></div>
+      <div class="seg" id="bvalidseg">
+        ${[[7, "7 days"], [14, "14 days"], [30, "30 days"], [0, "No expiry"]].map(([d, lbl]) =>
+          `<button class="${C.validDays === d ? "on" : ""}" data-bvalid="${d}">${lbl}</button>`).join("")}
+      </div>` : `
       <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Payment terms</span></div>
       <div class="seg" id="btermseg">
         ${[[0, "COD"], [15, "Net 15"], [30, "Net 30"], [60, "Net 60"]].map(([d, lbl]) =>
           `<button class="${C.termsDays === d ? "on" : ""}" data-bterm="${d}">${lbl}</button>`).join("")}
-      </div>
+      </div>`}
       <input id="bmemo" class="cmpinput sm" placeholder="Note to customer (optional)" value="${esc(C.memo)}">
       <div class="lanehead" style="margin-top:10px"><span class="eyebrow">Subtotal before tax</span><b>${money(subtotal())}</b></div>
       <button class="cta" id="bcreate" ${C.busy || !C.customer || !C.lines.length ? "disabled" : ""}>
-        <span><b>${C.busy ? "Creating…" : "Create invoice"}</b><span>Numbered + payment link, tax applied</span></span></button>
+        <span><b>${C.busy ? "Creating…" : isEst ? "Create estimate" : "Create invoice"}</b>
+          <span>${isEst ? "EST-numbered quote with a share page — posts nothing" : "Numbered + payment link, tax applied"}</span></span></button>
       <p class="note err" id="bcerr"></p>`;
     const q = wrap.querySelector("#bq");
     if (q) { q.oninput = () => { C.query = q.value; paint(); wrap.querySelector("#bq").focus(); const el = wrap.querySelector("#bq"); el.setSelectionRange(el.value.length, el.value.length); }; }
@@ -852,24 +1044,34 @@ async function nativeComposerSheet() {
     on("[data-bqty]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.bqty)].quantity = e.currentTarget.value; }, body());
     on("[data-brate]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.brate)].rate = e.currentTarget.value; }, body());
     on("[data-bterm]", "click", (e) => { C.termsDays = Number(e.currentTarget.dataset.bterm); paint(); }, body());
+    on("[data-bvalid]", "click", (e) => { C.validDays = Number(e.currentTarget.dataset.bvalid); paint(); }, body());
     wrap.querySelector("#bmemo").oninput = (e) => { C.memo = e.target.value; };
     const create = wrap.querySelector("#bcreate");
     if (create) create.onclick = async (e, force) => {
       C.busy = true; paint();
       try {
         const kept = C.lines.filter((l) => l.name.trim());
-        const r = await booksApi({ action: "invoice-create", customer_id: C.customer.id,
-          lines: kept.map((l) => ({ name: l.name.trim(), description: l.description || undefined, quantity: Number(l.quantity) || 1, rate: Number(l.rate) || 0 })),
-          memo: C.memo, terms_days: C.termsDays,
-          shortcut_codes: kept.map((l) => l.code).filter(Boolean), force: force === true });
-        toast(`${r.invoice.number} created`);
+        const mappedLines = kept.map((l) => ({ name: l.name.trim(), description: l.description || undefined, quantity: Number(l.quantity) || 1, rate: Number(l.rate) || 0 }));
+        let r, docId, docNumber;
+        if (isEst) {
+          r = await booksApi({ action: "estimate-create", customer_id: C.customer.id, lines: mappedLines,
+            memo: C.memo, ...(C.validDays > 0 ? { valid_for_days: C.validDays } : {}) });
+          docId = r.estimate.id; docNumber = r.estimate.number;
+        } else {
+          r = await booksApi({ action: "invoice-create", customer_id: C.customer.id, lines: mappedLines,
+            memo: C.memo, terms_days: C.termsDays,
+            shortcut_codes: kept.map((l) => l.code).filter(Boolean), force: force === true });
+          docId = r.invoice.id; docNumber = r.invoice.number;
+        }
+        toast(`${docNumber || (isEst ? "Estimate" : "Invoice")} created`);
         closeSheet(); loadNativeInvoices();
+        const openDoc = () => isEst ? nativeEstimateSheet(docId) : nativeInvoiceSheet(docId);
         // First-use shortcut offer: hand-typed lines the owner might want as a
         // one-tap code next time. Lines filled from a shortcut are skipped.
-        const offer = kept.filter((l) => !l.code && l.name.trim() && Number(l.rate) > 0 &&
+        const offer = isEst ? [] : kept.filter((l) => !l.code && l.name.trim() && Number(l.rate) > 0 &&
           !C.shortcuts.some((s) => s.name.toLowerCase() === l.name.trim().toLowerCase()));
-        if (offer.length) shortcutOfferSheet(offer, C.shortcuts, () => nativeInvoiceSheet(r.invoice.id));
-        else nativeInvoiceSheet(r.invoice.id);
+        if (offer.length) shortcutOfferSheet(offer, C.shortcuts, openDoc);
+        else openDoc();
       } catch (err) {
         C.busy = false; paint();
         if (err.status === 409 && err.data?.duplicate_of) {
@@ -1075,6 +1277,10 @@ async function loadInvoices() {
         <span class="ic">&#43;</span>
         <span><b>Create Invoice</b><span>Draft, review, post to QuickBooks</span></span>
       </button>
+      <button class="cta ghost" id="newest">
+        <span class="ic">&#128221;</span>
+        <span><b>Create Estimate</b><span>A quote on QuickBooks' EST numbering — posts nothing</span></span>
+      </button>
       <div class="searchwrap"><span class="mag">${MAG}</span>
         <input id="invsearch" placeholder="Customer, invoice, email or phone" value="${esc(S.invoiceSearch || "")}"></div>
       <div class="chips">
@@ -1113,6 +1319,7 @@ async function loadInvoices() {
         </button>`).join("")}</div>`
         : (S.invoiceSearch ? "" : `<div class="empty">No invoices yet.</div>`)}`;
     $("newinv").onclick = () => composerSheet();
+    $("newest").onclick = () => composerSheet("estimate");
     if ($("clrsearch")) $("clrsearch").onclick = () => { S.invoiceSearch = ""; loadInvoices(); };
     on("[data-op]", "click", (e) => {
       const op = e.currentTarget.dataset.op;
@@ -1177,9 +1384,13 @@ function salesIntel(invoices, k) {
 // Manual invoice composer — the web twin of iOS InvoiceComposerSheet.
 // Same single write path as chat: build → /quickbooks-invoice/draft → Confirm → /confirm.
 // The AI has no posting tool here either; the Confirm tap is the only thing that posts.
-async function composerSheet() {
+async function composerSheet(kind) {
+  // kind "estimate" rides the same composer down the estimate-draft route: QBO's
+  // own EST numbering, no terms control (estimates expire, they don't come due),
+  // and nothing posts to the books until the customer accepts.
+  const isEst = kind === "estimate";
   const C = { customer: null, lines: [], memo: "", items: [], itemsError: "", query: "", draft: null, busy: false, error: "" };
-  const wrap = sheet(`<h2>New Invoice</h2><div id="cmpbody"><div class="skel"></div><div class="skel"></div></div>`);
+  const wrap = sheet(`<h2>${isEst ? "New Estimate" : "New Invoice"}</h2><div id="cmpbody"><div class="skel"></div><div class="skel"></div></div>`);
   const body = () => wrap.querySelector("#cmpbody");
   const money2 = (n) => "$" + (Number(n) || 0).toFixed(2);
   const subtotal = () => C.lines.reduce((t, l) => t + Math.round(l.quantity * l.rate * 100) / 100, 0);
@@ -1239,10 +1450,10 @@ async function composerSheet() {
   function drawDraft() {
     const d = C.draft;
     body().innerHTML = `<div class="card" style="margin:0">
-      <h3>INVOICE DRAFT</h3><div class="cust">${esc(d.customer)}</div>
+      <h3>${isEst ? "ESTIMATE DRAFT" : "INVOICE DRAFT"}</h3><div class="cust">${esc(d.customer)}</div>
       <table>${(d.lines || []).map((l) => `<tr><td>${esc(l.description || l.item_name)} × ${l.quantity}</td><td>${money(l.amount)}</td></tr>`).join("")}
         <tr><td class="total">Subtotal</td><td class="total">${money(d.subtotal)}</td></tr></table>
-      ${termsRow(d.terms)}
+      ${isEst ? "" : termsRow(d.terms)}
       ${d.customer_email ? `<label class="emailrow"><input type="checkbox" id="cmpem" checked> Email to ${esc(d.customer_email)}</label>` : ""}
       <label class="emailrow"><input type="checkbox" id="cmppr" ${localStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
       <div class="row"><button class="btn cancel" id="cmpcancel">Cancel</button><button class="btn confirm" id="cmpconfirm">Confirm</button></div>
@@ -1256,18 +1467,19 @@ async function composerSheet() {
       const wantPrint = body().querySelector("#cmppr")?.checked ?? false;
       try {
         const terms = body().querySelector(".tm")?.value;
-        const r = await api("/quickbooks-invoice/confirm", { draft_id: d.draft_id, send_email: sendEmail, ...(terms ? { terms } : {}) });
+        const r = await api(isEst ? "/quickbooks-invoice/estimate-confirm" : "/quickbooks-invoice/confirm",
+          { draft_id: d.draft_id, send_email: sendEmail, ...(terms ? { terms } : {}) });
         note.className = "note ok";
         note.textContent = "✅ Posted" + (r.doc_number ? " — #" + r.doc_number : "") + (r.emailed ? " · emailed " + (r.emailed_to || "") : "");
         body().querySelector(".row").remove();
-        if (wantPrint && (r.qbo_invoice_id || r.id)) printPdfById(r.qbo_invoice_id || r.id, r.doc_number, "invoice");
+        if (wantPrint && (r.qbo_invoice_id || r.id)) printPdfById(r.qbo_invoice_id || r.id, r.doc_number, isEst ? "estimate" : "invoice");
         S.qboStale = true;
         setTimeout(() => { closeSheet(); loadInvoices(); }, 1400);
       } catch (e) { draftBtns().forEach((b) => b.disabled = false); note.className = "note err"; note.textContent = postedMessage(e); }
     };
     body().querySelector("#cmpcancel").onclick = async () => {
       draftBtns().forEach((b) => b.disabled = true);
-      try { await api("/quickbooks-invoice/cancel", { draft_id: d.draft_id }); } catch {}
+      try { await api(isEst ? "/quickbooks-invoice/estimate-cancel" : "/quickbooks-invoice/cancel", { draft_id: d.draft_id }); } catch {}
       C.draft = null; draw();
     };
   }
@@ -1305,7 +1517,7 @@ async function composerSheet() {
           return e;
         }) };
         if (C.memo) payload.memo = C.memo;
-        C.draft = (await api("/quickbooks-invoice/draft", payload)).draft;
+        C.draft = (await api(isEst ? "/quickbooks-invoice/estimate-draft" : "/quickbooks-invoice/draft", payload)).draft;
       } catch (e) { C.error = e.message; }
       C.busy = false; draw();
     };
@@ -1969,7 +2181,7 @@ function drawCalendar() {
     if (!d) return `<span class="cd empty"></span>`;
     const k = dayKey(d);
     const n = Math.min(countOn(k), 3);
-    const cls = [k === CAL.sel ? "on" : "", k === todayKey ? "now" : ""].filter(Boolean).join(" ");
+    const cls = [k === CAL.sel ? "on" : "", k === todayKey ? "now" : "", n ? "e" + n : ""].filter(Boolean).join(" ");
     return `<button class="cd ${cls}" data-day="${k}"><b>${d.getDate()}</b>
       <i>${n ? Array.from({ length: n }, () => "<u></u>").join("") : ""}</i></button>`;
   }).join("");
@@ -1988,20 +2200,92 @@ function drawCalendar() {
     .sort((a, b) => new Date(a.start) - new Date(b.start));
   const nextSelId = CAL.sel === todayKey ? (dayEvents.find((e) => new Date(e.start) > now) || {}).id : null;
 
+  // ---- Command-center intelligence (iOS build 42 parity) ----
+  const timed = (e) => (e.start || "").length > 10; // all-day rows carry no clock and stay off the run sheet
+  const clock = (d) => d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const todayTimed = all.filter((e) => evDayKey(e.start) === todayKey && timed(e))
+    .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+  const nextToday = todayTimed.find((e) => new Date(e.start) > now);
+  const todayDetail = nextToday ? "next " + clock(new Date(nextToday.start))
+    : todayCount > 0 ? "all wrapped" : "wide open";
+  const weekEvents = all.filter((e) => inRange(e.start, weekFrom, weekTo));
+  let weekDetail = "quiet week";
+  if (weekEvents.length) {
+    const byDay = {};
+    weekEvents.forEach((e) => { const k = evDayKey(e.start); byDay[k] = (byDay[k] || 0) + 1; });
+    const busiest = Object.entries(byDay).sort((a, b) => b[1] - a[1])[0];
+    weekDetail = new Date(busiest[0] + "T12:00:00").toLocaleDateString(undefined, { weekday: "short" }) + " ×" + busiest[1];
+  }
+  const monthEvents = all.filter((e) => inRange(e.start, monthFrom, monthTo));
+  const bookedDays = new Set(monthEvents.map((e) => evDayKey(e.start))).size;
+  const monthDetail = bookedDays ? bookedDays + " booked day" + (bookedDays === 1 ? "" : "s") : "clear board";
+
+  // Run sheet: today's timed jobs, open gaps of an hour or more, and a NOW line.
+  const runRows = [];
+  if (todayTimed.length) {
+    todayTimed.forEach((e) => runRows.push({ at: new Date(e.start), kind: "event", e }));
+    for (let i = 0; i < todayTimed.length - 1; i++) {
+      const endA = new Date(todayTimed[i].end || todayTimed[i].start);
+      const startB = new Date(todayTimed[i + 1].start);
+      const mins = (startB - endA) / 60000;
+      if (mins >= 60) runRows.push({ at: new Date(endA.getTime() + 1000), kind: "gap",
+        label: clock(endA) + " – " + clock(startB), slots: Math.floor(mins / 60) });
+    }
+    runRows.push({ at: now, kind: "now" });
+    runRows.sort((a, b) => a.at - b.at);
+  }
+  const runSheet = runRows.length ? `<div class="runsheet">
+    <div class="rshead">&#128421; TODAY'S RUN SHEET</div>
+    ${runRows.map((r) => {
+      if (r.kind === "now") return `<div class="rsnow"><i></i><span>NOW · ${esc(clock(now))}</span><u></u></div>`;
+      if (r.kind === "gap") return `<div class="rsgap"><span>&#10022; OPEN · ${esc(r.label)}</span>
+        <small>room for ${r.slots} job${r.slots === 1 ? "" : "s"}</small></div>`;
+      const past = new Date(r.e.end || r.e.start) < now;
+      return `<button class="rsrow${past ? " past" : ""}" data-ev="${esc(r.e.id)}">
+        <b>${esc(clock(new Date(r.e.start)))}</b><i class="bar"></i>
+        <span>${esc(r.e.title)}</span>${past ? `<em>&#10003;</em>` : ""}</button>`;
+    }).join("")}
+  </div>` : "";
+
+  // Schedule intelligence: this month's load by weekday.
+  let intel = "";
+  if (monthEvents.length) {
+    const wd = [0, 0, 0, 0, 0, 0, 0];
+    monthEvents.forEach((e) => { const d = new Date(evDayKey(e.start) + "T12:00:00"); if (!isNaN(d)) wd[d.getDay()]++; });
+    const maxWd = Math.max(1, ...wd);
+    const names = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+    const fullNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const busiestIdx = wd.indexOf(Math.max(...wd));
+    const dim2 = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    intel = `<div class="calintel">
+      <div class="cihead">&#129504; SCHEDULE INTELLIGENCE</div>
+      ${names.map((n, i) => `<div class="cibar">
+        <b>${n}</b><div class="track"><i style="width:${wd[i] ? Math.max(6, Math.round(wd[i] / maxWd * 100)) : 0}%"></i></div>
+        <em class="${wd[i] === maxWd && wd[i] > 0 ? "hot" : ""}">${wd[i]}</em></div>`).join("")}
+      ${wd[busiestIdx] > 1 ? `<p class="ciline">&#128293; ${fullNames[busiestIdx]}s carry the month — ${wd[busiestIdx]} bookings.</p>` : ""}
+      <p class="ciline dim">&#128197; ${bookedDays} of ${dim2} days booked this month — ${dim2 - bookedDays} still open to sell.</p>
+    </div>`;
+  }
+
   view().innerHTML = `<div class="sect">
     ${osHead("CAL.03 · SCHEDULE", "Calendar")}
     <div class="searchwrap"><span class="mag">${MAG}</span>
       <input id="calsearch" placeholder="Search selected day" value="${esc(CAL.q)}"></div>
+    ${next ? `<button class="nexthero" data-ev="${esc(next.id)}">
+      <div class="t"><span class="dot"></span><span class="lbl">NEXT UP</span><span class="go">&#10132;</span></div>
+      <div class="big">${esc(countdown(next.start))}</div>
+      <b>${esc(next.title)}</b>
+      <div class="meta"><span>&#128337; ${esc(timeLabel(next.start))}${next.end && timed(next) ? " – " + esc(timeLabel(next.end)) : ""}</span>
+        ${next.location ? `<span>&#128205; ${esc(next.location)}</span>` : ""}</div>
+    </button>` : ""}
     <div class="calstats">
-      <div class="calstat"><i style="background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></i><b>${todayCount}</b><small>Today</small></div>
-      <div class="calstat"><i style="background:var(--emerald);box-shadow:0 0 8px var(--emerald)"></i><b>${weekCount}</b><small>This week</small></div>
-      <div class="calstat"><i style="background:var(--magenta);box-shadow:0 0 8px var(--magenta)"></i><b>${monthCount}</b><small>This month</small></div>
+      <div class="calstat"><i style="background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></i><b>${todayCount}</b><small>Today</small><em>${esc(todayDetail)}</em></div>
+      <div class="calstat"><i style="background:var(--emerald);box-shadow:0 0 8px var(--emerald)"></i><b>${weekCount}</b><small>This week</small><em>${esc(weekDetail)}</em></div>
+      <div class="calstat"><i style="background:var(--magenta);box-shadow:0 0 8px var(--magenta)"></i><b>${monthCount}</b><small>This month</small><em>${esc(monthDetail)}</em></div>
     </div>
-    ${next ? `<button class="nextup" data-ev="${esc(next.id)}">
-      <div class="ic">&#9203;</div>
-      <div class="m"><small>&#9679; Next up · ${esc(countdown(next.start))}</small><b>${esc(next.title)}</b>
-        <span>${esc(timeLabel(next.start))}${next.location ? " · " + esc(next.location) : ""}</span></div>
-      <div class="go">&#8594;</div></button>` : ""}
+    ${runSheet}
+    ${intel}
     <div class="bookcal">
       <div class="bchead">
         <div><span class="eyebrow">Booking calendar</span>
@@ -3286,7 +3570,7 @@ const LEAD_SOURCES = [["call-in", "Call-in"], ["walk-in", "Walk-in"], ["referral
   ["website", "Website"], ["social", "Social"], ["repeat", "Repeat"], ["other", "Other"]];
 const TODO_PRIORITIES = [["low", "Low"], ["normal", "Normal"], ["high", "High"], ["urgent", "Urgent"]];
 
-const LANE_CODE = { directory: "CRM.05 · RELATIONSHIPS", todos: "CRM.05 · MISSION CONTROL" };
+const LANE_CODE = { directory: "CRM.05 · RELATIONSHIPS", reviews: "CRM.05 · REPUTATION", todos: "CRM.05 · MISSION CONTROL" };
 
 // Red badge count on the lane switcher, same rule as iOS CustomerLaneSwitcher:
 // open to-dos due by end of today. Leads moved to the Phone tab — see
@@ -3302,9 +3586,9 @@ function laneAlerts() {
 
 async function renderCustomers() {
   view().innerHTML = `<div class="sect">
-    ${osHead(LANE_CODE[S.lane] || LANE_CODE.directory, S.lane === "todos" ? "To-Do" : "Customers")}
+    ${osHead(LANE_CODE[S.lane] || LANE_CODE.directory, S.lane === "todos" ? "To-Do" : S.lane === "reviews" ? "Reviews" : "Customers")}
     <div class="seg">
-      ${[["directory", "Directory", 0], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
+      ${[["directory", "Directory", 0], ["reviews", "Reviews", 0], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
         `<button class="${S.lane === k ? "on" : ""}" data-lane="${k}">${l}${n ? `<i class="badge">${n}</i>` : ""}</button>`).join("")}
     </div>
     <div id="lanebody"><div class="skel"></div><div class="skel"></div></div>
@@ -3314,7 +3598,90 @@ async function renderCustomers() {
     loadDirectory();
     // iOS keeps the To-Do badge live from the same board; fetch it once so Directory shows it too.
     if (!S.board) api("/leads", { action: "board" }).then((b) => { S.board = b; if (S.tab === "customers") renderCustomers(); }).catch(() => {});
-  } else loadBoard();
+  } else if (S.lane === "reviews") loadReviewsLane();
+  else loadBoard();
+}
+
+// Reviews lane — the web twin of iOS ReviewsCommandLane (build 40): live Google
+// reviews, the public score, and the playbook for growing it.
+async function loadReviewsLane() {
+  const slot = $("lanebody"); if (!slot) return;
+  const gold = "var(--gold, #fbbf24)";
+  let board;
+  try {
+    board = (await get("/google-business-profile/reviews?limit=10")).reviews;
+  } catch (e) {
+    const connect = e.status === 409, pending = e.status === 403;
+    slot.innerHTML = `<div class="revlane-err">
+      <div class="eyebrow" style="color:${gold}">${connect ? "&#128279; CONNECT GOOGLE REVIEWS" : pending ? "&#8987; REVIEW ACCESS PENDING" : "REVIEWS UNAVAILABLE"}</div>
+      <p class="note" style="margin-top:8px">${esc(e.message)}</p>
+      ${connect ? `<p class="note">Business profile &amp; settings → Google Business Profile → Connect. Your live reviews, rating and reply tools light up the moment it links.</p>` : ""}
+      <button class="pillbtn" id="rvretry" style="margin-top:10px"><b>Try again</b></button>
+    </div>`;
+    $("rvretry").onclick = () => { slot.innerHTML = `<div class="skel"></div>`; loadReviewsLane(); };
+    return;
+  }
+  const items = board.items || [];
+  const five = items.filter((r) => r.star_rating === 5).length;
+  const low = items.filter((r) => r.star_rating <= 3).length;
+  const stars = (n) => "&#9733;".repeat(Math.max(0, Math.min(5, n))) + "&#9734;".repeat(5 - Math.max(0, Math.min(5, n)));
+  const rel = (iso) => {
+    const d = new Date(iso); if (isNaN(d)) return "";
+    const days = Math.floor((Date.now() - d) / 86400000);
+    return days < 1 ? "today" : days === 1 ? "yesterday" : days < 30 ? days + "d ago"
+      : days < 365 ? Math.floor(days / 30) + "mo ago" : Math.floor(days / 365) + "y ago";
+  };
+  const intel = [];
+  if (items.length) intel.push(["&#10024;", `${five} of your last ${items.length} reviews are five-star${five === items.length ? " — a perfect run." : "."}`, "var(--emerald)"]);
+  if (low > 0) intel.push(["&#10071;", `${low} recent review${low === 1 ? " sits" : "s sit"} at 3★ or below — a calm owner reply is the single strongest signal to the next reader.`, "var(--orange)"]);
+  if (board.unanswered_count > 0) intel.push(["&#8617;", `${board.unanswered_count} unanswered — say "reply to my latest review" in Ask Ledger and confirm the draft before it posts.`, "var(--cyan)"]);
+  else if (items.length) intel.push(["&#9989;", "Every recent review has an owner reply. That consistency is rare and customers notice.", "var(--emerald)"]);
+  if (items[0]) intel.push(["&#128337;", `Newest review landed ${rel(items[0].updated_at)}.`, "var(--magenta)"]);
+
+  slot.innerHTML = `
+    <div class="revhero">
+      <div class="t"><span class="eyebrow" style="color:${gold}">&#128737; Reputation command</span>
+        <span class="livechip">LIVE · GOOGLE</span></div>
+      <div class="score"><b>${board.average_rating > 0 ? board.average_rating.toFixed(1) : "—"}</b>
+        <div class="m"><span class="starrow">${stars(Math.round(board.average_rating))}</span>
+          <small>${board.total_review_count} Google review${board.total_review_count === 1 ? "" : "s"}</small></div></div>
+      <div class="pulse">
+        <div class="pm gold"><small>RATING</small><b>${board.average_rating > 0 ? board.average_rating.toFixed(2) : "—"}</b><i>public average</i></div>
+        <div class="pm cyan"><small>REVIEWS</small><b>${board.total_review_count}</b><i>all time</i></div>
+        <div class="pm ${board.unanswered_count === 0 ? "em" : "orange"}"><small>UNANSWERED</small><b>${board.unanswered_count}</b>
+          <i>${board.unanswered_count === 0 ? "all replied — elite" : "awaiting your reply"}</i></div>
+      </div>
+      ${board.business_name ? `<div class="bizname">${esc(board.business_name.toUpperCase())}</div>` : ""}
+    </div>
+    ${items.length ? `<div class="revintel">
+      <div class="cihead">&#129504; REVIEW INTELLIGENCE</div>
+      ${[5, 4, 3, 2, 1].map((s) => { const c = items.filter((r) => r.star_rating === s).length;
+        return `<div class="cibar"><b style="color:${gold}">${s}&#9733;</b>
+          <div class="track gold"><i style="width:${items.length ? Math.round(c / items.length * 100) : 0}%"></i></div><em>${c}</em></div>`; }).join("")}
+      ${intel.map(([ic, tx, tint]) => `<p class="ciline"><span class="icx" style="color:${tint}">${ic}</span>${esc(tx)}</p>`).join("")}
+    </div>` : ""}
+    <div class="revlist">
+      <div class="t"><span class="eyebrow" style="color:${gold}">&#128225; Last ${board.count} from Google</span>
+        <button class="pillbtn sm" id="rvreload">&#8635;</button></div>
+      ${items.length ? items.map((r) => `<div class="gcard">
+        <div class="t"><b>${esc(r.reviewer_anonymous ? "Google user" : r.reviewer_name)}</b>
+          <span class="starrow sm">${stars(r.star_rating)}</span><small>${esc(rel(r.updated_at))}</small></div>
+        ${r.comment ? `<p>${esc(r.comment)}</p>` : ""}
+        ${r.replied ? `<div class="reply"><small>&#8617; OWNER REPLY</small>${esc(r.reply_comment || "")}</div>`
+          : `<div class="noreply">&#9888; No owner reply yet</div>`}
+      </div>`).join("") : `<p class="note">No reviews yet — the moment your first Google review lands it appears here.</p>`}
+    </div>
+    <div class="revgrow">
+      <div class="cihead" style="color:var(--emerald)">&#128200; GROW YOUR REVIEWS WITH LEDGER</div>
+      ${[["01", "Ask at the high point", "Right after a job they loved. The Directory lane puts an Ask-for-review button on every customer — it sends your real Google review link."],
+        ["02", "Reply to every single one", "Ask Ledger to draft the reply — it answers what the customer actually said, and nothing posts until you confirm."],
+        ["03", "Make it a weekly habit", "Two asks a week compounds. A steady stream of fresh reviews outranks a burst from last year."]]
+        .map(([n, t, x]) => `<div class="playstep"><b>${n}</b><div><span>${t}</span><small>${x}</small></div></div>`).join("")}
+      <button class="cta gold" id="rvask"><span class="ic">&#11088;</span>
+        <span><b>Ask a customer for a review</b><span>Opens the Directory review queue</span></span></button>
+    </div>`;
+  $("rvreload").onclick = () => { slot.innerHTML = `<div class="skel"></div>`; loadReviewsLane(); };
+  $("rvask").onclick = () => { S.lane = "directory"; renderCustomers(); };
 }
 
 const reviewAsked = () => new Set((localStorage.getItem("kmj.reviewRequestedCustomerIDs") || "").split(",").filter(Boolean));
