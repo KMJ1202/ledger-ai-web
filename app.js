@@ -2750,7 +2750,7 @@ async function renderPhone() {
     S.phone = d;
     view().innerHTML = `<div class="sect">
       ${osHead("COM.06 · CALL LINE", "Phone")}
-      ${d.hasNumber ? "" : requestNumberCard(d.pendingRequest)}
+      ${d.hasNumber ? "" : requestNumberCard(d.pendingRequest) + connectQuoCard()}
       ${/* The number and its setup guide sit ABOVE the lane switcher, not in a
             lane. Call forwarding is the thing that has to be working before any
             of this tab means anything, and a setup guide found at the bottom of
@@ -2759,11 +2759,18 @@ async function renderPhone() {
       ${d.hasNumber ? phoneLaneSwitcher(d) : ""}
       ${d.hasNumber ? phoneLaneBody(d) : ""}
     </div>`;
-    if (!d.hasNumber) wireRequestNumber(d.pendingRequest);
+    if (!d.hasNumber) { wireRequestNumber(d.pendingRequest); wireConnectQuo(); }
     if (d.hasNumber) on("[data-pevt]", "click", (e) => phoneEventSheet(d.events.find((ev) => ev.id === e.currentTarget.dataset.pevt)));
     if (d.hasNumber) on("[data-pthread]", "click", (e) => phoneThreadSheet((d.threads || []).find((t) => t.id === e.currentTarget.dataset.pthread)));
     if (d.hasNumber) {
       $("phsetup").onclick = () => phoneSetupSheet(d);
+      const cqd = $("cqdisconnect");
+      if (cqd) cqd.onclick = async () => {
+        if (!confirm("Disconnect your Quo account? Missed-call texts and threads stop until you reconnect.")) return;
+        cqd.disabled = true;
+        try { await api("/phone", { action: "quo-disconnect" }); toast("Quo disconnected"); renderPhone(); }
+        catch (err) { cqd.disabled = false; toast(err.message); }
+      };
       $("phsettings").onclick = () => phoneSettingsSheet(d);
       on("[data-plane]", "click", (e) => { S.phoneLane = e.currentTarget.dataset.plane; renderPhone(); });
       if ($("remindall")) $("remindall").onclick = () => apptReminderPreviewSheet();
@@ -2836,8 +2843,45 @@ function phoneNumberCard(d) {
     <h3>&#128222; Business number</h3>
     <div class="bignum">${esc(formatE164(d.number.e164))}</div>
     <p class="sub">Missed calls get a same-second auto-text, and the caller lands in your Leads lane below — nothing to do here but read the feed.</p>
+    ${d.byoQuo ? `<p class="note" style="margin-top:8px">&#128279; Running on your own Quo account — you pay Quo directly. Keep a small message-credit balance topped up in Quo so auto-texts never fail.</p>` : ""}
     <button class="btn ghost wide" style="margin-top:12px" id="phsetup">&#128203; Setup guide</button>
+    ${d.byoQuo ? `<button class="btn ghost wide" style="margin-top:8px;color:var(--red)" id="cqdisconnect">Disconnect Quo account</button>` : ""}
   </div>`;
+}
+
+// BYO-Quo: the shop connects its OWN Quo account — they keep paying Quo
+// directly and own the number; Ledger holds only the workspace-scoped API key
+// and wires the webhooks. Mirrors the edge quo-connect/quo-disconnect actions.
+function connectQuoCard() {
+  return `<div class="panel">
+    <h3>&#128279; Already use Quo? Connect your own</h3>
+    <p class="sub">Bring your own Quo business line — you keep paying Quo directly and you own the number. Ledger plugs in for the missed-call auto-texts, voicemails, and text threads.</p>
+    <ol class="sub" style="margin:10px 0 0 18px;padding:0;display:flex;flex-direction:column;gap:6px">
+      <li>Create your account and number at <a href="https://quo.com" target="_blank" rel="noopener" style="color:var(--cyan)">quo.com</a></li>
+      <li>In Quo: Settings &#8594; API &#8594; generate an API key (workspace owner or admin)</li>
+      <li>Paste the key below — Ledger wires up the rest automatically</li>
+    </ol>
+    <label class="fld" style="margin-top:12px">QUO API KEY</label>
+    <input id="cqkey" placeholder="Paste your Quo API key" autocomplete="off">
+    <button class="btn em wide" style="margin-top:13px" id="cqsubmit">Connect Quo</button>
+    <div class="note" id="cqnote" style="margin-top:8px">Texts Ledger sends use your Quo prepaid message credits (about 1&#162; each) — keep a small balance topped up in Quo.</div>
+  </div>`;
+}
+
+function wireConnectQuo() {
+  const btn = $("cqsubmit"); if (!btn) return;
+  btn.onclick = async (e) => {
+    const note = $("cqnote");
+    const key = $("cqkey").value.trim();
+    if (key.length < 10) { note.className = "note err"; note.textContent = "Paste the API key from Quo → Settings → API first"; return; }
+    e.currentTarget.disabled = true;
+    note.className = "note"; note.textContent = "Checking your key and wiring up the webhooks…";
+    try {
+      const res = await api("/phone", { action: "quo-connect", api_key: key });
+      toast(`Connected — ${res?.number?.e164 ? formatE164(res.number.e164) : "your number"} is live in Ledger`);
+      renderPhone();
+    } catch (err) { e.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
+  };
 }
 
 // Standard GSM/3GPP conditional-forwarding codes — the same codes Bell,
