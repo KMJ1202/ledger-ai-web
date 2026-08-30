@@ -186,6 +186,10 @@ const SEG_ICONS = {
   inbox: `<path d="M4 4h16v16H4zM4 14h5c0 1.7 1.3 3 3 3s3-1.3 3-3h5"/>`,
   autopilot: `<path d="M13 2L5 13h5l-1 9 8-11h-5l1-9z"/>`,
   activity: `<path d="M3 12h2l2-6 3 12 3-9 2 3h6"/>`,
+  card: `<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M6 15h4"/>`,
+  phonearrow: `<path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2zM14 4h6M20 4v6M20 4l-6 6"/>`,
+  calclock: `<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4M12 13v3l2 1"/>`,
+  camera: `<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>`,
 };
 const segIc = (k) => SEG_ICONS[k] ? `<svg class="sic" viewBox="0 0 24 24">${SEG_ICONS[k]}</svg>` : "";
 
@@ -204,10 +208,8 @@ function appView() {
   root.innerHTML = `
   <header>
     <div class="mark">${logo ? `<img src="${esc(logo)}" alt="">` : '<img src="assets/logo-mark-96.png" alt="">'}</div>
-    <h1 id="bizname">${esc(S.profile?.business?.name || "Ledger AI")}</h1>
-    <span id="usage"></span>
-    <button class="hchat" id="hchat" title="Ask Ledger">&#128172;</button>
-    <button class="avatar" id="more" title="Your business">&#9679;</button>
+    <h1 class="brandttl">Ledger AI</h1>
+    <button class="avatar" id="more" title="Your business"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.6" fill="currentColor"/><path d="M5.5 19.4c.9-3.2 3.5-5 6.5-5s5.6 1.8 6.5 5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
   </header>
   <div id="banner">💡 Advisor Mode — business guidance beyond your books, on your AI allowance</div>
   <div id="alertbar"></div>
@@ -227,7 +229,6 @@ function appView() {
 
   on("#tabs button", "click", (e) => setTab(e.currentTarget.dataset.tab));
   $("more").onclick = businessSheet;
-  $("hchat").onclick = () => openChat();
   $("chatback").onclick = closeChat;
   $("newconv").onclick = newConversation;
   $("advisor").onclick = toggleAdvisor;
@@ -297,11 +298,30 @@ function wireConnect(scope) {
 }
 
 /* ---------------- HOME ---------------- */
+// The fixed showcase six — mirrors iOS LedgerHomeView.suggestedPrompts exactly
+// (Kyle 2026-08-29, build 41): every chip demos a different capability, review
+// AI front and centre, and each one is a question the assistant genuinely
+// answers from live data.
 const ASK_CHIPS = [
-  { icon: "&#128196;", label: "Create an invoice", prompt: "Create me an invoice — let's draft one now." },
-  { icon: "&#128200;", label: "Sales this week", prompt: "Report my sales for this week." },
-  { icon: "&#128221;", label: "Create an estimate", prompt: "Create me an estimate — let's draft one." },
-  { icon: "&#128202;", label: "Last month & YOY", prompt: "Report my sales for last month, and compare them year over year." },
+  { ic: "profit", label: "Profit today", prompt: "How much profit did we make today?" },
+  { ic: "reviews", label: "Reply to a review", prompt: "Draft a reply to my latest Google review." },
+  { ic: "card", label: "Who owes me?", prompt: "Who owes me money right now, biggest balance first?" },
+  { ic: "phonearrow", label: "Chase my missed calls", prompt: "Show me my missed calls and which ones look like new leads." },
+  { ic: "calclock", label: "Tomorrow's day", prompt: "What's booked on the calendar tomorrow?" },
+  { ic: "camera", label: "File this receipt", prompt: "I've got a receipt to file — walk me through it." },
+];
+
+// Rotating examples in the Ask box — same list as iOS consolePlaceholders.
+// Every one is a question the assistant genuinely answers from live data.
+const ASK_PLACEHOLDERS = [
+  "Tell Ledger what to do…",
+  "“How much profit did we make today?”",
+  "“Who owes me money right now?”",
+  "“What's booked tomorrow?”",
+  "“Show me my best customers this month.”",
+  "“How do sales compare with last month?”",
+  "“What needs my attention today?”",
+  "“Draft a reply to my latest Google review.”",
 ];
 
 async function renderHome() {
@@ -328,7 +348,7 @@ async function renderHome() {
           <button class="gobtn" id="askgo" title="Send">&#8593;</button>
         </div>
         <div class="askgrid">${ASK_CHIPS.map((c, i) =>
-          `<button class="askchip c${i}" data-ask="${esc(c.prompt)}"><em>${c.icon}</em>${esc(c.label)}</button>`).join("")}</div>
+          `<button class="askchip c${i}" data-ask="${esc(c.prompt)}"><em>${segIc(c.ic)}</em>${esc(c.label)}</button>`).join("")}</div>
       </div>
 
       <button class="bizrow" id="bizsettings">
@@ -367,6 +387,16 @@ async function renderHome() {
   };
   $("askgo").onclick = fire;
   box.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); fire(); } });
+  // Rotate the example questions like iOS does. One timer app-wide; it stops
+  // itself the moment the box leaves the DOM (tab switch re-renders the view).
+  clearInterval(S.askRotTimer);
+  let askRot = 0;
+  S.askRotTimer = setInterval(() => {
+    const el = $("askbox");
+    if (!el) { clearInterval(S.askRotTimer); return; }
+    askRot = (askRot + 1) % ASK_PLACEHOLDERS.length;
+    el.placeholder = ASK_PLACEHOLDERS[askRot];
+  }, 3500);
   // Ledger Live (realtime voice) is an iPhone capability — say so rather than fake an orb.
   $("livebtn").onclick = () => toast("Ledger Live voice runs in the iPhone app");
   $("askcam").onclick = () => { S.financeLane = "receipts"; setTab("finance"); };
@@ -5227,7 +5257,6 @@ async function businessSheet() {
       try {
         const detail = await api("/workspace-profile", { action: "update", name: sh.querySelector("#bn").value.trim(), address: sh.querySelector("#ba").value.trim() });
         S.profile.business = { ...S.profile.business, ...detail };
-        $("bizname").textContent = S.profile.business.name || "Ledger AI";
         toast("Saved");
       } catch (err) { toast(err.message, "err"); }
       e.currentTarget.disabled = false;
