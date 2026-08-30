@@ -172,6 +172,23 @@ const TABS = [
 // a mono OS code strip, then a chrome-gradient screen title over a cyan rule.
 const MAG = `<svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 015.9 12.1l4.3 4.3-1.4 1.4-4.3-4.3A7.5 7.5 0 1110.5 3zm0 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>`;
 
+// Tiny monochrome lane-pill icons — the web twins of the SF Symbols iOS uses
+// on its segment bars (chart.bar.xaxis / chart.line.uptrend.xyaxis /
+// doc.text.viewfinder / person.2 / star.bubble / checklist / tray / bolt /
+// waveform). Stroke inherits the pill's text colour.
+const SEG_ICONS = {
+  overview: `<path d="M4 20h16M6 16v-5M11 16V7M16 16v-8"/>`,
+  profit: `<path d="M3 17l5-5 4 3 8-8M20 7h-5M20 7v5"/>`,
+  receipts: `<path d="M7 3h10a1 1 0 011 1v16l-3-1.6L12 20l-3-1.6L6 20V4a1 1 0 011-1zM9 8h6M9 12h6"/>`,
+  directory: `<circle cx="9" cy="8" r="3"/><path d="M4 19c0-2.8 2.2-5 5-5s5 2.2 5 5M15 5a3 3 0 010 6M17 14c1.9.6 3 2.3 3 5"/>`,
+  reviews: `<path d="M4 5h16v11H9l-5 4V5zM12 7.5l1 2.2 2.4.2-1.8 1.6.5 2.3-2.1-1.2-2.1 1.2.5-2.3-1.8-1.6 2.4-.2z"/>`,
+  todos: `<path d="M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17M11 6h9M11 12h9M11 18h9"/>`,
+  inbox: `<path d="M4 4h16v16H4zM4 14h5c0 1.7 1.3 3 3 3s3-1.3 3-3h5"/>`,
+  autopilot: `<path d="M13 2L5 13h5l-1 9 8-11h-5l1-9z"/>`,
+  activity: `<path d="M3 12h2l2-6 3 12 3-9 2 3h6"/>`,
+};
+const segIc = (k) => SEG_ICONS[k] ? `<svg class="sic" viewBox="0 0 24 24">${SEG_ICONS[k]}</svg>` : "";
+
 function osHead(code, title) {
   return `<div>
     <div class="oshead"><span class="dash"></span>
@@ -294,7 +311,7 @@ async function renderHome() {
       ${osHead("CORE.01 · COMMAND", "Ledger")}
       <div class="brandcard">
         <div class="tile">${logo ? `<img src="${esc(logo)}" alt="">` : '<img src="assets/logo-mark-96.png" alt="">'}</div>
-        <div class="who"><b>Ledger AI</b><span>Intelligence.<br>Accuracy. Control.</span></div>
+        <div class="who"><b>Ledger AI</b><span>Your business, answered.</span></div>
         <span class="status"><i></i>READY</span>
       </div>
 
@@ -641,6 +658,62 @@ const FINANCE_CODE = { invoices: "FIN.02 · REVENUE GRID", profit: "FIN.02 · PR
 
 async function booksApi(body) { return api("/books", body); }
 
+// SALES INTELLIGENCE hero for native books — the web twin of iOS's Finance
+// Overview card. Every figure comes from the live invoice rows (voids
+// excluded): month-to-date total, a 14-day daily spark, MOM/YOY growth against
+// the SAME elapsed span, the real average sale, and a straight run-rate
+// forecast. "—" when there is no prior period to compare against.
+function salesIntelNative(invoices) {
+  const now = new Date();
+  const sales = invoices.filter((i) => i.status !== "void");
+  const dayTotal = (key) => sales.filter((i) => (i.issue_date || "").slice(0, 10) === key)
+    .reduce((s, i) => s + (Number(i.total) || 0), 0);
+  const rangeTotal = (from, to) => sales.filter((i) => {
+    const d = (i.issue_date || "").slice(0, 10);
+    return d >= from && d <= to;
+  }).reduce((s, i) => s + (Number(i.total) || 0), 0);
+  const iso = (d) => localDay(d);
+  const ym = iso(now).slice(0, 7);
+  const month = sales.filter((i) => (i.issue_date || "").slice(0, 7) === ym);
+  const mtd = month.reduce((s, i) => s + (Number(i.total) || 0), 0);
+  const avg = month.length ? mtd / month.length : 0;
+  const elapsed = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const forecast = elapsed ? mtd / elapsed * daysInMonth : 0;
+  // Same elapsed span, one month back / one year back.
+  const prevM = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMEnd = new Date(prevM.getFullYear(), prevM.getMonth(),
+    Math.min(elapsed, new Date(prevM.getFullYear(), prevM.getMonth() + 1, 0).getDate()));
+  const momBase = rangeTotal(iso(prevM), iso(prevMEnd));
+  const ytd = rangeTotal(now.getFullYear() + "-01-01", iso(now));
+  const prevY = new Date(now); prevY.setFullYear(now.getFullYear() - 1);
+  const yoyBase = rangeTotal((now.getFullYear() - 1) + "-01-01", iso(prevY));
+  const growth = (cur, base) => base > 0
+    ? `${cur >= base ? "+" : "−"}${Math.abs(Math.round((cur - base) / base * 100))}%` : "—";
+  const days = [];
+  for (let d = 13; d >= 0; d--) {
+    const t = new Date(now); t.setDate(now.getDate() - d);
+    days.push({ key: iso(t), total: dayTotal(iso(t)) });
+  }
+  const max = Math.max(1, ...days.map((d) => d.total));
+  return `<div class="intel">
+    <div class="ihead"><b>&#9651; Sales Intelligence</b><span class="live"><i></i>LIVE BOOKS</span></div>
+    <p class="cap">This month</p>
+    <div class="big">${money(mtd)}</div>
+    <div class="sub">Live sales performance</div>
+    <div class="spark">${days.map((d, i) =>
+      `<div class="b ${i === days.length - 1 ? "hot" : ""}" style="height:${Math.max(Math.round(d.total / max * 100), 3)}%" title="${d.key}: ${money0(d.total)}"></div>`).join("")}</div>
+    <div class="sparkends"><span>14 days ago</span><span>Today</span></div>
+    <div class="kpis" style="margin-top:15px">
+      <div class="kpi cyan"><small>MOM &middot; MTD</small><b>${growth(mtd, momBase)}</b><i>vs same point last month</i></div>
+      <div class="kpi purple"><small>YOY &middot; YTD</small><b>${growth(ytd, yoyBase)}</b><i>vs same point last year</i></div>
+      <div class="kpi em"><small>Avg sale</small><b>${money(avg)}</b><i>${month.length} invoice${month.length === 1 ? "" : "s"} this month</i></div>
+      <div class="kpi orange"><small>Forecast</small><b>${money(forecast)}</b><i>month-end run rate</i></div>
+    </div>
+    <p class="infoline"><em>&#9432;</em>Growth compares matching elapsed periods &mdash; not partial months against full months.</p>
+  </div>`;
+}
+
 async function loadNativeInvoices() {
   const slot = $("finbody"); if (!slot) return;
   let data, summary, connect, estData;
@@ -669,6 +742,7 @@ async function loadNativeInvoices() {
   const nums = invoices.map((i) => parseInt(String(i.number).replace(/\D/g, ""), 10)).filter(Number.isFinite);
   const nextNum = nums.length ? Math.max(...nums) + 1 : 1041;
   slot.innerHTML = `
+    ${salesIntelNative(invoices)}
     <div class="fintiles">
       <div class="fintile"><small>THIS MONTH</small><b>${money(thisMonth)}</b></div>
       <div class="fintile"><small>YEAR TO DATE</small><b>${money(ytd)}</b></div>
@@ -1246,9 +1320,9 @@ async function renderFinance() {
   view().innerHTML = `<div class="sect">
     ${osHead(FINANCE_CODE[lane], FINANCE_TITLE[lane])}
     <div class="seg">
-      <button class="${lane === "invoices" ? "on" : ""}" data-fl="invoices">Overview</button>
-      <button class="${lane === "profit" ? "on" : ""}" data-fl="profit">Profit &amp; Loss</button>
-      <button class="${lane === "receipts" ? "on" : ""}" data-fl="receipts">Receipts</button>
+      <button class="${lane === "invoices" ? "on" : ""}" data-fl="invoices">${segIc("overview")}Overview</button>
+      <button class="${lane === "profit" ? "on" : ""}" data-fl="profit">${segIc("profit")}Profit</button>
+      <button class="${lane === "receipts" ? "on" : ""}" data-fl="receipts">${segIc("receipts")}Receipts</button>
     </div>
     <div id="finbody"><div class="skel"></div><div class="skel"></div></div>
   </div>`;
@@ -3191,7 +3265,7 @@ function phoneLaneSwitcher(d) {
   const lane = phoneLane();
   const need = (d.needsYou || []).length;
   return `<div class="plane">${PHONE_LANES.map(([k, label]) => `
-    <button class="${lane === k ? "on" : ""}" data-plane="${k}">${label}${k === "inbox" && need ? `<i class="badge">${need}</i>` : ""}</button>`).join("")}</div>`;
+    <button class="${lane === k ? "on" : ""}" data-plane="${k}">${segIc(k)}${label}${k === "inbox" && need ? `<i class="badge">${need}</i>` : ""}</button>`).join("")}</div>`;
 }
 
 function phoneLaneBody(d) {
@@ -3637,7 +3711,7 @@ async function renderCustomers() {
     ${osHead(LANE_CODE[S.lane] || LANE_CODE.directory, S.lane === "todos" ? "To-Do" : S.lane === "reviews" ? "Reviews" : "Customers")}
     <div class="seg">
       ${[["directory", "Directory", 0], ["reviews", "Reviews", 0], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
-        `<button class="${S.lane === k ? "on" : ""}" data-lane="${k}">${l}${n ? `<i class="badge">${n}</i>` : ""}</button>`).join("")}
+        `<button class="${S.lane === k ? "on" : ""}" data-lane="${k}">${segIc(k)}${l}${n ? `<i class="badge">${n}</i>` : ""}</button>`).join("")}
     </div>
     <div id="lanebody"><div class="skel"></div><div class="skel"></div></div>
   </div>`;
@@ -3967,6 +4041,19 @@ async function loadNativeDirectory() {
         </div>
         <div class="split"><div><small>Customer revenue</small><b>${money0(lifetime)}</b></div>
           <div class="r"><small>Reviews asked</small><b class="em">${asked.size}</b></div></div>
+      </div>
+      <div class="revpanel">
+        <div class="t"><div><span class="eyebrow" style="color:var(--magenta)">Review opportunities</span>
+          <b>${qHead.length ? "Recent customers ready to ask" : "You’re caught up"}</b></div>
+          <span class="cnt">${reviewQueue.length} READY</span></div>
+        ${qHead.length ? `<button class="asknext" data-review="${esc(qHead[0].id)}">
+            <span class="ic">&#11088;</span>
+            <span class="m"><small>Ask next</small><b>${esc(qHead[0].name)}</b>
+              <span>${esc(qHead[0].phone || qHead[0].email)}</span></span>
+            <span class="go">&#8594;</span></button>
+          ${qHead.length > 1 ? `<div class="askrow">${qHead.slice(1).map((c) =>
+            `<button class="askpill" data-review="${esc(c.id)}"><i>${esc(c.name.slice(0, 1).toUpperCase())}</i>${esc(c.name)} &#11088;</button>`).join("")}</div>` : ""}`
+          : `<p class="note">No eligible recent customers waiting for a review request.</p>`}
       </div>
       <div class="searchwrap"><span class="mag">${MAG}</span>
         <input id="csearch" placeholder="Customer, email or phone" value="${esc(S.custSearch || "")}"></div>
