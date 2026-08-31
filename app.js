@@ -3450,11 +3450,13 @@ function openAutomation(d, key) {
     frontdesk: '<button class="btn" id="autoset">Settings</button><button class="btn" id="autolog">What it did</button>',
     reminders: '<button class="btn" id="autoprev">See tonight\'s list</button><button class="btn" id="autoset">Change time</button>',
     autoreply: '<button class="btn" id="autoset">Wording &amp; hours</button>',
+    dispatcher: '<button class="btn" id="autoorder">Dispatch order</button>',
   }[key] || "";
   const blurb = {
     frontdesk: "When a missed caller texts back, Ledger answers them — quoting your real QuickBooks prices and offering real open times. It can never invoice, take a payment or discuss a bill.",
     reminders: "The night before, everyone booked in gets a text asking them to confirm or say they need to move it. Each customer is texted once per appointment, ever.",
     autoreply: "A missed call gets an instant text back so the caller knows you exist and can reply.",
+    dispatcher: "New bookings text your first-call crew member their job from the business line, and you can tell Ledger to dispatch anyone by name. It can only ever text people on your crew roster.",
   }[key] || "";
   sheet(`<h2>${esc(a.title)} ${a.enabled ? '<span class="pill live">ON</span>' : '<span class="pill">OFF</span>'}</h2>
     <p class="sub">${render(a.result)}</p>
@@ -3467,10 +3469,28 @@ function openAutomation(d, key) {
     if (set) set.onclick = () => { closeSheet(); key === "frontdesk" ? frontDeskSheet(d) : key === "reminders" ? apptReminderSheet(d) : phoneSettingsSheet(d); };
     if (log) log.onclick = () => { closeSheet(); frontDeskLogSheet(); };
     if (prev) prev.onclick = () => { closeSheet(); apptReminderPreviewSheet(); };
+    const order = sh.querySelector("#autoorder");
+    if (order) order.onclick = () => { closeSheet(); dispatchOrderSheet(); };
     sh.querySelector("#autotoggle").onclick = async () => {
       closeSheet();
       if (key === "frontdesk") return toggleFrontDesk(d);
       if (key === "reminders") return toggleApptReminders(d);
+      if (key === "dispatcher") {
+        const turningOn = !a.enabled;
+        try {
+          await api("/phone", { action: "settings-save", dispatcherEnabled: turningOn });
+          toast(turningOn ? "Dispatcher is on" : "Dispatcher is off");
+          renderPhone();
+          // Kyle 2026-08-30: flipping it on with 2+ crew immediately asks for
+          // the standing dispatch order — the machine always knows who's first.
+          if (turningOn) {
+            const roster = await api("/crew", { action: "list" });
+            const dispatchable = (roster.employees || []).filter((e) => e.active !== false && (e.phone || "").trim());
+            if (dispatchable.length >= 2) dispatchOrderSheet(dispatchable);
+          }
+        } catch (err) { toast(err.message, "err"); }
+        return;
+      }
       try {
         await api("/phone", { action: "settings-save", autoReplyEnabled: d.autoReplyEnabled === false });
         toast(d.autoReplyEnabled === false ? "Auto text-back is on" : "Auto text-back is off");
@@ -3478,6 +3498,46 @@ function openAutomation(d, key) {
       } catch (err) { toast(err.message); }
     };
   });
+}
+
+// Dispatcher: standing dispatch order. 1 = first call. Arrows, not drag —
+// works the same with a thumb on a phone and a mouse on a laptop.
+async function dispatchOrderSheet(preloaded) {
+  let crew = preloaded;
+  if (!crew) {
+    try {
+      const roster = await api("/crew", { action: "list" });
+      crew = (roster.employees || []).filter((e) => e.active !== false && (e.phone || "").trim());
+    } catch (err) { toast(err.message, "err"); return; }
+  }
+  if (!crew.length) { toast("No crew members with phone numbers yet — add them on the Calendar tab first."); return; }
+  crew = crew.slice().sort((a, b) => (a.dispatchRank ?? a.dispatch_rank ?? 9999) - (b.dispatchRank ?? b.dispatch_rank ?? 9999));
+  const wrap = sheet(`<h2>Dispatch order</h2>
+    <p class="sub">Who gets the job first. When a booking lands with nobody assigned, <b>1st call</b> gets the text.</p>
+    <div id="dorder"></div>
+    <button class="btn em wide" style="margin-top:14px" id="dsave">Save order</button>
+    <div class="note" id="dnote" style="margin-top:8px"></div>`);
+  const paint = () => {
+    wrap.querySelector("#dorder").innerHTML = crew.map((e, i) => `
+      <div class="item" style="display:flex;align-items:center;gap:10px;padding:11px 4px">
+        <b style="color:var(--cyan);min-width:52px;font-family:var(--mono);font-size:11px">${i === 0 ? "1ST CALL" : (i + 1) + (i === 1 ? "ND" : i === 2 ? "RD" : "TH")}</b>
+        <span style="flex:1"><b>${esc(e.name)}</b><br><small style="color:var(--dim)">${esc(e.phone || "")}</small></span>
+        <button class="pillbtn" data-dup="${i}" ${i === 0 ? "disabled" : ""}>&#8593;</button>
+        <button class="pillbtn" data-ddn="${i}" ${i === crew.length - 1 ? "disabled" : ""}>&#8595;</button>
+      </div>`).join("");
+    wrap.querySelectorAll("[data-dup]").forEach((b) => b.onclick = () => { const i = Number(b.dataset.dup); [crew[i - 1], crew[i]] = [crew[i], crew[i - 1]]; paint(); });
+    wrap.querySelectorAll("[data-ddn]").forEach((b) => b.onclick = () => { const i = Number(b.dataset.ddn); [crew[i], crew[i + 1]] = [crew[i + 1], crew[i]]; paint(); });
+  };
+  paint();
+  wrap.querySelector("#dsave").onclick = async (e) => {
+    e.currentTarget.disabled = true;
+    const note = wrap.querySelector("#dnote");
+    try {
+      await api("/phone", { action: "dispatch-order", employee_ids: crew.map((c) => c.id) });
+      toast("Dispatch order saved");
+      closeSheet();
+    } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
+  };
 }
 
 function apptReminderCard(d) {
