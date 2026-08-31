@@ -2609,14 +2609,36 @@ async function loadReceipts() {
     const shown = !rq ? S.receipts : S.receipts.filter((r) =>
       ((r.vendor || "") + " " + (r.category || "") + " " + (r.received_at || "") + " " + (r.subject || "") + " " + (r.summary || ""))
         .toLowerCase().includes(rq));
+    // Same intake math as iOS ReceiptIntakeSummary: unposted excludes Personal
+    // but includes uncategorised rows — that pile is the money not yet in the books.
+    const unposted = S.receipts.filter((r) => !r.qbo_purchase_id && r.category !== "Personal");
+    const unpostedValue = unposted.reduce((t, r) => t + (Number(r.total) || 0), 0);
     slot.innerHTML = `
+      <div class="fintiles" style="grid-template-columns:1fr 1fr 1.35fr">
+        <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">&#128246;</span><small>ON RADAR</small><b>${S.receipts.length}</b><i>shot + emailed</i></div>
+        <div class="fintile em"><span class="tic" style="background:rgba(47,224,160,.15);color:var(--emerald)">&#10004;</span><small>READY</small><b>${ready.length}</b><i>priced &amp; filed</i></div>
+        <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#8987;</span><small>UNPOSTED</small><b>${money(unpostedValue)}</b><i>${unposted.length === 1 ? "1 waiting" : unposted.length + " waiting"}</i></div>
+      </div>
+      <div class="lanehead"><span class="eyebrow">Intake</span><span class="note">camera · library</span></div>
       <div class="panel">
-        <h3>&#128247; Photograph a receipt</h3>
-        <p class="sub">Snap the paper. Ledger reads the vendor, date and total, then it queues like any other receipt.</p>
+        <h3>&#9635; Capture a receipt</h3>
+        <p class="sub">Shoot it and Ledger reads the vendor, total and tax, then files it for QuickBooks.</p>
         <div class="rowbtns" style="margin-top:12px">
-          <button class="btn primary" id="rcptshoot">Take photo</button>
-          <button class="btn ghost" id="rcptpick">Choose from library</button>
+          <button class="cta" id="rcptshoot" style="flex:1;margin:0">
+            <span class="ic">&#128247;</span>
+            <span><b>Photograph</b><span>Reads it for you</span></span>
+          </button>
+          <button class="btn ghost" id="rcptpick" style="flex:0 0 auto;display:flex;flex-direction:column;gap:4px;align-items:center;justify-content:center;min-width:78px">&#128444;<small style="font-size:10px;font-weight:800;letter-spacing:.6px">LIBRARY</small></button>
         </div>
+        <label class="preclass" style="margin-top:12px;display:flex;align-items:center;gap:9px;padding:11px 13px;border-radius:13px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09)">
+          <span style="color:var(--gold)">&#127991;</span>
+          <span style="font-size:10px;font-weight:800;letter-spacing:1.3px;color:var(--dim)">PRE-CLASSIFY</span>
+          <select id="preclassify" style="margin-left:auto;background:none;border:0;color:var(--gold);font-weight:700;font-family:inherit;text-align:right">
+            <option value="">Let Ledger read it</option>
+            ${Object.entries(CATEGORIES).map(([g, cats]) => `<optgroup label="${esc(g)}">${cats.map((c) =>
+              `<option value="${esc(c)}" ${S.preClassify === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</optgroup>`).join("")}
+          </select>
+        </label>
       <button class="queue" id="batchqueue">
         <div class="ic">&#128229;</div>
         <div class="m"><small>QuickBooks batch queue</small>
@@ -2628,14 +2650,15 @@ async function loadReceipts() {
         <input type="file" id="rcptlib" accept="image/*" hidden>
         <p class="note" id="rcptcamnote" style="margin-top:8px"></p>
       </div>
-      <div class="panel">
-        <h3>&#128231; Email Receipt Radar</h3>
-        <p class="sub">Ledger reads supplier receipts out of your inbox and turns them into expenses.</p>
+      <div class="lanehead"><span class="eyebrow" style="color:var(--red)">Cost ledger</span><span class="note">${S.receipts.length === 1 ? "1 record" : S.receipts.length + " records"}</span></div>
+      <div class="panel" style="border-color:rgba(248,113,113,.35);box-shadow:0 0 18px rgba(248,113,113,.08)">
+        <h3 style="color:var(--red)">&#128231; Receipt Radar</h3>
+        <p class="sub">Ledger scans your inbox daily at ${hourLabel(d.scan_hour ?? 18)} for receipts and supplier invoices. Photos land here too.</p>
         <div class="rowbtns" style="margin-top:12px;align-items:center">
           <select id="scanhour" class="hourpick" title="Daily scan time">
             ${Array.from({ length: 24 }, (_, h) => `<option value="${h}" ${h === (d.scan_hour ?? 18) ? "selected" : ""}>Daily at ${hourLabel(h)}</option>`).join("")}
           </select>
-          <button class="btn ghost" id="scannow">Scan now</button>
+          <button class="btn em" id="scannow" style="background:linear-gradient(140deg,rgba(248,113,113,.85),rgba(251,146,60,.85));color:#fff;border:0">&#8635; Scan now</button>
           ${ready.length >= 2 ? `<button class="btn em" id="batch">Post all ready (${ready.length})</button>` : ""}
         </div>
         <p class="note" style="margin-top:8px">${d.last_scan_at ? "Last scan " + esc(new Date(d.last_scan_at).toLocaleString()) : "Not scanned yet"}</p>
@@ -2658,6 +2681,9 @@ async function loadReceipts() {
         : `<div class="empty">${rq ? "No receipts match that search." : "No receipts found yet.<br>Run a scan, or forward one to your inbox."}</div>`}`;
     $("rcptshoot").onclick = () => $("rcptcam").click();
     $("rcptpick").onclick = () => $("rcptlib").click();
+    // Pre-classify is a hint, same as iOS: Ledger's own read of the photo wins;
+    // this fills the category only when the read comes back without one.
+    $("preclassify").onchange = (e) => { S.preClassify = e.target.value || null; };
     $("rcptcam").onchange = (e) => captureReceipt(e.target.files?.[0]);
     $("rcptlib").onchange = (e) => captureReceipt(e.target.files?.[0]);
     $("scannow").onclick = async (e) => {
@@ -2792,7 +2818,7 @@ async function captureReceipt(file) {
     // loadReceipts rebuilds the panel, so the in-flight note is gone by now —
     // a toast is what actually survives to be read.
     toast("Receipt read — check the details");
-    receiptSheet(d.receipt, d.suggested_category);
+    receiptSheet(d.receipt, d.suggested_category || S.preClassify);
   } catch (err) {
     busy(false);
     if (note) { note.className = "note err"; note.textContent = err.message; }
