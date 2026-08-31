@@ -5307,7 +5307,7 @@ async function businessSheet() {
       slot.innerHTML = `${(t.members || []).map((m) => `<div class="kv"><span>${esc(m.email)}</span><span>${esc(m.role)}</span></div>`).join("")}
         ${(t.invites || []).map((i) => `<div class="kv"><span>${esc(i.email)}</span><span style="color:var(--gold)">invited</span></div>`).join("")}
         ${(S.profile?.role || (S.team?.members || []).find((m) => (m.email || "").toLowerCase() === S.email)?.role) === "owner" ? `<div style="margin-top:10px"><input id="invmail" type="email" placeholder="teammate@business.com">
-          <button class="btn ghost wide" style="margin-top:8px" id="invgo">Invite — $125/mo per seat</button></div>` : ""}`;
+          <button class="btn ghost wide" style="margin-top:8px" id="invgo">Invite — $299/mo per seat</button></div>` : ""}`;
       const go = slot.querySelector("#invgo");
       if (go) go.onclick = async () => {
         go.disabled = true;
