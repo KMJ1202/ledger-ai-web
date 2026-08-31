@@ -338,6 +338,12 @@ async function renderHome() {
         <span class="status"><i></i>READY</span>
       </div>
 
+      <button class="bizrow" id="bizsettings">
+        <span class="ic">&#9881;</span>
+        <span class="m"><b>Business profile &amp; settings</b><small>CONNECTIONS · BRANDING · BOOKS</small></span>
+        <span class="go">&#8599;</span>
+      </button>
+
       <div class="console">
         <div class="chead">
           <b>Ask Ledger</b>
@@ -354,11 +360,7 @@ async function renderHome() {
           `<button class="askchip c${i}" data-ask="${esc(c.prompt)}"><em>${segIc(c.ic)}</em>${esc(c.label)}</button>`).join("")}</div>
       </div>
 
-      <button class="bizrow" id="bizsettings">
-        <span class="ic">&#9881;</span>
-        <span class="m"><b>Business profile &amp; settings</b><small>CONNECTIONS · BRANDING · BOOKS</small></span>
-        <span class="go">&#8599;</span>
-      </button>
+
 
       <div class="lanehead" style="margin-top:4px"><span class="eyebrow"><span class="gticon">&#9638;</span> Go to</span></div>
       <div class="gotogrid">
