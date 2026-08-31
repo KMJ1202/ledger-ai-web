@@ -3673,6 +3673,9 @@ function phoneSettingsSheet(d) {
     <label class="fld" style="margin-top:10px">AUTO-REPLY · AFTER HOURS</label>
     <textarea id="phauto2" rows="3">${esc(d.autoReplyAfter || "")}</textarea>
     <p class="note" style="margin-top:6px">Use <code>{business}</code> and <code>{hours}</code> — they fill in automatically.</p>
+    <label class="fld" style="margin-top:10px">VOICEMAIL GREETING — SPOKEN TO CALLERS</label>
+    <textarea id="phvmgreet" rows="3" placeholder="${esc(d.vmGreetingDefault || "You have reached your business. Please leave a message after the tone, and we will text you right back.")}">${esc(d.vmGreeting || "")}</textarea>
+    <p class="note" style="margin-top:6px">Your own words, read aloud when a call goes to voicemail. Leave blank to use the built-in greeting above.</p>
     <button class="btn em wide" style="margin-top:13px" id="phsave">Save</button>
     <div class="note" id="phnote" style="margin-top:8px"></div>`, (sh) => {
     let days = new Set(d.hoursDays || []);
@@ -3689,6 +3692,7 @@ function phoneSettingsSheet(d) {
           action: "settings-save",
           hoursStart: sh.querySelector("#phstart").value, hoursEnd: sh.querySelector("#phend").value,
           hoursDays: [...days], autoReplyHours: sh.querySelector("#phauto1").value, autoReplyAfter: sh.querySelector("#phauto2").value,
+          voicemailGreeting: sh.querySelector("#phvmgreet").value,
         });
         toast("Phone settings saved");
         closeSheet();
