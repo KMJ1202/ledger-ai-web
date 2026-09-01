@@ -4527,14 +4527,96 @@ function nativeCustomerSheet(existing) {
   });
 }
 
+// Splits one written name into first/last the way QuickBooks' own form does:
+// everything before the first space is the given name, the rest is the family
+// name. Only ever used to PRE-FILL a visible field — the owner sees the result
+// and corrects it before anything reaches QuickBooks. Twin of iOS
+// ledgerSplitPersonName.
+function splitPersonName(full) {
+  const t = String(full || "").trim();
+  const i = t.indexOf(" ");
+  return i < 0 ? { first: t, last: "" } : { first: t.slice(0, i), last: t.slice(i + 1).trim() };
+}
+
+// The display name QuickBooks lists a record under: the person when there is
+// one, otherwise the business. Twin of iOS ledgerComposeDisplayName.
+function composeDisplayName(first, last, company) {
+  const person = [first, last].map((v) => String(v || "").trim()).filter(Boolean).join(" ");
+  return person || String(company || "").trim();
+}
+
+// The Phone tab writes the caller's number into a new lead's name because that is
+// all a missed call gives it. That is a placeholder, never a person — it must not
+// pre-fill a name box, and it must never reach QuickBooks as a GivenName.
+function isPhonePlaceholderName(name) {
+  const t = String(name || "").trim();
+  if (!t) return false;
+  return /^[+()\-.\s\d]+$/.test(t) && t.replace(/\D/g, "").length >= 7;
+}
+
+// First/last for a lead: what was saved, else a split of the written name — but
+// never a company name and never a phone placeholder.
+function leadPersonName(l) {
+  let first = String(l?.firstName || "").trim(), last = String(l?.lastName || "").trim();
+  if (!first && !last) {
+    const n = String(l?.name || "").trim();
+    const co = String(l?.company || "").trim();
+    const isCompany = !!co && n.toLowerCase() === co.toLowerCase();
+    if (n && !isCompany && !isPhonePlaceholderName(n)) {
+      const sp = splitPersonName(n);
+      first = sp.first; last = sp.last;
+    }
+  }
+  return { first, last };
+}
+
+// Live "this is what QuickBooks will call them" line under the name boxes, plus
+// the pinning rule: typing in the display box pins it, emptying it hands control
+// back to the first/last boxes so there is always a way out of a bad override.
+function wireNameBoxes(sh, ids) {
+  const q = (id) => sh.querySelector("#" + id);
+  const first = q(ids.first), last = q(ids.last), co = q(ids.company), name = q(ids.name), filed = q(ids.filed);
+  if (!first || !last || !name) return;
+  const composed = () => composeDisplayName(first.value, last.value, co ? co.value : "");
+  let pinned = !!name.value.trim() && name.value.trim() !== composed() && !ids.unpinned;
+  const paint = () => {
+    if (!filed) return;
+    const shown = name.value.trim() || composed();
+    const ok = !!shown && !isPhonePlaceholderName(shown);
+    filed.className = ok ? "note" : "note err";
+    filed.innerHTML = ok
+      ? "Filed in QuickBooks as <b>" + esc(shown) + "</b>."
+      : shown
+        ? "That is the caller's number, not a name. Type the first and last name — the number stays in the phone box."
+        : "Type a first and last name — or a business name. That is how QuickBooks will list them.";
+  };
+  const sync = () => { if (!pinned) name.value = composed(); paint(); };
+  [first, last, co].forEach((el) => { if (el) el.addEventListener("input", sync); });
+  name.addEventListener("input", () => {
+    const typed = name.value.trim();
+    if (!typed) pinned = false; else if (typed !== composed()) pinned = true;
+    paint();
+  });
+  paint();
+}
+
 function newCustomerSheet(prefill, onCreated) {
   const pre = prefill || {};
+  const person = leadPersonName(pre);
+  // A lead the Phone tab named after the caller's number has no display name yet —
+  // blank it so a real name has to be typed before a customer is filed under it.
+  const preName = isPhonePlaceholderName(pre.name) ? "" : String(pre.name || "");
   const form = (force) => `<h2>New Customer</h2>
     ${prefill ? `<p class="sh-sub">Converting lead &ldquo;${esc(pre.name || "")}&rdquo; — creating the customer marks it WON.</p>` : ""}
     <div class="eyebrow">Customer</div>
     <div class="cmpsect">
-      <input id="ncName" class="cmpinput" placeholder="Name (required)" value="${esc(pre.name || "")}">
-      <input id="ncCompany" class="cmpinput" placeholder="Company (optional)" value="${esc(pre.company || "")}">
+      <div class="namepair">
+        <input id="ncFirst" class="cmpinput" placeholder="First name" autocomplete="given-name" value="${esc(person.first)}">
+        <input id="ncLast" class="cmpinput" placeholder="Last name" autocomplete="family-name" value="${esc(person.last)}">
+      </div>
+      <input id="ncCompany" class="cmpinput" placeholder="Business name (optional)" value="${esc(pre.company || "")}">
+      <input id="ncName" class="cmpinput" placeholder="Display name (how QuickBooks lists them)" value="${esc(preName)}">
+      <div class="note" id="ncFiled"></div>
     </div>
     <div class="eyebrow">Contact</div>
     <div class="cmpsect">
@@ -4556,15 +4638,19 @@ function newCustomerSheet(prefill, onCreated) {
     <div class="note" id="ncNote" style="margin-top:9px"></div>`;
 
   sheet(form(false), (sh) => {
+    wireNameBoxes(sh, { first: "ncFirst", last: "ncLast", company: "ncCompany", name: "ncName", filed: "ncFiled" });
     const note = sh.querySelector("#ncNote");
     const dup = sh.querySelector("#ncDup");
     const val = (id) => (sh.querySelector("#" + id)?.value || "").trim();
     const submit = async (force, btn) => {
-      const name = val("ncName");
-      if (!name) { note.className = "note err"; note.textContent = "A name is required."; return; }
+      // First/last are what QuickBooks stores as GivenName/FamilyName; the display
+      // name is what it lists the record under and falls back to the composed person.
+      const name = val("ncName") || composeDisplayName(val("ncFirst"), val("ncLast"), val("ncCompany"));
+      if (!name) { note.className = "note err"; note.textContent = "A first and last name — or a business name — is required."; return; }
       btn.disabled = true; note.className = "note"; note.textContent = "Creating…";
       const payload = { display_name: name, force };
-      [["company", "ncCompany"], ["email", "ncEmail"], ["phone", "ncPhone"], ["mobile", "ncMobile"], ["notes", "ncNotes"]]
+      [["given_name", "ncFirst"], ["family_name", "ncLast"], ["company", "ncCompany"],
+       ["email", "ncEmail"], ["phone", "ncPhone"], ["mobile", "ncMobile"], ["notes", "ncNotes"]]
         .forEach(([k, id]) => { const v = val(id); if (v) payload[k] = v; });
       if (val("ncLine1") || val("ncCity")) {
         payload.address = { line1: val("ncLine1"), city: val("ncCity"), region: val("ncRegion"), postal: val("ncPostal") };
@@ -4830,10 +4916,20 @@ function drawLeads() {
 
 function leadSheet(l) {
   const isNew = !l.id;
+  const person = leadPersonName(l);
+  // An auto-created missed-call lead is named after the number. Keep it in the
+  // display box so the lead still saves, but leave it unpinned — the first real
+  // name typed replaces it instead of sitting behind a phone number forever.
+  const placeholderName = isPhonePlaceholderName(l.name);
   sheet(`<h2>${isNew ? "New lead" : esc(l.name)}</h2>
     <p class="sh-sub">${isNew ? "Who is it, and when do you chase them?" : esc(l.company || "")}</p>
-    <label class="fld">NAME</label><input id="lname" value="${esc(l.name || "")}">
+    <div class="namepair">
+      <div><label class="fld">FIRST NAME</label><input id="lfirst" autocomplete="given-name" value="${esc(person.first)}"></div>
+      <div><label class="fld">LAST NAME</label><input id="llast" autocomplete="family-name" value="${esc(person.last)}"></div>
+    </div>
     <label class="fld">COMPANY</label><input id="lco" value="${esc(l.company || "")}">
+    <label class="fld">DISPLAY NAME</label><input id="lname" value="${esc(l.name || "")}">
+    <div class="note" id="lfiled" style="margin-top:6px"></div>
     <label class="fld">PHONE</label><input id="lph" type="tel" value="${esc(l.phone || "")}">
     <label class="fld">EMAIL</label><input id="lem" type="email" value="${esc(l.email || "")}">
     <label class="fld">ESTIMATED VALUE</label><input id="lval" inputmode="decimal" value="${l.valueEstimate ?? ""}">
@@ -4859,8 +4955,20 @@ function leadSheet(l) {
       <button class="btn primary" id="lsave">${isNew ? "Add lead" : "Save"}</button>
     </div>
     <div class="note" id="lnote" style="margin-top:9px"></div>`, (sh) => {
+    wireNameBoxes(sh, { first: "lfirst", last: "llast", company: "lco", name: "lname",
+      filed: "lfiled", unpinned: placeholderName });
     const conv = sh.querySelector("#lconv");
-    if (conv) conv.onclick = () => newCustomerSheet(l, async (created) => {
+    // Carry what is on screen, not what was last saved — typing the caller's real
+    // name and converting in one go must not file the customer under the old name.
+    const liveLead = () => ({ ...l,
+      name: sh.querySelector("#lname").value.trim(),
+      firstName: sh.querySelector("#lfirst").value.trim(),
+      lastName: sh.querySelector("#llast").value.trim(),
+      company: sh.querySelector("#lco").value.trim(),
+      phone: sh.querySelector("#lph").value.trim(),
+      email: sh.querySelector("#lem").value.trim(),
+      notes: sh.querySelector("#lnotes").value.trim() });
+    if (conv) conv.onclick = () => newCustomerSheet(liveLead(), async (created) => {
       // Same contract as iOS markWon(customerId:) — the lead is won and linked.
       try {
         S.board = await api("/leads", { action: "lead-save",
@@ -4874,6 +4982,8 @@ function leadSheet(l) {
       const lead = {
         ...(l.id ? { id: l.id } : {}),
         name: sh.querySelector("#lname").value.trim(),
+        first_name: sh.querySelector("#lfirst").value.trim(),
+        last_name: sh.querySelector("#llast").value.trim(),
         company: sh.querySelector("#lco").value.trim(),
         phone: sh.querySelector("#lph").value.trim(),
         email: sh.querySelector("#lem").value.trim(),
