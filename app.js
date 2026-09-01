@@ -3457,14 +3457,14 @@ function openAutomation(d, key) {
     reminders: '<button class="btn" id="autoprev">See tonight\'s list</button><button class="btn" id="autoset">Change time</button>',
     autoreply: '<button class="btn" id="autoset">Wording &amp; hours</button>',
     dispatcher: '<button class="btn" id="autoorder">Dispatch order</button>',
-    "crew-reminders": '<button class="btn" id="autocrewhours">Crew hours</button><button class="btn" id="autocrewshifts">Shifts &amp; timing</button>',
+    "crew-reminders": '<button class="btn" id="autocrewlist">Your reminders</button><button class="btn" id="autocrewhours">Crew hours</button><button class="btn" id="autocrewshifts">Clock-out timing</button>',
   }[key] || "";
   const blurb = {
     frontdesk: "When a missed caller texts back, Ledger answers them — quoting your real QuickBooks prices and offering real open times. It can never invoice, take a payment or discuss a bill.",
     reminders: "The night before, everyone booked in gets a text asking them to confirm or say they need to move it. Each customer is texted once per appointment, ever.",
     autoreply: "A missed call gets an instant text back so the caller knows you exist and can reply.",
     dispatcher: "New bookings text your first-call crew member their job from the business line, and you can tell Ledger to dispatch anyone by name. It can only ever text people on your crew roster.",
-    "crew-reminders": "After a crew member's shift ends, anyone still clocked in gets a text from the business line — replying DONE clocks them out, ignoring it keeps them on the clock. Each punch is nudged once, and only people on your roster can ever be texted.",
+    "crew-reminders": "Two things. After a crew member's shift ends, anyone still clocked in gets a text — replying DONE clocks them out. And any reminder you write yourself goes out from the business line at the time you set it. Each punch is nudged once, each reminder sends once a day, and only people on your roster can ever be texted.",
   }[key] || "";
   sheet(`<h2>${esc(a.title)} ${a.enabled ? '<span class="pill live">ON</span>' : '<span class="pill">OFF</span>'}</h2>
     <p class="sub">${render(a.result)}</p>
@@ -3483,6 +3483,8 @@ function openAutomation(d, key) {
     if (crewHours) crewHours.onclick = () => { closeSheet(); crewHoursSheet(); };
     const crewShifts = sh.querySelector("#autocrewshifts");
     if (crewShifts) crewShifts.onclick = () => { closeSheet(); crewTimingSheet(d); };
+    const crewList = sh.querySelector("#autocrewlist");
+    if (crewList) crewList.onclick = () => { closeSheet(); crewRemindersSheet(); };
     sh.querySelector("#autotoggle").onclick = async () => {
       closeSheet();
       if (key === "frontdesk") return toggleFrontDesk(d);
@@ -3782,6 +3784,191 @@ function crewTimingSheet(d) {
         toast("Timing saved");
         closeSheet();
         renderPhone();
+      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
+    };
+  });
+}
+
+// ---- The owner's own crew reminders (Kyle 2026-08-31) ---------------------
+// The clock-out nudge is derived from an open punch. These are written by the
+// owner: a message, a time, and who gets it. Same card, same switch, separate
+// records — see the migration for why they are not one table.
+
+// "Every Mon Tue Wed at 7:30 AM · everyone" — the whole schedule in the row,
+// so nobody has to open a reminder to find out when it goes.
+function crewReminderWhen(r, crew) {
+  const time = apptPrettyTime(r.send_time || "08:00");
+  const who = r.audience === "selected"
+    ? (r.employee_ids || []).map((id) => (crew.find((e) => e.id === id) || {}).name).filter(Boolean).join(", ") || "nobody on the roster"
+    : "everyone";
+  if (r.send_on) {
+    const [y, m, dd] = String(r.send_on).slice(0, 10).split("-").map(Number);
+    const when = new Date(y, (m || 1) - 1, dd || 1).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return `Once on ${when} at ${time} · ${who}`;
+  }
+  const labels = CREW_DAY_LABELS.filter(([k]) => (r.days || []).includes(k)).map(([, l]) => l);
+  return `Every ${labels.join(" ") || "—"} at ${time} · ${who}`;
+}
+
+function crewRemindersSheet() {
+  sheet(`<h2>Your reminders</h2>
+    <p class="sh-sub">Texted to your crew from the business line at the time you set. The clock-out nudge is separate and always on with this switch.</p>
+    <div id="crlist" class="note" style="margin-top:12px">Loading…</div>
+    <button class="btn em wide" style="margin-top:13px" id="cradd">New reminder</button>`, async (sh) => {
+    sh.querySelector("#cradd").onclick = () => { closeSheet(); crewReminderEditSheet(null); };
+    try {
+      const [data, roster] = await Promise.all([
+        api("/phone", { action: "crew-reminder-list" }),
+        api("/crew", { action: "list" }),
+      ]);
+      const crew = (roster.employees || []).filter((e) => e.active !== false);
+      const rows = data.reminders || [];
+      const list = sh.querySelector("#crlist");
+      if (!rows.length) {
+        list.innerHTML = `<p class="note">Nothing yet. A reminder is one text on a schedule — "Trailer inspection today", "Sign your time card", anything you say twice a week.</p>`;
+        return;
+      }
+      list.className = "panel";
+      list.style.padding = "0";
+      list.style.overflow = "hidden";
+      list.innerHTML = rows.map((r, i) => `<div class="autorow" data-crid="${esc(r.id)}" style="${i ? "" : "border-top:0"}">
+        <div style="flex:1;min-width:0">
+          <div class="needst">${esc(r.message)} ${r.active === false ? '<span class="pill">OFF</span>' : ""}</div>
+          <div class="needsm">${esc(crewReminderWhen(r, crew))}${r.last_sent_on ? ` · last sent ${esc(r.last_sent_on)}` : ""}</div>
+        </div>
+        <span style="color:var(--dim2)">&rsaquo;</span></div>`).join("");
+      on("[data-crid]", "click", (e) => {
+        const r = rows.find((x) => x.id === e.currentTarget.dataset.crid);
+        if (r) { closeSheet(); crewReminderEditSheet(r, crew); }
+      }, sh);
+    } catch (err) {
+      sh.querySelector("#crlist").className = "note err";
+      sh.querySelector("#crlist").textContent = err.message;
+    }
+  });
+}
+
+function crewReminderEditSheet(rem, crewCache) {
+  const days = new Set(rem?.days?.length ? rem.days : ["mon", "tue", "wed", "thu", "fri"]);
+  const picked = new Set(rem?.employee_ids || []);
+  let mode = rem?.send_on ? "once" : "repeat";
+  let audience = rem?.audience === "selected" ? "selected" : "all";
+  sheet(`<h2>${rem ? "Edit reminder" : "New reminder"}</h2>
+    <label class="fld" style="margin-top:10px">WHAT IT SAYS</label>
+    <textarea id="crMsg" class="cmpinput" rows="3" maxlength="320" placeholder="Sign your time card before you leave">${esc(rem?.message || "")}</textarea>
+    <p class="note" style="margin-top:6px">Your business name goes on the front of it automatically.</p>
+    <label class="fld" style="margin-top:12px">WHAT TIME</label>
+    <input type="time" id="crTime" class="cmpinput" value="${esc(rem?.send_time || "08:00")}">
+    <div class="rowbtns" style="margin-top:12px">
+      <button class="btn ${mode === "repeat" ? "em" : ""}" id="crModeRepeat" type="button">Every week</button>
+      <button class="btn ${mode === "once" ? "em" : ""}" id="crModeOnce" type="button">Just once</button>
+    </div>
+    <div id="crRepeatWrap" style="display:${mode === "repeat" ? "block" : "none"}">
+      <div class="daypick" style="margin-top:10px">
+        ${CREW_DAY_LABELS.map(([k, l]) => `<button class="daybtn ${days.has(k) ? "on" : ""}" data-crday="${k}" type="button">${l}</button>`).join("")}
+      </div>
+    </div>
+    <div id="crOnceWrap" style="display:${mode === "once" ? "block" : "none"}">
+      <input type="date" id="crDate" class="cmpinput" style="margin-top:10px" value="${esc(String(rem?.send_on || "").slice(0, 10))}">
+      <p class="note" style="margin-top:6px">It sends that day and then switches itself off.</p>
+    </div>
+    <label class="fld" style="margin-top:14px">WHO GETS IT</label>
+    <div class="rowbtns" style="margin-top:6px">
+      <button class="btn ${audience === "all" ? "em" : ""}" id="crWhoAll" type="button">Everyone on the crew</button>
+      <button class="btn ${audience === "selected" ? "em" : ""}" id="crWhoSome" type="button">Only who I pick</button>
+    </div>
+    <div id="crPickWrap" style="display:${audience === "selected" ? "block" : "none"}">
+      <div class="daypick" id="crPick" style="margin-top:10px;flex-wrap:wrap"></div>
+    </div>
+    ${rem ? `<div class="rowbtns" style="margin-top:14px">
+      <button class="btn ghost" id="crToggle" type="button">${rem.active === false ? "Turn this one back on" : "Turn this one off"}</button>
+      <button class="btn ghost" id="crDelete" type="button">Delete</button>
+    </div>` : ""}
+    <button class="btn em wide" style="margin-top:13px" id="crSave">Save</button>
+    <div class="note" id="crNote" style="margin-top:8px"></div>`, async (sh) => {
+    const note = sh.querySelector("#crNote");
+    const setMode = (next) => {
+      mode = next;
+      sh.querySelector("#crRepeatWrap").style.display = next === "repeat" ? "block" : "none";
+      sh.querySelector("#crOnceWrap").style.display = next === "once" ? "block" : "none";
+      sh.querySelector("#crModeRepeat").classList.toggle("em", next === "repeat");
+      sh.querySelector("#crModeOnce").classList.toggle("em", next === "once");
+    };
+    sh.querySelector("#crModeRepeat").onclick = () => setMode("repeat");
+    sh.querySelector("#crModeOnce").onclick = () => setMode("once");
+    on("[data-crday]", "click", (e) => {
+      const k = e.currentTarget.dataset.crday;
+      days.has(k) ? days.delete(k) : days.add(k);
+      e.currentTarget.classList.toggle("on");
+    }, sh);
+    const setAudience = (next) => {
+      audience = next;
+      sh.querySelector("#crPickWrap").style.display = next === "selected" ? "block" : "none";
+      sh.querySelector("#crWhoAll").classList.toggle("em", next === "all");
+      sh.querySelector("#crWhoSome").classList.toggle("em", next === "selected");
+    };
+    sh.querySelector("#crWhoAll").onclick = () => setAudience("all");
+    sh.querySelector("#crWhoSome").onclick = () => setAudience("selected");
+
+    let crew = crewCache;
+    if (!crew) {
+      try { crew = ((await api("/crew", { action: "list" })).employees || []).filter((e) => e.active !== false); }
+      catch { crew = []; }
+    }
+    // Only people who can actually be texted. Someone with no number on the
+    // roster is shown as unavailable rather than silently missing.
+    sh.querySelector("#crPick").innerHTML = crew.map((e) => {
+      const textable = String(e.phone || "").trim();
+      return `<button class="daybtn ${picked.has(e.id) ? "on" : ""}" data-crwho="${esc(e.id)}" type="button" style="flex:0 0 auto;padding:10px 13px" ${textable ? "" : "disabled"}>${esc(e.name)}${textable ? "" : " (no number)"}</button>`;
+    }).join("") || `<p class="note">Nobody on the roster yet.</p>`;
+    on("[data-crwho]", "click", (e) => {
+      const id = e.currentTarget.dataset.crwho;
+      picked.has(id) ? picked.delete(id) : picked.add(id);
+      e.currentTarget.classList.toggle("on");
+    }, sh);
+
+    const save = async (patch) => {
+      const message = sh.querySelector("#crMsg").value.trim();
+      if (!message) { note.className = "note err"; note.textContent = "Say what the text should say."; return false; }
+      const body = {
+        action: "crew-reminder-save",
+        message,
+        sendTime: sh.querySelector("#crTime").value || "08:00",
+        days: mode === "repeat" ? [...days] : [],
+        sendOn: mode === "once" ? sh.querySelector("#crDate").value : "",
+        audience,
+        employeeIds: [...picked],
+        active: rem ? rem.active !== false : true,
+        ...patch,
+      };
+      if (rem) body.id = rem.id;
+      try {
+        await api("/phone", body);
+        return true;
+      } catch (err) { note.className = "note err"; note.textContent = err.message; return false; }
+    };
+
+    sh.querySelector("#crSave").onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      if (await save({})) { toast("Reminder saved"); closeSheet(); crewRemindersSheet(); renderPhone(); }
+      else e.currentTarget.disabled = false;
+    };
+    const toggle = sh.querySelector("#crToggle");
+    if (toggle) toggle.onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      if (await save({ active: rem.active === false })) {
+        toast(rem.active === false ? "Reminder is on" : "Reminder is off");
+        closeSheet(); crewRemindersSheet(); renderPhone();
+      } else e.currentTarget.disabled = false;
+    };
+    const del = sh.querySelector("#crDelete");
+    if (del) del.onclick = async (e) => {
+      if (!confirm("Delete this reminder? Your crew stops getting it.")) return;
+      e.currentTarget.disabled = true;
+      try {
+        await api("/phone", { action: "crew-reminder-delete", id: rem.id });
+        toast("Reminder deleted");
+        closeSheet(); crewRemindersSheet(); renderPhone();
       } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
     };
   });
