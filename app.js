@@ -732,11 +732,11 @@ function salesIntelNative(invoices) {
   }
   const max = Math.max(1, ...days.map((d) => d.total));
   return `<div class="intel">
-    <div class="ihead"><b>&#9651; Sales Intelligence</b><span class="live"><i></i>LIVE BOOKS</span></div>
+    <div class="pihead"><b>&#9651; Sales Intelligence</b><span class="live"><i></i>LIVE BOOKS</span></div>
     <p class="cap">This month</p>
     <div class="big">${money(mtd)}</div>
     <div class="sub">Live sales performance</div>
-    <div class="spark">${days.map((d, i) =>
+    <div class="pspark">${days.map((d, i) =>
       `<div class="b ${i === days.length - 1 ? "hot" : ""}" style="height:${Math.max(Math.round(d.total / max * 100), 3)}%" title="${d.key}: ${money0(d.total)}"></div>`).join("")}</div>
     <div class="sparkends"><span>14 days ago</span><span>Today</span></div>
     <div class="kpis" style="margin-top:15px">
@@ -1481,11 +1481,11 @@ function salesIntel(invoices, k) {
   const max = Math.max(1, ...days.map((d) => d.total));
 
   return `<div class="intel">
-    <div class="ihead"><b>&#9651; Sales Intelligence</b><span class="live"><i></i>LIVE QBO</span></div>
+    <div class="pihead"><b>&#9651; Sales Intelligence</b><span class="live"><i></i>LIVE QBO</span></div>
     <p class="cap">This month</p>
     <div class="big">${money(monthTotal)}</div>
     <div class="sub">Live sales performance</div>
-    <div class="spark">${days.map((d, i) =>
+    <div class="pspark">${days.map((d, i) =>
       `<div class="b ${i === days.length - 1 ? "hot" : ""}" style="height:${Math.max(Math.round(d.total / max * 100), 3)}%" title="${d.key}: ${money0(d.total)}"></div>`).join("")}</div>
     <div class="sparkends"><span>14 days ago</span><span>Today</span></div>
     <div class="kpis" style="margin-top:15px">
@@ -2938,7 +2938,7 @@ async function renderPhone() {
             lane. Call forwarding is the thing that has to be working before any
             of this tab means anything, and a setup guide found at the bottom of
             a third sub-tab is a setup guide nobody reads. */""}
-      ${d.hasNumber ? phoneNumberCard(d) : ""}
+      ${d.hasNumber ? phoneStatusRail(d) : ""}
       ${d.hasNumber ? phoneLaneSwitcher(d) : ""}
       ${d.hasNumber ? phoneLaneBody(d) : ""}
     </div>`;
@@ -2946,12 +2946,21 @@ async function renderPhone() {
     if (d.hasNumber) on("[data-pevt]", "click", (e) => phoneEventSheet(d.events.find((ev) => ev.id === e.currentTarget.dataset.pevt)));
     if (d.hasNumber) on("[data-pthread]", "click", (e) => phoneThreadSheet((d.threads || []).find((t) => t.id === e.currentTarget.dataset.pthread)));
     if (d.hasNumber) {
-      $("phsetup").onclick = () => phoneSetupSheet(d);
+      if ($("phsetup")) $("phsetup").onclick = () => phoneSetupSheet(d);
       if ($("phsettings")) $("phsettings").onclick = () => phoneSettingsSheet(d);
       on("[data-plane]", "click", (e) => { S.phoneLane = e.currentTarget.dataset.plane; renderPhone(); });
       if ($("remindall")) $("remindall").onclick = () => apptReminderPreviewSheet();
       on("[data-needs]", "click", (e) => openNeedsYou(d, e.currentTarget.dataset.needs));
-      on("[data-auto]", "click", (e) => openAutomation(d, e.currentTarget.dataset.auto));
+      on("[data-autotoggle]", "click", (e) => {
+        e.stopPropagation();
+        toggleAutomation(d, e.currentTarget.dataset.autotoggle);
+      });
+      on("[data-auto]", "click", (e) => {
+        // The switch is a child of the row. Without this the flip would also
+        // open the sheet it just changed the state of.
+        if (e.target.closest("[data-autotoggle]")) return;
+        openAutomation(d, e.currentTarget.dataset.auto);
+      });
       if ($("fdtoggle")) $("fdtoggle").onclick = () => toggleFrontDesk(d);
       if ($("remtoggle")) $("remtoggle").onclick = () => toggleApptReminders(d);
       if ($("remtune")) $("remtune").onclick = () => apptReminderSheet(d);
@@ -3014,12 +3023,29 @@ function phoneStatusStrip(d) {
   </div>`;
 }
 
-function phoneNumberCard(d) {
-  return `<div class="panel">
-    <h3>&#128222; Business number</h3>
-    <div class="bignum">${esc(formatE164(d.number.e164))}</div>
-    <p class="sub">Missed calls get a same-second auto-text, and the caller lands in your Leads lane below — nothing to do here but read the feed.</p>
-    <button class="btn ghost wide" style="margin-top:12px" id="phsetup">&#128203; Setup guide</button>
+// THE STATUS RAIL — one line where a whole card used to be.
+//
+// What it replaced: a panel carrying a heading, a phone number that has never
+// changed and will never change, a paragraph of marketing, and a button an
+// owner presses exactly once in the life of the account. Four elements and a
+// third of the first screen, none of it answering a question anybody has after
+// day one.
+//
+// What it says instead is the one thing this tab never carried: state, right
+// now. Open or after hours, and how much of the line is armed. Everything else
+// on the Phone tab is a report on a week that has already happened.
+//
+// The setup guide moves to Activity → Your line, where the rest of the
+// once-ever configuration already lives.
+function phoneStatusRail(d) {
+  const rows = d.automations || [];
+  const armed = rows.filter((r) => r.enabled).length;
+  const open = d.openNow === true;
+  return `<div class="prail">
+    <span class="pdot${open ? " open" : ""}"></span>
+    <b>${esc(formatE164(d.number.e164))}</b>
+    <span class="prstate${open ? " open" : ""}">${open ? "OPEN" : "AFTER HOURS"}</span>
+    <span class="prarm${armed ? " on" : ""}">${armed} OF ${rows.length} ARMED</span>
   </div>`;
 }
 
@@ -3215,9 +3241,17 @@ function phoneEventSheet(ev) {
 // tab's own scroll flow with nothing to close the keyboard once open.
 function phoneSettingsSummary(d) {
   const start = timeLabel12(d.hoursStart || "08:00"), end = timeLabel12(d.hoursEnd || "17:00");
+  // The setup guide lives here now rather than above the lane bar. Call
+  // forwarding is a once-in-the-life-of-the-account job, and a button for it
+  // was holding the best strip on the screen hostage forever after.
   return `<div class="panel phsettingsrow" id="phsettings">
     <div class="ic">&#9200;</div>
     <div class="m"><b>Business hours &amp; auto-reply</b><span>${esc(start)} &ndash; ${esc(end)}</span></div>
+    <span class="chev">&#8250;</span>
+  </div>
+  <div class="panel phsettingsrow" id="phsetup" style="margin-top:10px">
+    <div class="ic">&#128203;</div>
+    <div class="m"><b>Setup guide</b><span>Forward your calls to ${esc(formatE164(d.number ? d.number.e164 : ""))}</span></div>
     <span class="chev">&#8250;</span>
   </div>`;
 }
@@ -3323,8 +3357,15 @@ async function playVoicemail(eventId) {
 // question people actually open this tab with; RUNNING FOR YOU replaces two
 // fat marketing cards with three measured lines.
 
-const PHONE_LANES = [["inbox", "INBOX"], ["autopilot", "AUTOPILOT"], ["activity", "ACTIVITY"]];
-function phoneLane() { return PHONE_LANES.some(([k]) => k === S.phoneLane) ? S.phoneLane : "inbox"; }
+// Kyle 2026-08-31: Autopilot leads, and it is where the tab lands.
+// The order is a claim about what this product IS. Opening on the Inbox said
+// "here is your mess"; opening on Autopilot says "here is what ran without
+// you" — and the Inbox badge rides in the bar, so nothing waiting can hide
+// behind that choice. Landing on a lane that moves with the day would be the
+// alternative, and it is worse: a screen you cannot predict is a screen you
+// have to read every time.
+const PHONE_LANES = [["autopilot", "AUTOPILOT"], ["inbox", "INBOX"], ["activity", "ACTIVITY"]];
+function phoneLane() { return PHONE_LANES.some(([k]) => k === S.phoneLane) ? S.phoneLane : "autopilot"; }
 
 // Same three-lane shape Finance uses, for the same reason: one screen per
 // question. What needs me / what is running for me / what happened.
@@ -3372,19 +3413,164 @@ function phoneInboxLane(d) {
     <div id="vmlane"></div>`;
 }
 
+// ---------------------------------------------------------------------------
+// THE AUTOPILOT LANE (rebuilt 2026-08-31, Kyle override 1202)
+// ---------------------------------------------------------------------------
+//
+// What was here: three unlabelled counters, five identical rows, and a line of
+// text telling the owner how to use the screen. Three faults, and the third is
+// the one that mattered.
+//
+//   The counters had no header. "0 / 46 / 2" over TEXTED BACK / ANSWERED /
+//   BOOKED is three numbers with no shared subject — 46 answered *what*, out of
+//   how many, compared to when?
+//
+//   Every row weighed the same. Front Desk answering 46 customers rendered
+//   identically to Dispatcher sitting off, so the eye had no reason to stop on
+//   either and stopped on neither.
+//
+//   And the screen explained itself: "Tap any line to turn it on or off." A
+//   control that needs a caption is a control that lost. It is also two
+//   controls saying one thing — an ON pill beside a TURN OFF button.
+//
+// What replaced it, in the order it reads:
+//
+//   THE ARMATURE. Five segments, one per system, lit or dark. A breaker panel
+//   for the phone line: how much of it is live is a shape, not a sentence, and
+//   a dark segment is a tap away from being lit.
+//
+//   ROWS SORTED BY WHAT BEING OFF IS COSTING. Anything dark with a measured
+//   price floats to the top wearing an amber rail. An off switch that shows the
+//   bill gets flipped; one showing a description gets scrolled past. Under it,
+//   what is earning; under that, what is quiet. The server computes the rank
+//   (see impact() in the phone function) so both faces sort identically — a
+//   client sorting on parsed prose is a client that drifts.
+//
+//   A SPARKLINE ON EVERY SWITCH. Seven days of that system's own work. "46
+//   answered" reads the same whether it was 46 on one frantic Monday or seven a
+//   day — and those are different businesses.
+//
+//   THE PROOF TICKER. What it actually did, in sentences, timestamped. Every
+//   autonomous reply Front Desk ever sent was already a row in the database and
+//   was never once shown to the man paying for it. This is the difference
+//   between trusting it and watching it.
+//
+// The switch is now a switch. Tap the row for the whole story, tap the toggle
+// to flip it, and nothing has to say so out loud.
+
+const PHONE_SYSTEM_CODE = {
+  frontdesk: "DESK", dispatcher: "DISPATCH", "crew-reminders": "CREW",
+  reminders: "APPTS", autoreply: "TEXTBACK",
+};
+// A system's own colour, fixed for life. The ticker keys on THIS, not on the
+// row's current tone — a line that says "Nudged Mike about their shift" must
+// not turn amber just because the switch happens to be off today. What a thing
+// did is history; whether it is armed is state, and they are different facts.
+const PHONE_SYSTEM_TONE = {
+  frontdesk: "var(--cyan)", dispatcher: "var(--blue)", "crew-reminders": "var(--emerald)",
+  reminders: "var(--gold)", autoreply: "var(--purple)",
+};
+const PHONE_TONE_VAR = { cost: "var(--gold)", live: "var(--emerald)", ready: "var(--cyan)", idle: "#39424f" };
+
+// Rank first, then the loudest number inside a rank, then the server's own
+// order so equal rows never shuffle between renders.
+function phoneRankedAutomations(d) {
+  const rows = (d.automations || []).map((x, i) => ({ ...x, _i: i }));
+  return rows.sort((a, b) =>
+    ((a.impact?.rank ?? 9) - (b.impact?.rank ?? 9)) || (a._i - b._i));
+}
+
+// THE ARMATURE. Five bars, lit or dark, each one a system and each one a tap.
+// Deliberately not five toggles: this is the read, the rows below are the
+// write. Mixing them would put two ways to do the same thing on one screen.
+function phoneArmature(d) {
+  const rows = d.automations || [];
+  if (!rows.length) return "";
+  return `<div class="panel armature">
+    <div class="arow">${rows.map((r) => {
+      const tone = PHONE_TONE_VAR[r.impact?.tone] || (r.enabled ? "var(--emerald)" : "#39424f");
+      const costing = !r.enabled && r.impact?.tone === "cost";
+      return `<button class="aseg${r.enabled ? " lit" : ""}${costing ? " cost" : ""}" data-auto="${esc(r.key)}"
+        style="--seg:${tone}" aria-label="${esc(r.title)} ${r.enabled ? "on" : "off"}">
+        <span class="abar"></span>
+        <span class="acode">${esc(PHONE_SYSTEM_CODE[r.key] || r.key.slice(0, 4).toUpperCase())}</span>
+      </button>`;
+    }).join("")}</div>
+  </div>`;
+}
+
+// Seven days of one system's work. Bars, not a line: a line implies a
+// continuous quantity, and these are counts of discrete things that happened.
+// An empty week draws a baseline rather than nothing, so the row keeps its
+// shape and "it did nothing" stays a visible answer.
+function phoneSpark(series, tone) {
+  const values = Array.isArray(series) && series.length ? series : [0, 0, 0, 0, 0, 0, 0];
+  const peak = Math.max(...values);
+  // A week of nothing draws one flat rule. Seven 2px stubs read as dirt on the
+  // screen — a deliberate baseline reads as an answer, which is what it is.
+  if (peak <= 0) return `<span class="pspark flat" aria-hidden="true"></span>`;
+  return `<span class="pspark" aria-hidden="true">${values.map((v, i) => {
+    const today = i === values.length - 1;
+    return `<i style="height:${v > 0 ? Math.max(11, Math.round((v / peak) * 100)) : 4}%;background:${v > 0 ? tone : "currentColor"};opacity:${v > 0 ? (today ? 1 : 0.6) : 0.22}"></i>`;
+  }).join("")}</span>`;
+}
+
 function phoneAutopilotLane(d) {
-  const a = d.autopilot || {};
   const render = (text) => esc(text).replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--gold)">$1</b>');
+  const rows = phoneRankedAutomations(d);
+  const costing = rows.filter((r) => r.impact?.tone === "cost").length;
   return `
-    ${heroStrip([[a.textedBack ?? 0, "TEXTED BACK"], [a.replied ?? 0, "ANSWERED"], [a.booked ?? 0, "BOOKED"]])}
-    <p class="zonehead">THIS WEEK, WITHOUT YOU TOUCHING IT</p>
-    <div class="panel flush">${(d.automations || []).map((x) => `
-      <div class="prow" data-auto="${esc(x.key)}">
-        <span class="needsdot" style="background:${x.enabled ? "var(--emerald)" : "#39424f"};${x.enabled ? "box-shadow:0 0 9px rgba(47,224,160,.6)" : ""}"></span>
+    ${phoneArmature(d)}
+    <p class="zonehead${costing ? " cost" : ""}">${costing
+      ? `${costing} SWITCH${costing === 1 ? " IS" : "ES ARE"} COSTING YOU`
+      : "THIS WEEK, WITHOUT YOU TOUCHING IT"}</p>
+    <div class="panel flush">${rows.map((x) => {
+      const tone = PHONE_TONE_VAR[x.impact?.tone] || "#39424f";
+      return `<div class="prow autorow" data-auto="${esc(x.key)}" style="--tone:${tone}">
+        <span class="autorail"></span>
         <div style="flex:1;min-width:0">
-          <div class="needst">${esc(x.title)} <span class="pill ${x.enabled ? "live" : ""}">${x.enabled ? "ON" : "OFF"}</span></div>
+          <div class="needst">${esc(x.title)}${x.impact?.headline
+            ? `<span class="pihead">${esc(x.impact.headline)}</span>` : ""}</div>
           <div class="needsm">${render(x.result)}</div>
-        </div><span class="pchev">&rsaquo;</span></div>`).join("")}</div>`;
+        </div>
+        ${phoneSpark(x.series, tone)}
+        <button class="pswx${x.enabled ? " on" : ""}" data-autotoggle="${esc(x.key)}"
+          role="switch" aria-checked="${x.enabled ? "true" : "false"}"
+          aria-label="${esc(x.title)}"><i></i></button>
+      </div>`;
+    }).join("")}</div>
+    ${phoneAutopilotFeed(d)}`;
+}
+
+// THE PROOF TICKER. Grouped by day, newest first, and every line is a sentence
+// an owner can check against his own memory of that day. Being challengeable is
+// the whole value of showing it — "frontdesk.booked" is a log line, "Booked Dan
+// R. in" is a claim he can catch me on.
+function phoneAutopilotFeed(d) {
+  const feed = d.autopilotFeed || [];
+  if (!feed.length) {
+    return `<p class="zonehead">WHAT IT DID</p>
+      <div class="panel" style="text-align:center;padding:22px">
+        <p class="sub" style="margin:0">Nothing has run on its own yet. Every text your line sends without you shows up here, with the time it went.</p>
+      </div>`;
+  }
+  const today = localDay();
+  const yesterday = new Date(Date.now() - 86400000).toLocaleDateString("en-CA");
+  let lastDay = "";
+  const lines = feed.map((row) => {
+    const when = new Date(row.at);
+    const day = when.toLocaleDateString("en-CA");
+    const head = day === lastDay ? "" :
+      `<p class="ptickday">${day === today ? "TODAY" : day === yesterday ? "YESTERDAY"
+        : esc(when.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }).toUpperCase())}</p>`;
+    lastDay = day;
+    const tone = PHONE_SYSTEM_TONE[row.key] || "var(--cyan)";
+    return `${head}<div class="ptick" style="--tone:${tone}">
+      <span class="ptickt">${esc(when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }).toLowerCase().replace(/\s/g, ""))}</span>
+      <span class="ptickdot"></span>
+      <span class="ptickx">${esc(row.text)}</span></div>`;
+  }).join("");
+  return `<p class="zonehead">WHAT IT DID</p><div class="panel pticker">${lines}</div>`;
 }
 
 function phoneActivityLane(d) {
@@ -3485,49 +3671,55 @@ function openAutomation(d, key) {
     if (crewShifts) crewShifts.onclick = () => { closeSheet(); crewTimingSheet(d); };
     const crewList = sh.querySelector("#autocrewlist");
     if (crewList) crewList.onclick = () => { closeSheet(); crewRemindersSheet(); };
-    sh.querySelector("#autotoggle").onclick = async () => {
-      closeSheet();
-      if (key === "frontdesk") return toggleFrontDesk(d);
-      if (key === "reminders") return toggleApptReminders(d);
-      if (key === "crew-reminders") {
-        const turningOn = d.crewReminderEnabled !== true;
-        try {
-          await api("/phone", { action: "settings-save", crewReminderEnabled: turningOn });
-          toast(turningOn ? "Crew reminders are on" : "Crew reminders are off");
-          renderPhone();
-          // Turning it on with nobody's shift hours set would run silently
-          // forever — send the owner straight to where the hours live.
-          if (turningOn) {
-            const roster = await api("/crew", { action: "list" });
-            const withShift = (roster.employees || []).filter((e) => e.active !== false && e.workEnd);
-            if (!withShift.length) { toast("Set shift hours on the roster so Ledger knows when shifts end"); crewRosterSheet(); }
-          }
-        } catch (err) { toast(err.message, "err"); }
-        return;
-      }
-      if (key === "dispatcher") {
-        const turningOn = !a.enabled;
-        try {
-          await api("/phone", { action: "settings-save", dispatcherEnabled: turningOn });
-          toast(turningOn ? "Dispatcher is on" : "Dispatcher is off");
-          renderPhone();
-          // Kyle 2026-08-30: flipping it on with 2+ crew immediately asks for
-          // the standing dispatch order — the machine always knows who's first.
-          if (turningOn) {
-            const roster = await api("/crew", { action: "list" });
-            const dispatchable = (roster.employees || []).filter((e) => e.active !== false && (e.phone || "").trim());
-            if (dispatchable.length >= 2) dispatchOrderSheet(dispatchable);
-          }
-        } catch (err) { toast(err.message, "err"); }
-        return;
-      }
-      try {
-        await api("/phone", { action: "settings-save", autoReplyEnabled: d.autoReplyEnabled === false });
-        toast(d.autoReplyEnabled === false ? "Auto text-back is on" : "Auto text-back is off");
-        renderPhone();
-      } catch (err) { toast(err.message); }
-    };
+    sh.querySelector("#autotoggle").onclick = () => { closeSheet(); toggleAutomation(d, key); };
   });
+}
+
+// ONE flip, two callers. The switch on the Autopilot row and the button inside
+// the automation's own sheet have to do exactly the same thing, including the
+// two follow-up prompts — a switch that behaves differently depending on where
+// you touched it is a bug waiting for the day you touch the other one.
+async function toggleAutomation(d, key) {
+  const row = (d.automations || []).find((x) => x.key === key);
+  if (key === "frontdesk") return toggleFrontDesk(d);
+  if (key === "reminders") return toggleApptReminders(d);
+  if (key === "crew-reminders") {
+    const turningOn = d.crewReminderEnabled !== true;
+    try {
+      await api("/phone", { action: "settings-save", crewReminderEnabled: turningOn });
+      toast(turningOn ? "Crew reminders are on" : "Crew reminders are off");
+      renderPhone();
+      // Turning it on with nobody's shift hours set would run silently
+      // forever — send the owner straight to where the hours live.
+      if (turningOn) {
+        const roster = await api("/crew", { action: "list" });
+        const withShift = (roster.employees || []).filter((e) => e.active !== false && e.workEnd);
+        if (!withShift.length) { toast("Set shift hours on the roster so Ledger knows when shifts end"); crewRosterSheet(); }
+      }
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  if (key === "dispatcher") {
+    const turningOn = !(row ? row.enabled : d.dispatcherEnabled === true);
+    try {
+      await api("/phone", { action: "settings-save", dispatcherEnabled: turningOn });
+      toast(turningOn ? "Dispatcher is on" : "Dispatcher is off");
+      renderPhone();
+      // Kyle 2026-08-30: flipping it on with 2+ crew immediately asks for
+      // the standing dispatch order — the machine always knows who's first.
+      if (turningOn) {
+        const roster = await api("/crew", { action: "list" });
+        const dispatchable = (roster.employees || []).filter((e) => e.active !== false && (e.phone || "").trim());
+        if (dispatchable.length >= 2) dispatchOrderSheet(dispatchable);
+      }
+    } catch (err) { toast(err.message, "err"); }
+    return;
+  }
+  try {
+    await api("/phone", { action: "settings-save", autoReplyEnabled: d.autoReplyEnabled === false });
+    toast(d.autoReplyEnabled === false ? "Auto text-back is on" : "Auto text-back is off");
+    renderPhone();
+  } catch (err) { toast(err.message); }
 }
 
 // Dispatcher: standing dispatch order. 1 = first call. Arrows, not drag —

@@ -57,6 +57,95 @@
 .panel.hero .n{font-size:29px;font-weight:300;letter-spacing:-1.4px;line-height:1;
  background:linear-gradient(160deg,#fff,#8fd8f2);-webkit-background-clip:text;background-clip:text;color:transparent}
 .panel.hero .l{font:800 8.5px/1 var(--mono);letter-spacing:1.3px;color:var(--dim2);margin-top:9px}
+/* ---------- Autopilot lane, rebuilt 2026-08-31 (Kyle override 1202) -------- */
+/* Everything here is p-prefixed on purpose. This stylesheet already owns
+   .spark (Finance's 96px revenue chart), .tick, .swx and .ihead, and a plain
+   .spark here inherited a 96px height that stretched every row on the tab. A
+   generic class name in a single shared stylesheet is a collision waiting for
+   the next feature. */
+
+/* THE STATUS RAIL. One line where a whole card used to sit — a heading, a
+   number that never changes, a paragraph of marketing, and a button pressed
+   once in the life of the account. The dot is the only thing on this tab that
+   reports the present tense; everything else is a report on a week gone by. */
+.prail{display:flex;align-items:center;gap:9px;padding:10px 14px;margin-bottom:12px;
+ border-radius:14px;background:var(--glass);border:1px solid var(--line)}
+.prail b{font-size:15.5px;font-weight:800;letter-spacing:-.2px}
+.pdot{width:8px;height:8px;border-radius:99px;flex:0 0 8px;background:var(--dim2)}
+.pdot.open{background:var(--emerald);box-shadow:0 0 0 0 rgba(47,224,160,.55);animation:ppulse 2.4s ease-out infinite}
+@keyframes ppulse{70%{box-shadow:0 0 0 7px rgba(47,224,160,0)}100%{box-shadow:0 0 0 0 rgba(47,224,160,0)}}
+.prstate{font:800 8.5px/1 var(--mono);letter-spacing:1.2px;color:var(--dim2)}
+.prstate.open{color:var(--emerald)}
+.prarm{margin-left:auto;font:800 8.5px/1 var(--mono);letter-spacing:1.2px;color:var(--dim2)}
+.prarm.on{color:var(--cyan)}
+
+/* THE ARMATURE. A breaker panel for the phone line: how much of it is live is
+   a shape you read, not a sentence you parse. A dark bar is one tap from lit.
+   It carries no count — the rail above already says 3 OF 5, and a screen that
+   states the same fact twice is a screen that trusts neither statement. */
+.panel.armature{padding:15px 13px 13px}
+.arow{display:flex;gap:7px}
+.aseg{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;
+ background:none;border:0;padding:0;cursor:pointer;font-family:inherit;color:var(--dim2)}
+.abar{width:100%;height:34px;border-radius:7px;background:rgba(255,255,255,.05);
+ border:1px solid var(--line2);transition:background .2s,box-shadow .2s,border-color .2s}
+.aseg.lit .abar{background:linear-gradient(180deg,var(--seg),color-mix(in srgb,var(--seg) 45%,transparent));
+ border-color:color-mix(in srgb,var(--seg) 55%,transparent);
+ box-shadow:0 0 14px color-mix(in srgb,var(--seg) 40%,transparent)}
+.aseg.lit{color:var(--seg)}
+/* A dark segment that is costing something is not merely off. It wears the
+   same amber the row below it wears, so the panel warns before the list does. */
+.aseg.cost{color:var(--seg)}
+.aseg.cost .abar{border-color:color-mix(in srgb,var(--seg) 45%,transparent);
+ background:color-mix(in srgb,var(--seg) 9%,transparent)}
+.aseg:active .abar{transform:scale(.96)}
+.acode{font:800 8px/1 var(--mono);letter-spacing:1.1px}
+
+/* A ROW IS ITS OWN VERDICT. The rail carries the tone the server ranked it
+   with, so an amber row is visible before a single word is read. */
+.zonehead.cost{color:var(--gold)}
+.prow.autorow{align-items:center;gap:11px;position:relative;padding-left:17px}
+.autorail{position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--tone)}
+.autorow .needst{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+.pihead{font:800 8.5px/1 var(--mono);letter-spacing:.9px;color:var(--tone);
+ border:1px solid color-mix(in srgb,var(--tone) 40%,transparent);
+ background:color-mix(in srgb,var(--tone) 12%,transparent);
+ border-radius:99px;padding:4px 7px;white-space:nowrap}
+/* Two lines in the row, the whole sentence in the sheet. The row is a verdict,
+   not a paragraph. */
+.autorow .needsm{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* SEVEN DAYS OF SHAPE. Bars, not a line — these are counts of discrete things
+   that happened, and a line would imply a continuous quantity. align-self is
+   explicit so this can never inherit a stretch from a row rule again. */
+.pspark{display:flex;align-items:flex-end;gap:2px;width:38px;height:26px;
+ flex:0 0 38px;align-self:center;color:var(--dim2)}
+.pspark i{flex:1;border-radius:1.5px;min-height:2px}
+.pspark.flat{align-items:center}
+.pspark.flat::before{content:"";width:100%;height:2px;border-radius:2px;background:currentColor;opacity:.22}
+
+/* THE SWITCH IS A SWITCH. It replaced an ON pill sitting beside a TURN OFF
+   button — two controls saying one thing — and a caption underneath telling
+   you they were controls at all. */
+.pswx{flex:0 0 44px;width:44px;height:26px;border-radius:99px;border:1px solid var(--line);
+ background:rgba(255,255,255,.05);position:relative;cursor:pointer;padding:0;align-self:center;
+ transition:background .2s,border-color .2s}
+.pswx i{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:99px;background:#7d8b99;
+ transition:transform .2s cubic-bezier(.4,1.3,.6,1),background .2s}
+.pswx.on{background:rgba(47,224,160,.2);border-color:rgba(47,224,160,.55)}
+.pswx.on i{transform:translateX(18px);background:var(--emerald);box-shadow:0 0 10px rgba(47,224,160,.6)}
+
+/* THE PROOF TICKER. Every autonomous text this line has ever sent was already
+   a row in the database, and was never once shown to the owner paying for it.
+   Sentences, not event names: being challengeable is the point. */
+.panel.pticker{padding:6px 14px 14px}
+.ptickday{font:800 8.5px/1 var(--mono);letter-spacing:1.4px;color:var(--dim2);margin:15px 0 4px}
+.ptickday:first-child{margin-top:8px}
+.ptick{display:flex;align-items:flex-start;gap:10px;padding:6px 0}
+.ptickt{font:600 10px/1.5 var(--mono);color:var(--dim2);flex:0 0 46px;text-align:right}
+.ptickdot{width:5px;height:5px;border-radius:99px;background:var(--tone);flex:0 0 5px;margin-top:5px}
+.ptickx{font-size:12.4px;color:var(--dim);line-height:1.45}
+@media (prefers-reduced-motion:reduce){.pdot.open{animation:none}.pswx i{transition:none}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overscroll-behavior-y:none}
 body{
@@ -1049,5 +1138,5 @@ a{color:var(--cyan)}
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=58"></script>
+<script type="module" src="app.js?v=59"></script>
 </body></html>
