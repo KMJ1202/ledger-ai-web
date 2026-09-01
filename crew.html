@@ -76,7 +76,6 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
 .chip[aria-pressed="true"]{border-color:var(--cyan);background:rgba(34,211,238,.16);color:var(--cyan)}
 .availgo{width:100%;padding:14px;border:0;border-radius:14px;font-size:14px;font-weight:800;letter-spacing:.04em;cursor:pointer;color:#2a0f12;background:linear-gradient(135deg,var(--red),#fca5a5)}
 .availgo:disabled{opacity:.5}
-.availcancel{width:100%;margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:14px;background:transparent;color:var(--dim);font-size:13px;font-weight:700;cursor:pointer}
 .daymeter{display:flex;align-items:center;gap:10px;margin:2px 0 18px;padding:13px 15px;border-radius:16px;background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.25)}
 .daymeter .bar{flex:1;height:7px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
 .daymeter .fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--cyan),var(--emerald));box-shadow:0 0 12px rgba(52,211,153,.6);transition:width .5s ease}
@@ -348,12 +347,11 @@ function renderAvail(availability) {
         <div class="availnow">${off ? "Unavailable" : "Available"}</div>
         <div class="availsub">${off ? escapeHtml(absenceSummary(a)) : "You're on the schedule and can be dispatched."}</div>
       </div>
-      <div class="availtoggle" id="availtoggle" role="button" tabindex="0">
-        <span class="${off ? "" : "on"}">Available</span>
-        <span class="${off ? "offsel" : ""}">Off</span>
+      <div class="availtoggle">
+        <span class="${off ? "" : "on"}" id="availyes" role="button" tabindex="0">Available</span>
+        <span class="${off ? "offsel" : ""}" id="availno" role="button" tabindex="0">Off</span>
       </div>
     </div>
-    ${off ? `<button class="availcancel" id="availback">I'm back — cancel this</button>` : ""}
     ${(!off && availOpen) ? `<div class="availsheet">
       <h4>Reason</h4>
       <div class="chiprow">${Object.keys(REASON_LABELS).map((k) =>
@@ -365,8 +363,12 @@ function renderAvail(availability) {
     </div>` : ""}
   </div>`;
 
-  $("availtoggle").onclick = () => {
-    if (off) return; // Coming back is the explicit button below, never a stray tap.
+  $("availyes").onclick = () => {
+    if (!off) { availOpen = false; renderAvail(availability); return; }
+    sendAvailability({ available: true }, $("availyes"));
+  };
+  $("availno").onclick = () => {
+    if (off) return;
     availOpen = !availOpen;
     renderAvail(availability);
   };
@@ -377,7 +379,6 @@ function renderAvail(availability) {
     b.onclick = () => { availSpan = b.dataset.span; renderAvail(availability); };
   });
   if ($("availgo")) $("availgo").onclick = () => sendAvailability({ reason: availReason, span: availSpan }, $("availgo"));
-  if ($("availback")) $("availback").onclick = () => sendAvailability({ available: true }, $("availback"));
 }
 
 async function sendAvailability(payload, btn) {
