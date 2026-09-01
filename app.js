@@ -2455,6 +2455,11 @@ function drawCalendar() {
       <span class="m"><b>BOOK ${selDate.toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()}</b>
         <span>Live availability · verified Calendar write</span></span>
       <span class="go">&#8599;</span></button>
+    <button class="bookbtn" id="crewbtn">
+      <span class="ic">&#128119;</span>
+      <span class="m"><b>CREW</b>
+        <span>Hours, time cards, roster &amp; shifts</span></span>
+      <span class="go">&#8599;</span></button>
     <div class="dayhead">
       <div><span class="eyebrow">Day schedule</span>
         <b>${selDate.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</b></div>
@@ -2482,6 +2487,7 @@ function drawCalendar() {
   on("[data-day]", "click", (e) => { CAL.sel = e.currentTarget.dataset.day; drawCalendar(); });
   on("[data-ev]", "click", (e) => eventSheet(all.find((x) => x.id === e.currentTarget.dataset.ev)));
   $("bookday").onclick = () => bookingSheet(CAL.sel);
+  $("crewbtn").onclick = () => crewHoursSheet();
   if ($("bookempty")) $("bookempty").onclick = () => bookingSheet(CAL.sel);
 }
 
@@ -2927,7 +2933,7 @@ async function renderPhone() {
     S.phone = d;
     view().innerHTML = `<div class="sect">
       ${osHead("COM.06 · CALL LINE", "Phone")}
-      ${d.hasNumber ? "" : requestNumberCard(d.pendingRequest)}
+      ${d.hasNumber ? "" : requestNumberCard(d.pendingRequest, d.numberLocked)}
       ${/* The number and its setup guide sit ABOVE the lane switcher, not in a
             lane. Call forwarding is the thing that has to be working before any
             of this tab means anything, and a setup guide found at the bottom of
@@ -2936,7 +2942,7 @@ async function renderPhone() {
       ${d.hasNumber ? phoneLaneSwitcher(d) : ""}
       ${d.hasNumber ? phoneLaneBody(d) : ""}
     </div>`;
-    if (!d.hasNumber) wireRequestNumber(d.pendingRequest);
+    if (!d.hasNumber) wireRequestNumber(d.pendingRequest, d.numberLocked);
     if (d.hasNumber) on("[data-pevt]", "click", (e) => phoneEventSheet(d.events.find((ev) => ev.id === e.currentTarget.dataset.pevt)));
     if (d.hasNumber) on("[data-pthread]", "click", (e) => phoneThreadSheet((d.threads || []).find((t) => t.id === e.currentTarget.dataset.pthread)));
     if (d.hasNumber) {
@@ -3451,12 +3457,14 @@ function openAutomation(d, key) {
     reminders: '<button class="btn" id="autoprev">See tonight\'s list</button><button class="btn" id="autoset">Change time</button>',
     autoreply: '<button class="btn" id="autoset">Wording &amp; hours</button>',
     dispatcher: '<button class="btn" id="autoorder">Dispatch order</button>',
+    "crew-reminders": '<button class="btn" id="autocrewhours">Crew hours</button><button class="btn" id="autocrewshifts">Shifts &amp; timing</button>',
   }[key] || "";
   const blurb = {
     frontdesk: "When a missed caller texts back, Ledger answers them — quoting your real QuickBooks prices and offering real open times. It can never invoice, take a payment or discuss a bill.",
     reminders: "The night before, everyone booked in gets a text asking them to confirm or say they need to move it. Each customer is texted once per appointment, ever.",
     autoreply: "A missed call gets an instant text back so the caller knows you exist and can reply.",
     dispatcher: "New bookings text your first-call crew member their job from the business line, and you can tell Ledger to dispatch anyone by name. It can only ever text people on your crew roster.",
+    "crew-reminders": "After a crew member's shift ends, anyone still clocked in gets a text from the business line — replying DONE clocks them out, ignoring it keeps them on the clock. Each punch is nudged once, and only people on your roster can ever be texted.",
   }[key] || "";
   sheet(`<h2>${esc(a.title)} ${a.enabled ? '<span class="pill live">ON</span>' : '<span class="pill">OFF</span>'}</h2>
     <p class="sub">${render(a.result)}</p>
@@ -3471,10 +3479,30 @@ function openAutomation(d, key) {
     if (prev) prev.onclick = () => { closeSheet(); apptReminderPreviewSheet(); };
     const order = sh.querySelector("#autoorder");
     if (order) order.onclick = () => { closeSheet(); dispatchOrderSheet(); };
+    const crewHours = sh.querySelector("#autocrewhours");
+    if (crewHours) crewHours.onclick = () => { closeSheet(); crewHoursSheet(); };
+    const crewShifts = sh.querySelector("#autocrewshifts");
+    if (crewShifts) crewShifts.onclick = () => { closeSheet(); crewTimingSheet(d); };
     sh.querySelector("#autotoggle").onclick = async () => {
       closeSheet();
       if (key === "frontdesk") return toggleFrontDesk(d);
       if (key === "reminders") return toggleApptReminders(d);
+      if (key === "crew-reminders") {
+        const turningOn = d.crewReminderEnabled !== true;
+        try {
+          await api("/phone", { action: "settings-save", crewReminderEnabled: turningOn });
+          toast(turningOn ? "Crew reminders are on" : "Crew reminders are off");
+          renderPhone();
+          // Turning it on with nobody's shift hours set would run silently
+          // forever — send the owner straight to where the hours live.
+          if (turningOn) {
+            const roster = await api("/crew", { action: "list" });
+            const withShift = (roster.employees || []).filter((e) => e.active !== false && e.workEnd);
+            if (!withShift.length) { toast("Set shift hours on the roster so Ledger knows when shifts end"); crewRosterSheet(); }
+          }
+        } catch (err) { toast(err.message, "err"); }
+        return;
+      }
       if (key === "dispatcher") {
         const turningOn = !a.enabled;
         try {
@@ -3538,6 +3566,225 @@ async function dispatchOrderSheet(preloaded) {
       closeSheet();
     } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
   };
+}
+
+/* ---------------- CREW (2026-08-31) — hours view, roster & shifts --------- */
+// The web twin of iOS Crew Command's Time Cards: every employee's punches,
+// daily totals and overtime for a range, plus roster shift hours (which drive
+// the Crew Reminders clock-out nudge) and the workspace overtime rules.
+
+const CREW_DAY_LABELS = [["mon", "M"], ["tue", "T"], ["wed", "W"], ["thu", "T"], ["fri", "F"], ["sat", "S"], ["sun", "S"]];
+const crewH = (sec) => `${(Math.round((sec || 0) / 360) / 10).toFixed(1)}h`;
+const crewT = (iso) => iso ? new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "—";
+
+function crewShiftLabel(e) {
+  if (!e.workStart && !e.workEnd) return "No shift set";
+  const days = (e.workDays || []).map((d) => d[0].toUpperCase() + d.slice(1, 3)).join(" ");
+  return `${e.workStart || "?"}–${e.workEnd || "?"}${days ? " · " + days : ""}`;
+}
+
+function crewRangeDates(range) {
+  const day = (d) => d.toLocaleDateString("en-CA");
+  const today = new Date();
+  if (range === "today") return [day(today), day(today)];
+  const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  if (range === "week") { const sun = new Date(monday); sun.setDate(monday.getDate() + 6); return [day(monday), day(sun)]; }
+  if (range === "last-week") {
+    const lm = new Date(monday); lm.setDate(monday.getDate() - 7);
+    const ls = new Date(monday); ls.setDate(monday.getDate() - 1);
+    return [day(lm), day(ls)];
+  }
+  return [day(new Date(today.getFullYear(), today.getMonth(), 1)), day(today)];
+}
+
+const CREW_RANGES = [["today", "Today"], ["week", "This week"], ["last-week", "Last week"], ["month", "Month"]];
+
+async function crewHoursSheet(range = "week") {
+  const [from, to] = crewRangeDates(range);
+  let d;
+  try { d = await api("/crew", { action: "timecards", from, to }); }
+  catch (err) { toast(err.message, "err"); return; }
+  const cards = (d.cards || []).filter((c) => c.total_seconds > 0 || c.on_clock || c.active);
+  const otBits = [];
+  if (d.ot_daily_hours != null) otBits.push(`over ${d.ot_daily_hours}h/day`);
+  if (d.ot_weekly_hours != null) otBits.push(`over ${d.ot_weekly_hours}h/week`);
+  const otLabel = otBits.length ? `Overtime counts hours ${otBits.join(" or ")}.` : "Overtime tracking is off.";
+  sheet(`<h2>Crew hours</h2>
+    <p class="sh-sub">${esc(from)} → ${esc(to)}</p>
+    <div class="rowbtns" style="margin-top:8px">${CREW_RANGES.map(([k, l]) =>
+      `<button class="btn ${k === range ? "em" : ""}" data-crange="${k}">${l}</button>`).join("")}</div>
+    ${cards.length ? cards.map((c) => `
+      <div class="panel" style="margin-top:12px">
+        <h3 style="display:flex;gap:8px;align-items:center">${esc(c.name)}
+          ${c.on_clock ? '<span class="pill live">ON THE CLOCK</span>' : ""}
+          <span style="margin-left:auto;font-weight:800">${crewH(c.total_seconds)}</span></h3>
+        <p class="note" style="margin-top:2px">Regular ${crewH(c.regular_seconds)}${c.ot_seconds > 0 ? ` · <b style="color:var(--gold)">OT ${crewH(c.ot_seconds)}</b>` : " · no OT"}</p>
+        ${(c.days || []).map((day) => `
+          <div class="kv" style="margin-top:6px"><span>${esc(day.date)}</span><span>${crewH(day.seconds)}</span></div>
+          ${(day.punches || []).map((p) => `<p class="note" style="margin:2px 0 0 4px">${crewT(p.in)} → ${p.out ? crewT(p.out) : "<b>still on the clock</b>"}${p.corrected ? " · corrected" : ""}${p.note ? " · " + esc(p.note) : ""}</p>`).join("")}
+        `).join("") || '<p class="note" style="margin-top:6px">No punches in this range.</p>'}
+      </div>`).join("")
+      : '<div class="panel" style="margin-top:12px;text-align:center"><p class="sub" style="margin:0">No crew members yet — add them under Roster &amp; shifts.</p></div>'}
+    <p class="note" style="margin-top:10px">${esc(otLabel)}</p>
+    <div class="rowbtns" style="margin-top:10px">
+      <button class="btn" id="crewroster">Roster &amp; shifts</button>
+      <button class="btn" id="crewot">Overtime rules</button>
+      ${cards.length ? '<button class="btn" id="crewcsv">Export CSV</button>' : ""}
+    </div>`, (sh) => {
+    on("[data-crange]", "click", (e) => { closeSheet(); crewHoursSheet(e.currentTarget.dataset.crange); }, sh);
+    sh.querySelector("#crewroster").onclick = () => { closeSheet(); crewRosterSheet(); };
+    sh.querySelector("#crewot").onclick = () => { closeSheet(); crewOtSheet(d, range); };
+    const csv = sh.querySelector("#crewcsv");
+    if (csv) csv.onclick = () => {
+      const rows = [["Employee", "Date", "In", "Out", "Hours", "Corrected", "Note"]];
+      for (const c of cards) for (const day of c.days || []) for (const p of day.punches || []) {
+        rows.push([c.name, day.date, p.in || "", p.out || "", "", p.corrected ? "yes" : "", p.note || ""]);
+      }
+      for (const c of cards) rows.push([c.name, "TOTAL", "", "", crewH(c.total_seconds), c.ot_seconds > 0 ? `OT ${crewH(c.ot_seconds)}` : "", ""]);
+      const blob = new Blob([rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")], { type: "text/csv" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = `crew-hours-${from}-to-${to}.csv`; a.click();
+      URL.revokeObjectURL(a.href);
+    };
+  });
+}
+
+function crewOtSheet(d, backRange) {
+  sheet(`<h2>Overtime rules</h2>
+    <p class="sh-sub">Hours past these thresholds count as overtime on every time card. Leave a box blank to turn that rule off.</p>
+    <label class="fld" style="margin-top:12px">DAILY — OT AFTER THIS MANY HOURS IN A DAY</label>
+    <input id="otdaily" class="cmpinput" type="number" min="1" max="24" step="0.5" value="${d.ot_daily_hours ?? ""}" placeholder="off">
+    <label class="fld" style="margin-top:10px">WEEKLY — OT AFTER THIS MANY HOURS IN A WEEK</label>
+    <input id="otweekly" class="cmpinput" type="number" min="1" max="168" step="0.5" value="${d.ot_weekly_hours ?? ""}" placeholder="off">
+    <p class="note" style="margin-top:8px">Alberta's rules are 8 daily / 44 weekly — the starting defaults.</p>
+    <button class="btn em wide" style="margin-top:13px" id="otsave">Save</button>
+    <div class="note" id="otnote" style="margin-top:8px"></div>`, (sh) => {
+    sh.querySelector("#otsave").onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      const note = sh.querySelector("#otnote");
+      try {
+        await api("/crew", {
+          action: "set-ot-rules",
+          daily_hours: sh.querySelector("#otdaily").value.trim(),
+          weekly_hours: sh.querySelector("#otweekly").value.trim(),
+        });
+        toast("Overtime rules saved");
+        closeSheet();
+        crewHoursSheet(backRange || "week");
+      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
+    };
+  });
+}
+
+async function crewRosterSheet() {
+  let roster;
+  try { roster = await api("/crew", { action: "list" }); }
+  catch (err) { toast(err.message, "err"); return; }
+  const crew = roster.employees || [];
+  sheet(`<h2>Roster &amp; shifts</h2>
+    <p class="sh-sub">Regular working hours drive the end-of-shift clock-out text — no shift set means no reminder for that person.</p>
+    ${crew.length ? `<div class="panel" style="padding:0;overflow:hidden;margin-top:10px">
+      ${crew.map((e, i) => `<div class="autorow" data-crewid="${esc(e.id)}" style="${i ? "" : "border-top:0"}">
+        <div style="flex:1;min-width:0">
+          <div class="needst">${esc(e.name)} ${e.active === false ? '<span class="pill">INACTIVE</span>' : ""}</div>
+          <div class="needsm">${esc(e.phone || "no phone")} · ${esc(crewShiftLabel(e))}</div>
+        </div>
+        <span style="color:var(--dim2)">&rsaquo;</span></div>`).join("")}
+    </div>` : '<div class="panel" style="margin-top:10px;text-align:center"><p class="sub" style="margin:0">No crew members yet.</p></div>'}
+    <div class="rowbtns" style="margin-top:12px">
+      <button class="btn em" id="crewadd">&#43; Add crew member</button>
+      <button class="btn" id="crewhoursback">Crew hours</button>
+    </div>`, (sh) => {
+    on("[data-crewid]", "click", (e) => {
+      const emp = crew.find((x) => x.id === e.currentTarget.dataset.crewid);
+      if (emp) { closeSheet(); crewMemberSheet(emp); }
+    }, sh);
+    sh.querySelector("#crewadd").onclick = () => { closeSheet(); crewMemberSheet(null); };
+    sh.querySelector("#crewhoursback").onclick = () => { closeSheet(); crewHoursSheet(); };
+  });
+}
+
+function crewMemberSheet(emp) {
+  const days = new Set(emp?.workDays || ["mon", "tue", "wed", "thu", "fri"]);
+  sheet(`<h2>${emp ? esc(emp.name) : "New crew member"}</h2>
+    <label class="fld" style="margin-top:10px">NAME</label>
+    <input id="cmName" class="cmpinput" value="${esc(emp?.name || "")}">
+    <label class="fld" style="margin-top:10px">PHONE — WHERE THEIR TEXTS GO</label>
+    <input id="cmPhone" class="cmpinput" inputmode="tel" value="${esc(emp?.phone || "")}">
+    <label class="fld" style="margin-top:12px">REGULAR SHIFT — DRIVES THE CLOCK-OUT TEXT</label>
+    <div class="timerow" style="margin-top:6px">
+      <input type="time" id="cmStart" value="${esc(emp?.workStart || "")}">
+      <span class="note">to</span>
+      <input type="time" id="cmEnd" value="${esc(emp?.workEnd || "")}">
+    </div>
+    <div class="daypick" style="margin-top:10px">
+      ${CREW_DAY_LABELS.map(([k, l]) => `<button class="daybtn ${days.has(k) ? "on" : ""}" data-cmday="${k}" type="button">${l}</button>`).join("")}
+    </div>
+    <p class="note" style="margin-top:6px">Clear both times to turn their reminder off.</p>
+    ${emp ? `<div class="rowbtns" style="margin-top:12px">
+      <button class="btn ghost" id="cmActive">${emp.active === false ? "Reactivate" : "Deactivate"}</button>
+    </div>` : ""}
+    <button class="btn em wide" style="margin-top:13px" id="cmSave">Save</button>
+    <div class="note" id="cmNote" style="margin-top:8px"></div>`, (sh) => {
+    on("[data-cmday]", "click", (e) => {
+      const k = e.currentTarget.dataset.cmday;
+      days.has(k) ? days.delete(k) : days.add(k);
+      e.currentTarget.classList.toggle("on");
+    }, sh);
+    const note = sh.querySelector("#cmNote");
+    const active = sh.querySelector("#cmActive");
+    if (active) active.onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        await api("/crew", { action: "update", id: emp.id, active: emp.active === false });
+        toast(emp.active === false ? "Reactivated" : "Deactivated");
+        closeSheet(); crewRosterSheet();
+      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
+    };
+    sh.querySelector("#cmSave").onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      const name = sh.querySelector("#cmName").value.trim();
+      if (!name) { note.className = "note err"; note.textContent = "Name is required."; e.currentTarget.disabled = false; return; }
+      const body = {
+        action: emp ? "update" : "add",
+        name,
+        phone: sh.querySelector("#cmPhone").value.trim(),
+        work_start: sh.querySelector("#cmStart").value,
+        work_end: sh.querySelector("#cmEnd").value,
+        work_days: [...days],
+      };
+      if (emp) body.id = emp.id;
+      try {
+        await api("/crew", body);
+        toast(emp ? "Saved" : `${name} added`);
+        closeSheet(); crewRosterSheet();
+      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
+    };
+  });
+}
+
+// Crew Reminders timing: how long after shift end the nudge goes out, plus a
+// shortcut to the roster where the shift hours themselves live.
+function crewTimingSheet(d) {
+  sheet(`<h2>Shifts &amp; timing</h2>
+    <p class="sh-sub">Each crew member's shift hours live on the roster. This sets how long after shift end the clock-out text goes out.</p>
+    <label class="fld" style="margin-top:12px">MINUTES AFTER SHIFT END</label>
+    <input id="crewdelay" class="cmpinput" type="number" min="5" max="240" step="5" value="${Number(d.crewReminderDelayMin) > 0 ? Number(d.crewReminderDelayMin) : 30}">
+    <button class="btn em wide" style="margin-top:13px" id="crewdelaysave">Save</button>
+    <button class="btn wide" style="margin-top:9px" id="crewrosterlink">Roster &amp; shift hours</button>
+    <div class="note" id="crewdelaynote" style="margin-top:8px"></div>`, (sh) => {
+    sh.querySelector("#crewrosterlink").onclick = () => { closeSheet(); crewRosterSheet(); };
+    sh.querySelector("#crewdelaysave").onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      const note = sh.querySelector("#crewdelaynote");
+      try {
+        await api("/phone", { action: "settings-save", crewReminderDelayMin: sh.querySelector("#crewdelay").value });
+        toast("Timing saved");
+        closeSheet();
+        renderPhone();
+      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
+    };
+  });
 }
 
 function apptReminderCard(d) {
@@ -3762,7 +4009,18 @@ function phoneSettingsSheet(d) {
   });
 }
 
-function requestNumberCard(pending) {
+function requestNumberCard(pending, locked) {
+  // Subscription-only since 2026-08-31. Show what the line DOES and the way to
+  // get it, rather than a form whose only possible answer is "subscribe first".
+  if (locked && !pending) {
+    return `<div class="panel">
+      <h3>&#128241; Your own business line &#128664;</h3>
+      <p class="sub">A local number of your own, included with your subscription: missed calls text the caller back automatically, every lead lands in your Leads list, and you can reply right from this tab.</p>
+      <p class="note" style="margin-top:10px">Included with Ledger AI &mdash; your line is live seconds after you subscribe.</p>
+      <button class="btn em wide" style="margin-top:13px" id="rnsubscribe">Subscribe to get your number</button>
+      <div class="note" id="rnnote" style="margin-top:8px"></div>
+    </div>`;
+  }
   if (pending) {
     return `<div class="panel">
       <h3>&#128241; Business number requested</h3>
@@ -3788,8 +4046,16 @@ function requestNumberCard(pending) {
   </div>`;
 }
 
-function wireRequestNumber(pending) {
+function wireRequestNumber(pending, locked) {
   if (pending) return;
+  if (locked) {
+    const sub = $("rnsubscribe");
+    if (sub) sub.onclick = async () => {
+      try { const c = await api("/stripe-billing/checkout", {}); location.href = c.url; }
+      catch (err) { const note = $("rnnote"); note.className = "note err"; note.textContent = err.message; }
+    };
+    return;
+  }
   $("rnsubmit").onclick = async (e) => {
     const note = $("rnnote");
     const businessName = $("rnbiz").value.trim();
