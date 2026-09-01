@@ -172,27 +172,6 @@ const TABS = [
 // a mono OS code strip, then a chrome-gradient screen title over a cyan rule.
 const MAG = `<svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 015.9 12.1l4.3 4.3-1.4 1.4-4.3-4.3A7.5 7.5 0 1110.5 3zm0 2a5.5 5.5 0 100 11 5.5 5.5 0 000-11z"/></svg>`;
 
-// Tiny monochrome lane-pill icons — the web twins of the SF Symbols iOS uses
-// on its segment bars (chart.bar.xaxis / chart.line.uptrend.xyaxis /
-// doc.text.viewfinder / person.2 / star.bubble / checklist / tray / bolt /
-// waveform). Stroke inherits the pill's text colour.
-const SEG_ICONS = {
-  overview: `<path d="M4 20h16M6 16v-5M11 16V7M16 16v-8"/>`,
-  profit: `<path d="M3 17l5-5 4 3 8-8M20 7h-5M20 7v5"/>`,
-  receipts: `<path d="M7 3h10a1 1 0 011 1v16l-3-1.6L12 20l-3-1.6L6 20V4a1 1 0 011-1zM9 8h6M9 12h6"/>`,
-  directory: `<circle cx="9" cy="8" r="3"/><path d="M4 19c0-2.8 2.2-5 5-5s5 2.2 5 5M15 5a3 3 0 010 6M17 14c1.9.6 3 2.3 3 5"/>`,
-  reviews: `<path d="M4 5h16v11H9l-5 4V5zM12 7.5l1 2.2 2.4.2-1.8 1.6.5 2.3-2.1-1.2-2.1 1.2.5-2.3-1.8-1.6 2.4-.2z"/>`,
-  todos: `<path d="M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17M11 6h9M11 12h9M11 18h9"/>`,
-  inbox: `<path d="M4 4h16v16H4zM4 14h5c0 1.7 1.3 3 3 3s3-1.3 3-3h5"/>`,
-  autopilot: `<path d="M13 2L5 13h5l-1 9 8-11h-5l1-9z"/>`,
-  activity: `<path d="M3 12h2l2-6 3 12 3-9 2 3h6"/>`,
-  card: `<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M6 15h4"/>`,
-  phonearrow: `<path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2zM14 4h6M20 4v6M20 4l-6 6"/>`,
-  calclock: `<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4M12 13v3l2 1"/>`,
-  camera: `<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>`,
-};
-const segIc = (k) => SEG_ICONS[k] ? `<svg class="sic" viewBox="0 0 24 24">${SEG_ICONS[k]}</svg>` : "";
-
 function osHead(code, title) {
   return `<div>
     <div class="oshead"><span class="dash"></span>
@@ -207,11 +186,11 @@ function appView() {
   const logo = S.profile?.business?.logo_url;
   root.innerHTML = `
   <header>
-    <div class="mark">${logo ? `<img src="${esc(logo)}" alt="">` : '<img src="assets/logo-mark-96.png" alt="">'}</div>
-    <h1 class="brandttl chrome" id="bizname">${esc(S.profile?.business?.name || "Ledger AI")}</h1>
+    <div class="mark">${logo ? `<img src="${esc(logo)}" alt="">` : "L"}</div>
+    <h1 id="bizname">${esc(S.profile?.business?.name || "Ledger AI")}</h1>
     <span id="usage"></span>
     <button class="hchat" id="hchat" title="Ask Ledger">&#128172;</button>
-    <button class="avatar" id="more" title="Your business"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.6" fill="currentColor"/><path d="M5.5 19.4c.9-3.2 3.5-5 6.5-5s5.6 1.8 6.5 5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
+    <button class="avatar" id="more" title="Your business">&#9679;</button>
   </header>
   <div id="banner">💡 Advisor Mode — business guidance beyond your books, on your AI allowance</div>
   <div id="alertbar"></div>
@@ -301,30 +280,11 @@ function wireConnect(scope) {
 }
 
 /* ---------------- HOME ---------------- */
-// The fixed showcase six — mirrors iOS LedgerHomeView.suggestedPrompts exactly
-// (Kyle 2026-08-29, build 41): every chip demos a different capability, review
-// AI front and centre, and each one is a question the assistant genuinely
-// answers from live data.
 const ASK_CHIPS = [
-  { ic: "profit", label: "Profit today", prompt: "How much profit did we make today?" },
-  { ic: "reviews", label: "Reply to a review", prompt: "Draft a reply to my latest Google review." },
-  { ic: "card", label: "Who owes me?", prompt: "Who owes me money right now, biggest balance first?" },
-  { ic: "phonearrow", label: "Chase my missed calls", prompt: "Show me my missed calls and which ones look like new leads." },
-  { ic: "calclock", label: "Tomorrow's day", prompt: "What's booked on the calendar tomorrow?" },
-  { ic: "camera", label: "File this receipt", prompt: "I've got a receipt to file — walk me through it." },
-];
-
-// Rotating examples in the Ask box — same list as iOS consolePlaceholders.
-// Every one is a question the assistant genuinely answers from live data.
-const ASK_PLACEHOLDERS = [
-  "Tell Ledger what to do…",
-  "“How much profit did we make today?”",
-  "“Who owes me money right now?”",
-  "“What's booked tomorrow?”",
-  "“Show me my best customers this month.”",
-  "“How do sales compare with last month?”",
-  "“What needs my attention today?”",
-  "“Draft a reply to my latest Google review.”",
+  { icon: "&#128196;", label: "Create an invoice", prompt: "Create me an invoice — let's draft one now." },
+  { icon: "&#128200;", label: "Sales this week", prompt: "Report my sales for this week." },
+  { icon: "&#128221;", label: "Create an estimate", prompt: "Create me an estimate — let's draft one." },
+  { icon: "&#128202;", label: "Last month & YOY", prompt: "Report my sales for last month, and compare them year over year." },
 ];
 
 async function renderHome() {
@@ -333,16 +293,10 @@ async function renderHome() {
     <div class="sect">
       ${osHead("CORE.01 · COMMAND", "Ledger")}
       <div class="brandcard">
-        <div class="tile">${logo ? `<img src="${esc(logo)}" alt="">` : '<img src="assets/logo-mark-96.png" alt="">'}</div>
-        <div class="who"><b class="chrome">Ledger AI</b><span>Your business, answered.</span></div>
+        <div class="tile">${logo ? `<img src="${esc(logo)}" alt="">` : "L"}</div>
+        <div class="who"><b>Ledger AI</b><span>Intelligence.<br>Accuracy. Control.</span></div>
         <span class="status"><i></i>READY</span>
       </div>
-
-      <button class="bizrow" id="bizsettings">
-        <span class="ic">&#9881;</span>
-        <span class="m"><b>Business profile &amp; settings</b><small>CONNECTIONS · BRANDING · BOOKS</small></span>
-        <span class="go">&#8599;</span>
-      </button>
 
       <div class="console">
         <div class="chead">
@@ -357,27 +311,9 @@ async function renderHome() {
           <button class="gobtn" id="askgo" title="Send">&#8593;</button>
         </div>
         <div class="askgrid">${ASK_CHIPS.map((c, i) =>
-          `<button class="askchip c${i}" data-ask="${esc(c.prompt)}"><em>${segIc(c.ic)}</em>${esc(c.label)}</button>`).join("")}</div>
+          `<button class="askchip c${i}" data-ask="${esc(c.prompt)}"><em>${c.icon}</em>${esc(c.label)}</button>`).join("")}</div>
       </div>
 
-
-
-      <div class="lanehead" style="margin-top:4px"><span class="eyebrow"><span class="gticon">&#9638;</span> Go to</span></div>
-      <div class="gotogrid">
-        ${[
-          ["finance", "em", "&#128200;", "Finance", "INVOICES · PROFIT"],
-          ["calendar", "purple", "&#128197;", "Calendar", "BOOKINGS"],
-          ["phone", "cyan", "&#128222;", "Phone", "CALLS · LEADS"],
-          ["customers", "red", "&#128101;", "Customers", "DIRECTORY"],
-          ["receipts", "orange", "&#128247;", "Receipts", "SNAP · FILE"],
-          ["reviews", "gold", "&#11088;", "Reviews", "WIN 5 STARS"],
-        ].map(([k, tint, icon, label, sub]) => `<button class="gotile ${tint}" data-goto="${k}">
-          <span class="ictile">${icon}</span><span class="arrow">&#8599;</span>
-          <b>${label}</b><small>${sub}</small></button>`).join("")}
-      </div>
-
-      <div class="lanehead"><span class="eyebrow">&#9889; Today</span>
-        <span class="note">SYNC ${new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span></div>
       <div id="homekpis"><div class="skel"></div></div>
       <div id="homemail"></div>
       <div id="homenext"></div>
@@ -392,68 +328,14 @@ async function renderHome() {
   };
   $("askgo").onclick = fire;
   box.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); fire(); } });
-  // Rotate the example questions like iOS does. One timer app-wide; it stops
-  // itself the moment the box leaves the DOM (tab switch re-renders the view).
-  clearInterval(S.askRotTimer);
-  let askRot = 0;
-  S.askRotTimer = setInterval(() => {
-    const el = $("askbox");
-    if (!el) { clearInterval(S.askRotTimer); return; }
-    askRot = (askRot + 1) % ASK_PLACEHOLDERS.length;
-    el.placeholder = ASK_PLACEHOLDERS[askRot];
-  }, 3500);
   // Ledger Live (realtime voice) is an iPhone capability — say so rather than fake an orb.
   $("livebtn").onclick = () => toast("Ledger Live voice runs in the iPhone app");
   $("askcam").onclick = () => { S.financeLane = "receipts"; setTab("finance"); };
-  $("bizsettings").onclick = () => bizSettingsSheet();
-  on("[data-goto]", "click", (e) => {
-    const k = e.currentTarget.dataset.goto;
-    if (k === "receipts") { S.financeLane = "receipts"; setTab("finance"); }
-    else if (k === "reviews") { S.lane = "reviews"; setTab("customers"); }
-    else if (k === "finance") { S.financeLane = "invoices"; setTab("finance"); }
-    else if (k === "customers") { S.lane = "directory"; setTab("customers"); }
-    else setTab(k);
-  });
   on("[data-ask]", "click", (e) => { openChat(); $("box").value = e.currentTarget.dataset.ask; send(); });
   loadHomeKpis();
   loadHomeMail();
   loadHomeNext();
   loadHomeAttention();
-}
-
-// Business profile & settings hub — the web twin of the iOS settings row (build 41).
-// Each row deep-links to the surface that already owns that setting.
-async function bizSettingsSheet() {
-  if (S.booksProvider === undefined) {
-    try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
-    catch { S.booksProvider = "quickbooks"; }
-  }
-  const native = S.booksProvider === "native";
-  const row = (id, icon, title, detail) => `<button class="revbtn" id="${id}">
-      <span class="ic">${icon}</span><span class="m"><b>${esc(title)}</b><span>${esc(detail)}</span></span>
-      <span class="chev">&#8250;</span></button>`;
-  sheet(`<h2>Business profile &amp; settings</h2>
-    <p class="sh-sub">${esc(S.profile?.business?.name || "Your business")}</p>
-    <div class="cmpsect">
-      ${native ? row("bzbooks", "&#9881;", "Books settings", "Tax, numbering, branding, payment info")
-        : row("bzbooks", "&#9881;", "Books connection", "This workspace runs on QuickBooks Online")}
-      ${native ? row("bzcard", "&#128179;", "Card payments", "Stripe setup — get paid online") : ""}
-      ${row("bzphone", "&#128222;", "Phone & Front Desk", "Number, reminders, auto-replies")}
-      ${row("bzconn", "&#128279;", "Connected services", "QuickBooks, Calendar, Gmail, Reviews")}
-    </div>`, (sh) => {
-    sh.querySelector("#bzbooks").onclick = () => {
-      closeSheet();
-      if (native) booksSettingsSheet();
-      else { S.financeLane = "invoices"; setTab("finance"); }
-    };
-    const card = sh.querySelector("#bzcard");
-    if (card) card.onclick = async () => {
-      try { const r = await booksApi({ action: "connect-onboard" }); if (r.url) window.open(r.url, "_blank"); }
-      catch (e) { toast(e.message, "err"); }
-    };
-    sh.querySelector("#bzphone").onclick = () => { closeSheet(); setTab("phone"); };
-    sh.querySelector("#bzconn").onclick = () => { closeSheet(); S.lane = "reviews"; setTab("customers"); };
-  });
 }
 
 function kpiBlock(k) {
@@ -686,685 +568,22 @@ async function emailSheet(m) {
 
 /* ---------------- FINANCE ---------------- */
 const FINANCE_CODE = { invoices: "FIN.02 · REVENUE GRID", profit: "FIN.02 · PROFIT & LOSS", receipts: "EXP.04 · EXPENSE INTAKE" };
-/* ---------------- native books (built-in ledger, no QuickBooks) ---------------- */
-// Workspaces with books_provider="native" run on the books edge fn instead of
-// QBO. The Finance tab swaps its invoices lane for these screens; Profit (a QBO
-// P&L board) is hidden, Receipts stays — the receipt pipeline is native already.
-
-async function booksApi(body) { return api("/books", body); }
-
-// SALES INTELLIGENCE hero for native books — the web twin of iOS's Finance
-// Overview card. Every figure comes from the live invoice rows (voids
-// excluded): month-to-date total, a 14-day daily spark, MOM/YOY growth against
-// the SAME elapsed span, the real average sale, and a straight run-rate
-// forecast. "—" when there is no prior period to compare against.
-function salesIntelNative(invoices) {
-  const now = new Date();
-  const sales = invoices.filter((i) => i.status !== "void");
-  const dayTotal = (key) => sales.filter((i) => (i.issue_date || "").slice(0, 10) === key)
-    .reduce((s, i) => s + (Number(i.total) || 0), 0);
-  const rangeTotal = (from, to) => sales.filter((i) => {
-    const d = (i.issue_date || "").slice(0, 10);
-    return d >= from && d <= to;
-  }).reduce((s, i) => s + (Number(i.total) || 0), 0);
-  const iso = (d) => localDay(d);
-  const ym = iso(now).slice(0, 7);
-  const month = sales.filter((i) => (i.issue_date || "").slice(0, 7) === ym);
-  const mtd = month.reduce((s, i) => s + (Number(i.total) || 0), 0);
-  const avg = month.length ? mtd / month.length : 0;
-  const elapsed = now.getDate();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const forecast = elapsed ? mtd / elapsed * daysInMonth : 0;
-  // Same elapsed span, one month back / one year back.
-  const prevM = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevMEnd = new Date(prevM.getFullYear(), prevM.getMonth(),
-    Math.min(elapsed, new Date(prevM.getFullYear(), prevM.getMonth() + 1, 0).getDate()));
-  const momBase = rangeTotal(iso(prevM), iso(prevMEnd));
-  const ytd = rangeTotal(now.getFullYear() + "-01-01", iso(now));
-  const prevY = new Date(now); prevY.setFullYear(now.getFullYear() - 1);
-  const yoyBase = rangeTotal((now.getFullYear() - 1) + "-01-01", iso(prevY));
-  const growth = (cur, base) => base > 0
-    ? `${cur >= base ? "+" : "−"}${Math.abs(Math.round((cur - base) / base * 100))}%` : "—";
-  const days = [];
-  for (let d = 13; d >= 0; d--) {
-    const t = new Date(now); t.setDate(now.getDate() - d);
-    days.push({ key: iso(t), total: dayTotal(iso(t)) });
-  }
-  const max = Math.max(1, ...days.map((d) => d.total));
-  return `<div class="intel">
-    <div class="ihead"><b>&#9651; Sales Intelligence</b><span class="live"><i></i>LIVE BOOKS</span></div>
-    <p class="cap">This month</p>
-    <div class="big">${money(mtd)}</div>
-    <div class="sub">Live sales performance</div>
-    <div class="spark">${days.map((d, i) =>
-      `<div class="b ${i === days.length - 1 ? "hot" : ""}" style="height:${Math.max(Math.round(d.total / max * 100), 3)}%" title="${d.key}: ${money0(d.total)}"></div>`).join("")}</div>
-    <div class="sparkends"><span>14 days ago</span><span>Today</span></div>
-    <div class="kpis" style="margin-top:15px">
-      <div class="kpi cyan"><small>MOM &middot; MTD</small><b>${growth(mtd, momBase)}</b><i>vs same point last month</i></div>
-      <div class="kpi purple"><small>YOY &middot; YTD</small><b>${growth(ytd, yoyBase)}</b><i>vs same point last year</i></div>
-      <div class="kpi em"><small>Avg sale</small><b>${money(avg)}</b><i>${month.length} invoice${month.length === 1 ? "" : "s"} this month</i></div>
-      <div class="kpi orange"><small>Forecast</small><b>${money(forecast)}</b><i>month-end run rate</i></div>
-    </div>
-    <p class="infoline"><em>&#9432;</em>Growth compares matching elapsed periods &mdash; not partial months against full months.</p>
-  </div>`;
-}
-
-async function loadNativeInvoices() {
-  const slot = $("finbody"); if (!slot) return;
-  let data, summary, connect, estData;
-  try {
-    [data, summary, connect, estData] = await Promise.all([
-      booksApi({ action: "invoices" }),
-      booksApi({ action: "summary" }),
-      booksApi({ action: "connect-status" }),
-      booksApi({ action: "estimates" }).catch(() => ({ estimates: [] })),
-    ]);
-  } catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
-  const invoices = data.invoices || [];
-  const estimates = estData.estimates || [];
-  // Same split as iOS: open/accepted estimates are live work; the rest is history.
-  const liveEst = estimates.filter((x) => x.status === "open" || x.status === "accepted");
-  const filtered = invoices.filter((i) => !S.invoiceSearch ||
-    (i.customer + " " + i.number).toLowerCase().includes(S.invoiceSearch));
-  const chargesOn = connect?.charges_enabled === true;
-  // iOS Overview parity: the 2x2 KPI tile grid renders every time — zeros on
-  // a fresh workspace beat a blank screen. THIS MONTH / YTD come from the
-  // summary's monthly income series (payments received).
-  const nowKey = new Date().toISOString().slice(0, 7);
-  const thisMonth = (summary.months || []).find((m) => m.month === nowKey)?.income || 0;
-  const ytd = (summary.months || []).filter((m) => m.month.slice(0, 4) === nowKey.slice(0, 4))
-    .reduce((s, m) => s + Number(m.income || 0), 0);
-  const nums = invoices.map((i) => parseInt(String(i.number).replace(/\D/g, ""), 10)).filter(Number.isFinite);
-  const nextNum = nums.length ? Math.max(...nums) + 1 : 1041;
-  slot.innerHTML = `
-    ${salesIntelNative(invoices)}
-    <div class="fintiles">
-      <div class="fintile"><small>THIS MONTH</small><b>${money(thisMonth)}</b></div>
-      <div class="fintile"><small>YEAR TO DATE</small><b>${money(ytd)}</b></div>
-      <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#36;</span><small>OUTSTANDING</small><b>${money(summary.open_balance || 0)}</b></div>
-      <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#128196;</span><span class="nextchip">Next #${esc(String(nextNum))}</span><small>OPEN INVOICES</small><b>${summary.open_invoices ?? 0}</b></div>
-    </div>
-    <button class="cta" id="newinv">
-      <span class="ic">&#43;</span>
-      <span><b>Create Invoice</b><span>Numbered, taxed, with a payment link</span></span>
-    </button>
-    <button class="cta ghost" id="newest">
-      <span class="ic">&#128221;</span>
-      <span><b>Create Estimate</b><span>EST-numbered quote with a share page — posts nothing</span></span>
-    </button>
-    ${liveEst.length ? `<div class="lanehead"><span class="eyebrow" style="color:var(--dim)">Open estimates</span>
-      <span class="note">${liveEst.length}</span></div>
-    <div class="list">${liveEst.slice(0, 40).map((x) => `
-      <button class="item" data-best="${esc(x.id)}">
-        <div class="main"><div class="ttl">${esc(x.customer || "—")}</div>
-          <div class="sub">${esc(x.number || "EST")} · ${esc(dateShort(x.issue_date))}${x.expiry_date ? " · expires " + esc(dateShort(x.expiry_date)) : ""}</div></div>
-        <div class="amt">${money(x.total)}
-          <small><span class="tag ${x.status === "accepted" ? "paid" : "open"}">${esc(x.status)}</span></small></div>
-      </button>`).join("")}</div>` : ""}
-    <div class="searchwrap"><span class="mag">${MAG}</span>
-      <input id="invsearch" placeholder="Customer or invoice number" value="${esc(S.invoiceSearch || "")}"></div>
-    <div class="opsgrid">
-      <button class="opcard ${chargesOn ? "em" : "purple"}" data-op="stripe"><span class="ic">&#128179;</span>
-        <b>Card payments</b><span>${chargesOn ? "ON — customers can pay online" : "Set up Stripe to get paid online"}</span>
-        <em>${chargesOn ? "MANAGE" : "SET UP"} &#8599;</em></button>
-      <button class="opcard" data-op="bsettings"><span class="ic">&#9881;</span><b>Books settings</b>
-        <span>Tax, numbering, payment info</span><em>OPEN &#8599;</em></button>
-      <button class="opcard em" data-op="receipts"><span class="ic">&#128229;</span><b>Receipt Queue</b>
-        <span>Review &amp; batch</span><em>OPEN &#8599;</em></button>
-      <button class="opcard" data-op="bexport"><span class="ic">&#128228;</span><b>Export CSV</b>
-        <span>Invoices, payments, customers</span><em>EXPORT &#8599;</em></button>
-    </div>
-    <div class="lanehead"><span class="eyebrow" style="color:var(--dim)">${S.invoiceSearch ? "Matching invoices" : "Recent invoices"}</span>
-      <span class="note">${filtered.length}</span></div>
-    ${filtered.length ? `<div class="list">${filtered.slice(0, 120).map((i) => `
-      <button class="item" data-binv="${esc(i.id)}">
-        <div class="main"><div class="ttl">${esc(i.customer || "—")}</div>
-          <div class="sub">${esc(i.number)} · ${esc(dateShort(i.issue_date))}</div></div>
-        <div class="amt">${money(i.total)}
-          <small><span class="tag ${i.status === "paid" ? "paid" : i.status === "void" ? "" : "open"}">${esc(i.status)}</span></small></div>
-      </button>`).join("")}</div>`
-      : `<div class="empty">${S.invoiceSearch ? "No matches." : "No invoices yet — create your first, or ask Ledger in chat."}</div>`}`;
-  $("newinv").onclick = () => nativeComposerSheet();
-  $("newest").onclick = () => nativeComposerSheet("estimate");
-  const search = $("invsearch");
-  if (search) search.oninput = () => { S.invoiceSearch = search.value.trim().toLowerCase(); loadNativeInvoices(); };
-  on("[data-binv]", "click", (e) => nativeInvoiceSheet(e.currentTarget.dataset.binv), slot);
-  on("[data-best]", "click", (e) => nativeEstimateSheet(e.currentTarget.dataset.best), slot);
-  on("[data-op]", "click", async (e) => {
-    const op = e.currentTarget.dataset.op;
-    if (op === "receipts") { S.financeLane = "receipts"; renderFinance(); }
-    else if (op === "bsettings") booksSettingsSheet();
-    else if (op === "bexport") {
-      try {
-        const ex = await booksApi({ action: "export" });
-        const blob = new Blob([
-          "== CUSTOMERS ==\n" + ex.customers_csv + "\n\n== INVOICES ==\n" + ex.invoices_csv +
-          "\n\n== LINES ==\n" + ex.lines_csv + "\n\n== PAYMENTS ==\n" + ex.payments_csv,
-        ], { type: "text/csv" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob); a.download = "ledger-books-export.csv"; a.click();
-        toast("Export downloaded");
-      } catch (err) { toast(err.message, "err"); }
-    } else if (op === "stripe") {
-      try {
-        const r = await booksApi({ action: "connect-onboard" });
-        if (r.url) window.open(r.url, "_blank");
-      } catch (err) { toast(err.message, "err"); }
-    }
-  }, slot);
-}
-
-async function nativeInvoiceSheet(id) {
-  const wrap = sheet(`<h2>Invoice</h2><div id="binvbody"><div class="skel"></div><div class="skel"></div></div>`);
-  const body = () => wrap.querySelector("#binvbody");
-  let inv;
-  try { inv = (await booksApi({ action: "invoice-get", id })).invoice; }
-  catch (e) { body().innerHTML = `<p class="note err">${esc(e.message)}</p>`; return; }
-  const paint = () => {
-    body().innerHTML = `
-      <div class="lanehead"><span class="eyebrow">${esc(inv.number)}</span>
-        <span class="tag ${inv.status === "paid" ? "paid" : "open"}">${esc(inv.status)}</span></div>
-      <p class="note">${esc(inv.customer?.name || "")}${inv.customer?.email ? " · " + esc(inv.customer.email) : ""}<br>
-        Issued ${esc(inv.issue_date)}${inv.due_date ? " · Due " + esc(inv.due_date) : ""}</p>
-      <table class="dtable"><tbody>
-        ${(inv.lines || []).map((l) => `<tr><td>${esc(l.name)} × ${l.quantity}</td><td style="text-align:right">${money(l.amount)}</td></tr>`).join("")}
-        <tr><td>Subtotal</td><td style="text-align:right">${money(inv.subtotal)}</td></tr>
-        ${Number(inv.tax_total) > 0 ? `<tr><td>${esc(inv.tax_name || "Tax")}</td><td style="text-align:right">${money(inv.tax_total)}</td></tr>` : ""}
-        <tr><td><b>Total</b></td><td style="text-align:right"><b>${money(inv.total)}</b></td></tr>
-        ${Number(inv.balance) > 0 && Number(inv.balance) < Number(inv.total)
-          ? `<tr><td>Balance due</td><td style="text-align:right">${money(inv.balance)}</td></tr>` : ""}
-      </tbody></table>
-      ${(inv.payments || []).length ? `<p class="note">${inv.payments.map((p) =>
-        `Paid ${money(p.amount)} · ${esc(p.method)} · ${esc(String(p.received_at).slice(0, 10))}`).join("<br>")}</p>` : ""}
-      ${inv.email_enabled ? `<button class="pillbtn" id="bemail"><b>Email invoice</b></button>` : ""}
-      ${inv.email_sent_at ? `<p class="note">Emailed to ${esc(inv.email_sent_to)} · ${esc(String(inv.email_sent_at).slice(0, 10))}</p>` : ""}
-      <button class="pillbtn" id="blink">Copy payment link</button>
-      <button class="pillbtn" id="bopen">Open invoice page</button>
-      ${Number(inv.balance) > 0 ? `
-        <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Record a payment</span></div>
-        <div class="f" style="display:flex;gap:8px">
-          <input id="bamt" type="number" min="0.01" step="0.01" class="cmpinput" style="flex:1" value="${inv.balance}">
-          <select id="bmethod" class="pillbtn"><option value="etransfer">E-transfer</option><option value="cash">Cash</option>
-            <option value="cheque">Cheque</option><option value="other">Other</option></select>
-        </div>
-        <button class="pillbtn" id="bpay" style="margin-top:8px"><b>Mark paid</b></button>` : ""}
-      ${inv.status === "sent" && !(inv.payments || []).length ? `<button class="linkbtn" id="bvoid" style="color:var(--red);margin-top:10px">Void this invoice</button>` : ""}
-      <p class="note err" id="berr"></p>`;
-    const link = inv.link || "";
-    wrap.querySelector("#blink").onclick = async () => {
-      try { await navigator.clipboard.writeText(link); toast("Payment link copied"); }
-      catch { prompt("Payment link:", link); }
-    };
-    wrap.querySelector("#bopen").onclick = () => window.open(link, "_blank");
-    const emailBtn = wrap.querySelector("#bemail");
-    if (emailBtn) emailBtn.onclick = async () => {
-      const to = (prompt("Email this invoice to:", inv.customer?.email || "") || "").trim();
-      if (!to) return;
-      emailBtn.disabled = true;
-      const send = async (force) => {
-        const r = await booksApi({ action: "invoice-send", id: inv.id, to, ...(force ? { force: true } : {}) });
-        toast(`Invoice emailed to ${r.to}`);
-        inv = { ...inv, email_sent_at: new Date().toISOString(), email_sent_to: r.to };
-        paint();
-      };
-      try { await send(false); }
-      catch (e) {
-        if (/already emailed/i.test(e.message)) {
-          if (confirm(`${inv.number} was already emailed to ${to}. Send it again?`)) {
-            try { await send(true); return; } catch (e2) { wrap.querySelector("#berr").textContent = e2.message; }
-          }
-        } else wrap.querySelector("#berr").textContent = e.message;
-        emailBtn.disabled = false;
-      }
-    };
-    const pay = wrap.querySelector("#bpay");
-    if (pay) pay.onclick = async () => {
-      pay.disabled = true;
-      try {
-        const amount = Number(wrap.querySelector("#bamt").value);
-        const r = await booksApi({ action: "payment-record", invoice_id: inv.id, amount, method: wrap.querySelector("#bmethod").value });
-        inv = { ...inv, ...r.invoice, link };
-        toast(r.invoice.status === "paid" ? "Invoice paid in full" : "Payment recorded");
-        paint(); loadNativeInvoices();
-      } catch (e) { wrap.querySelector("#berr").textContent = e.message; pay.disabled = false; }
-    };
-    const voidBtn = wrap.querySelector("#bvoid");
-    if (voidBtn) voidBtn.onclick = async () => {
-      if (!confirm(`Void ${inv.number}? The number is never reused.`)) return;
-      try { await booksApi({ action: "invoice-void", id: inv.id }); toast(`${inv.number} voided`); closeSheet(); loadNativeInvoices(); }
-      catch (e) { wrap.querySelector("#berr").textContent = e.message; }
-    };
-  };
-  paint();
-}
-
-// Native estimate detail — the web twin of iOS NativeEstimateDetailSheet.
-// An estimate becomes money only through Convert; everything else here is
-// status housekeeping on the quote itself.
-async function nativeEstimateSheet(id) {
-  const wrap = sheet(`<h2>Estimate</h2><div id="bestbody"><div class="skel"></div><div class="skel"></div></div>`);
-  const body = () => wrap.querySelector("#bestbody");
-  let est;
-  try { est = (await booksApi({ action: "estimate-get", id })).estimate; }
-  catch (e) { body().innerHTML = `<p class="note err">${esc(e.message)}</p>`; return; }
-  const tagCls = (s) => s === "accepted" || s === "converted" ? "paid" : s === "declined" || s === "void" ? "" : "open";
-  const paint = () => {
-    const live = est.status === "open" || est.status === "accepted";
-    body().innerHTML = `
-      <div class="lanehead"><span class="eyebrow">${esc(est.number || "ESTIMATE")}</span>
-        <span class="tag ${tagCls(est.status)}">${esc(est.status)}</span></div>
-      <p class="note">${esc(est.customer?.name || "")}${est.customer?.email ? " · " + esc(est.customer.email) : ""}<br>
-        Issued ${esc(est.issue_date)}${est.expiry_date ? " · Valid until " + esc(est.expiry_date) : " · No expiry"}</p>
-      <table class="dtable"><tbody>
-        ${(est.lines || []).map((l) => `<tr><td>${esc(l.name)} × ${l.quantity}</td><td style="text-align:right">${money(l.amount)}</td></tr>`).join("")}
-        <tr><td>Subtotal</td><td style="text-align:right">${money(est.subtotal)}</td></tr>
-        ${Number(est.tax_total) > 0 ? `<tr><td>${esc(est.tax_name || "Tax")}</td><td style="text-align:right">${money(est.tax_total)}</td></tr>` : ""}
-        <tr><td><b>Total</b></td><td style="text-align:right"><b>${money(est.total)}</b></td></tr>
-      </tbody></table>
-      ${est.converted_invoice_number ? `<p class="note ok">Converted to invoice ${esc(est.converted_invoice_number)}</p>` : ""}
-      ${est.email_enabled && live ? `<button class="pillbtn" id="estemail"><b>Email estimate</b></button>` : ""}
-      ${est.email_sent_at ? `<p class="note">Emailed to ${esc(est.email_sent_to)} · ${esc(String(est.email_sent_at).slice(0, 10))}</p>` : ""}
-      ${est.link ? `<button class="pillbtn" id="estlink">Copy share link</button>
-      <button class="pillbtn" id="estopen">Open estimate page</button>` : ""}
-      ${est.status === "open" ? `
-        <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Customer decision</span></div>
-        <div class="f" style="display:flex;gap:8px">
-          <button class="pillbtn" id="estaccept" style="flex:1"><b>Mark accepted</b></button>
-          <button class="pillbtn" id="estdecline" style="flex:1">Mark declined</button>
-        </div>` : ""}
-      ${est.status === "accepted" ? `<button class="cta" id="estconvert" style="margin-top:12px">
-        <span class="ic">&#8594;</span>
-        <span><b>Convert to invoice</b><span>Numbered invoice + payment link, tax applied</span></span></button>` : ""}
-      ${live ? `<button class="linkbtn" id="estvoid" style="color:var(--red);margin-top:10px">Void this estimate</button>` : ""}
-      <p class="note err" id="esterr"></p>`;
-    const err = (m) => { wrap.querySelector("#esterr").textContent = m; };
-    const link = est.link || "";
-    const lb = wrap.querySelector("#estlink");
-    if (lb) lb.onclick = async () => {
-      try { await navigator.clipboard.writeText(link); toast("Share link copied"); }
-      catch { prompt("Estimate link:", link); }
-    };
-    const ob = wrap.querySelector("#estopen");
-    if (ob) ob.onclick = () => window.open(link, "_blank");
-    const emailBtn = wrap.querySelector("#estemail");
-    if (emailBtn) emailBtn.onclick = async () => {
-      const to = (prompt("Email this estimate to:", est.customer?.email || "") || "").trim();
-      if (!to) return;
-      emailBtn.disabled = true;
-      const doSend = async (force) => {
-        const r = await booksApi({ action: "estimate-send", id: est.id, to, ...(force ? { force: true } : {}) });
-        toast(`Estimate emailed to ${r.to}`);
-        est = { ...est, email_sent_at: new Date().toISOString(), email_sent_to: r.to };
-        paint();
-      };
-      try { await doSend(false); }
-      catch (e) {
-        if (/already emailed/i.test(e.message)) {
-          if (confirm(`${est.number} was already emailed to ${to}. Send it again?`)) {
-            try { await doSend(true); return; } catch (e2) { err(e2.message); }
-          }
-        } else err(e.message);
-        emailBtn.disabled = false;
-      }
-    };
-    const setStatus = (status) => async (e) => {
-      e.currentTarget.disabled = true;
-      try {
-        est = (await booksApi({ action: "estimate-status", id: est.id, status })).estimate;
-        toast(`Marked ${status}`); paint(); loadNativeInvoices();
-      } catch (e2) { err(e2.message); e.currentTarget.disabled = false; }
-    };
-    const acc = wrap.querySelector("#estaccept"); if (acc) acc.onclick = setStatus("accepted");
-    const dec = wrap.querySelector("#estdecline"); if (dec) dec.onclick = setStatus("declined");
-    const conv = wrap.querySelector("#estconvert");
-    if (conv) conv.onclick = async () => {
-      conv.disabled = true;
-      try {
-        const r = await booksApi({ action: "estimate-convert", id: est.id });
-        toast(`Invoice ${r.invoice.number} created from ${est.number}`);
-        closeSheet(); loadNativeInvoices(); nativeInvoiceSheet(r.invoice.id);
-      } catch (e) { err(e.message); conv.disabled = false; }
-    };
-    const vb = wrap.querySelector("#estvoid");
-    if (vb) vb.onclick = async () => {
-      if (!confirm(`Void ${est.number}? The number is never reused.`)) return;
-      try { await booksApi({ action: "estimate-void", id: est.id }); toast(`${est.number} voided`); closeSheet(); loadNativeInvoices(); }
-      catch (e) { err(e.message); }
-    };
-  };
-  paint();
-}
-
-// Initials of the line name make the offered code: "Medium truck flat repair"
-// suggests MTFR. Single-word names fall back to their first four letters.
-function suggestShortcutCode(name, taken) {
-  const words = String(name).toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
-  let code = words.length >= 2 ? words.map((w) => w[0]).join("").slice(0, 8) : (words[0] || "").slice(0, 4);
-  if (!code) return "";
-  const exists = (c) => (taken || []).some((s) => s.code.toUpperCase() === c);
-  for (let n = 2; exists(code) && n < 10; n++) code = code.replace(/\d+$/, "") + n;
-  return code;
-}
-
-async function nativeComposerSheet(kind) {
-  // kind "estimate": EST numbering, VALID FOR instead of payment terms, and the
-  // create posts nothing to the books — money moves only on convert-to-invoice.
-  const isEst = kind === "estimate";
-  const C = { customer: null, customers: [], query: "", lines: [{ name: "", quantity: 1, rate: 0 }], memo: "", termsDays: 0, validDays: 14, newCust: false, busy: false, shortcuts: [] };
-  const wrap = sheet(`<h2>${isEst ? "New Estimate" : "New Invoice"}</h2><div id="bcmp"><div class="skel"></div></div>`);
-  const body = () => wrap.querySelector("#bcmp");
-  try {
-    const [cust, sc, set] = await Promise.all([
-      booksApi({ action: "customers" }),
-      booksApi({ action: "shortcuts" }).catch(() => ({ shortcuts: [] })),
-      booksApi({ action: "settings" }).catch(() => null),
-    ]);
-    C.customers = cust.customers || [];
-    C.shortcuts = sc.shortcuts || [];
-    C.termsDays = set?.default_terms_days ?? 0;
-  } catch { C.customers = []; }
-  const subtotal = () => C.lines.reduce((t, l) => t + Math.round((Number(l.quantity) || 0) * (Number(l.rate) || 0) * 100) / 100, 0);
-  const paint = () => {
-    const hits = C.query
-      ? C.customers.filter((c) => (`${c.first_name} ${c.last_name} ${c.company || ""} ${c.email || ""}`).toLowerCase().includes(C.query.toLowerCase())).slice(0, 8)
-      : C.customers.slice(0, 6);
-    body().innerHTML = `
-      <div class="lanehead"><span class="eyebrow">Customer</span></div>
-      ${C.customer ? `<div class="cmpsel"><span class="av">${esc((C.customer.first_name || "?").slice(0, 1).toUpperCase())}</span>
-          <span class="m"><b>${esc(`${C.customer.first_name} ${C.customer.last_name}`.trim())}</b>${C.customer.email ? `<span>${esc(C.customer.email)}</span>` : ""}</span>
-          <button class="x" id="bclear">&#10005;</button></div>`
-        : C.newCust ? `
-          <div class="f" style="display:flex;gap:8px">
-            <input id="ncf" class="cmpinput" placeholder="First name" style="flex:1">
-            <input id="ncl" class="cmpinput" placeholder="Last name" style="flex:1"></div>
-          <input id="nce" class="cmpinput sm" placeholder="Email">
-          <input id="ncp" class="cmpinput sm" placeholder="Phone">
-          <input id="ncc" class="cmpinput sm" placeholder="Company (optional)">
-          <button class="pillbtn" id="ncsave">Save customer</button>
-          <button class="linkbtn" id="ncback">Back to search</button>`
-        : `<input id="bq" class="cmpinput" placeholder="Search customers…" value="${esc(C.query)}" autocomplete="off">
-          ${hits.map((c) => `<button class="cmprow" data-bpick="${esc(c.id)}">
-            <span class="av sm">${esc((c.first_name || "?").slice(0, 1).toUpperCase())}</span>
-            <span class="m"><b>${esc(`${c.first_name} ${c.last_name}`.trim() || c.company || "")}</b>${c.email ? `<span>${esc(c.email)}</span>` : ""}</span>
-            <span class="plus">+</span></button>`).join("")}
-          <button class="linkbtn" id="bnewc">+ New customer</button>`}
-      <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Lines</span></div>
-      ${C.lines.map((l, i) => `<div class="cmpline">
-        <div class="t"><input class="cmpinput sm" data-bname="${i}" placeholder="Service or product — or a shortcut like MTFR" value="${esc(l.name)}" style="flex:1" autocomplete="off">
-          <button class="del" data-bdel="${i}">&#128465;</button></div>
-        <div id="bsug${i}" class="scsug"></div>
-        <div class="f"><label>Qty<input type="number" min="1" step="1" data-bqty="${i}" value="${l.quantity}"></label>
-          <label>Rate<input type="number" min="0" step="0.01" data-brate="${i}" value="${l.rate}"></label></div>
-      </div>`).join("") || `<p class="note">Add what's being billed — free-form, priced by you.${C.shortcuts.length ? " Type a shortcut code to fill a line instantly." : ""}</p>`}
-      <button class="pillbtn" id="baddline">+ Add line</button>
-      ${isEst ? `
-      <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Valid for</span></div>
-      <div class="seg" id="bvalidseg">
-        ${[[7, "7 days"], [14, "14 days"], [30, "30 days"], [0, "No expiry"]].map(([d, lbl]) =>
-          `<button class="${C.validDays === d ? "on" : ""}" data-bvalid="${d}">${lbl}</button>`).join("")}
-      </div>` : `
-      <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Payment terms</span></div>
-      <div class="seg" id="btermseg">
-        ${[[0, "COD"], [15, "Net 15"], [30, "Net 30"], [60, "Net 60"]].map(([d, lbl]) =>
-          `<button class="${C.termsDays === d ? "on" : ""}" data-bterm="${d}">${lbl}</button>`).join("")}
-      </div>`}
-      <input id="bmemo" class="cmpinput sm" placeholder="Note to customer (optional)" value="${esc(C.memo)}">
-      <div class="lanehead" style="margin-top:10px"><span class="eyebrow">Subtotal before tax</span><b>${money(subtotal())}</b></div>
-      <button class="cta" id="bcreate" ${C.busy || !C.customer || !C.lines.length ? "disabled" : ""}>
-        <span><b>${C.busy ? "Creating…" : isEst ? "Create estimate" : "Create invoice"}</b>
-          <span>${isEst ? "EST-numbered quote with a share page — posts nothing" : "Numbered + payment link, tax applied"}</span></span></button>
-      <p class="note err" id="bcerr"></p>`;
-    const q = wrap.querySelector("#bq");
-    if (q) { q.oninput = () => { C.query = q.value; paint(); wrap.querySelector("#bq").focus(); const el = wrap.querySelector("#bq"); el.setSelectionRange(el.value.length, el.value.length); }; }
-    on("[data-bpick]", "click", (e) => {
-      C.customer = C.customers.find((c) => c.id === e.currentTarget.dataset.bpick);
-      if (C.customer?.default_terms_days != null) C.termsDays = C.customer.default_terms_days;
-      paint();
-    }, body());
-    const clear = wrap.querySelector("#bclear"); if (clear) clear.onclick = () => { C.customer = null; paint(); };
-    const newc = wrap.querySelector("#bnewc"); if (newc) newc.onclick = () => { C.newCust = true; paint(); };
-    const back = wrap.querySelector("#ncback"); if (back) back.onclick = () => { C.newCust = false; paint(); };
-    const save = wrap.querySelector("#ncsave");
-    if (save) save.onclick = async () => {
-      try {
-        const r = await booksApi({ action: "customer-save", customer: {
-          first_name: wrap.querySelector("#ncf").value.trim(), last_name: wrap.querySelector("#ncl").value.trim(),
-          email: wrap.querySelector("#nce").value.trim(), phone: wrap.querySelector("#ncp").value.trim(),
-          company: wrap.querySelector("#ncc").value.trim(),
-        } });
-        C.customers.unshift(r.customer); C.customer = r.customer; C.newCust = false; paint();
-      } catch (e) { wrap.querySelector("#bcerr").textContent = e.message; }
-    };
-    wrap.querySelector("#baddline").onclick = () => { C.lines.push({ name: "", quantity: 1, rate: 0 }); paint(); };
-    on("[data-bdel]", "click", (e) => { C.lines.splice(Number(e.currentTarget.dataset.bdel), 1); paint(); }, body());
-    // Shortcut chips paint under the line being typed in — no full repaint, so
-    // the input never loses focus mid-word.
-    const paintSuggestions = (i, value) => {
-      const box = wrap.querySelector(`#bsug${i}`);
-      if (!box) return;
-      const q = value.trim().toUpperCase();
-      const hits = q.length < 1 ? [] : C.shortcuts.filter((s) =>
-        s.code.toUpperCase().startsWith(q) || s.name.toUpperCase().includes(q)).slice(0, 4);
-      box.innerHTML = hits.map((s) =>
-        `<button class="pillbtn sm" data-bsc="${esc(s.code)}" data-bscline="${i}"><b>${esc(s.code)}</b> ${esc(s.name)} · ${money(s.rate)}</button>`).join("");
-      box.querySelectorAll("[data-bsc]").forEach((btn) => btn.onclick = () => {
-        const s = C.shortcuts.find((x) => x.code === btn.dataset.bsc);
-        if (!s) return;
-        C.lines[i] = { name: s.name, description: s.description || "", quantity: C.lines[i].quantity || 1, rate: s.rate, code: s.code };
-        paint();
-      });
-    };
-    on("[data-bname]", "input", (e) => {
-      const i = Number(e.currentTarget.dataset.bname);
-      C.lines[i].name = e.currentTarget.value;
-      delete C.lines[i].code;
-      paintSuggestions(i, e.currentTarget.value);
-    }, body());
-    on("[data-bqty]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.bqty)].quantity = e.currentTarget.value; }, body());
-    on("[data-brate]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.brate)].rate = e.currentTarget.value; }, body());
-    on("[data-bterm]", "click", (e) => { C.termsDays = Number(e.currentTarget.dataset.bterm); paint(); }, body());
-    on("[data-bvalid]", "click", (e) => { C.validDays = Number(e.currentTarget.dataset.bvalid); paint(); }, body());
-    wrap.querySelector("#bmemo").oninput = (e) => { C.memo = e.target.value; };
-    const create = wrap.querySelector("#bcreate");
-    if (create) create.onclick = async (e, force) => {
-      C.busy = true; paint();
-      try {
-        const kept = C.lines.filter((l) => l.name.trim());
-        const mappedLines = kept.map((l) => ({ name: l.name.trim(), description: l.description || undefined, quantity: Number(l.quantity) || 1, rate: Number(l.rate) || 0 }));
-        let r, docId, docNumber;
-        if (isEst) {
-          r = await booksApi({ action: "estimate-create", customer_id: C.customer.id, lines: mappedLines,
-            memo: C.memo, ...(C.validDays > 0 ? { valid_for_days: C.validDays } : {}) });
-          docId = r.estimate.id; docNumber = r.estimate.number;
-        } else {
-          r = await booksApi({ action: "invoice-create", customer_id: C.customer.id, lines: mappedLines,
-            memo: C.memo, terms_days: C.termsDays,
-            shortcut_codes: kept.map((l) => l.code).filter(Boolean), force: force === true });
-          docId = r.invoice.id; docNumber = r.invoice.number;
-        }
-        toast(`${docNumber || (isEst ? "Estimate" : "Invoice")} created`);
-        closeSheet(); loadNativeInvoices();
-        const openDoc = () => isEst ? nativeEstimateSheet(docId) : nativeInvoiceSheet(docId);
-        // First-use shortcut offer: hand-typed lines the owner might want as a
-        // one-tap code next time. Lines filled from a shortcut are skipped.
-        const offer = isEst ? [] : kept.filter((l) => !l.code && l.name.trim() && Number(l.rate) > 0 &&
-          !C.shortcuts.some((s) => s.name.toLowerCase() === l.name.trim().toLowerCase()));
-        if (offer.length) shortcutOfferSheet(offer, C.shortcuts, openDoc);
-        else openDoc();
-      } catch (err) {
-        C.busy = false; paint();
-        if (err.status === 409 && err.data?.duplicate_of) {
-          if (confirm(err.message + "\n\nCreate anyway?")) return create.onclick(null, true);
-        } else wrap.querySelector("#bcerr").textContent = err.message;
-      }
-    };
-  };
-  paint();
-}
-
-// "Would you like a shortcut for that?" — shown once per new hand-typed line
-// right after its first invoice. Yes = the code fills a line on every future
-// invoice; the owner's item catalog builds itself while they work.
-function shortcutOfferSheet(offerLines, knownShortcuts, done) {
-  const taken = [...knownShortcuts];
-  const wrap = sheet(`<h2>Save as shortcuts?</h2>
-    <p class="note">Next time, type the code and the whole line fills in.</p>
-    <div id="scoffer">${offerLines.map((l, i) => `
-      <div class="cmpline" data-scrow="${i}">
-        <div class="t"><span style="flex:1"><b>${esc(l.name)}</b> · ${money(Number(l.rate) || 0)}</span></div>
-        <div class="f" style="display:flex;gap:8px;align-items:center">
-          <input class="cmpinput sm" data-sccode="${i}" value="${esc(suggestShortcutCode(l.name, taken))}" style="max-width:120px;text-transform:uppercase" autocomplete="off">
-          <button class="pillbtn sm" data-scyes="${i}"><b>Save</b></button>
-          <button class="linkbtn" data-scno="${i}">No thanks</button>
-        </div>
-        <p class="note err" data-scerr="${i}"></p>
-      </div>`).join("")}</div>
-    <button class="cta" id="scdone"><span><b>Done</b></span></button>`);
-  let open = offerLines.length;
-  const finish = () => { closeSheet(); done && done(); };
-  const resolveRow = (i) => {
-    const row = wrap.querySelector(`[data-scrow="${i}"]`);
-    if (row) row.remove();
-    if (--open <= 0) finish();
-  };
-  offerLines.forEach((l, i) => {
-    wrap.querySelector(`[data-scyes="${i}"]`).onclick = async (e) => {
-      const code = wrap.querySelector(`[data-sccode="${i}"]`).value.trim().toUpperCase();
-      e.currentTarget.disabled = true;
-      try {
-        await booksApi({ action: "shortcut-save", code, name: l.name.trim(), description: l.description || "", rate: Number(l.rate) || 0 });
-        toast(`${code} saved`);
-        resolveRow(i);
-      } catch (err) {
-        e.currentTarget.disabled = false;
-        wrap.querySelector(`[data-scerr="${i}"]`).textContent = err.message;
-      }
-    };
-    wrap.querySelector(`[data-scno="${i}"]`).onclick = () => resolveRow(i);
-  });
-  wrap.querySelector("#scdone").onclick = finish;
-}
-
-async function booksSettingsSheet() {
-  const wrap = sheet(`<h2>Books settings</h2><div id="bset"><div class="skel"></div></div>`);
-  const body = () => wrap.querySelector("#bset");
-  let s;
-  try { s = await booksApi({ action: "settings" }); }
-  catch (e) { body().innerHTML = `<p class="note err">${esc(e.message)}</p>`; return; }
-  let shortcuts = [];
-  try { shortcuts = (await booksApi({ action: "shortcuts" })).shortcuts || []; } catch {}
-  const br = s.branding || {};
-  const template = { v: br.template || "classic" };
-  const termsDefault = { v: Number(s.default_terms_days) || 0 };
-  const paintShortcuts = () => {
-    const box = wrap.querySelector("#sclist");
-    if (!box) return;
-    box.innerHTML = shortcuts.length ? shortcuts.map((sc) => `
-      <div class="cmpline"><div class="t">
-        <span style="flex:1"><b>${esc(sc.code)}</b> ${esc(sc.name)} · ${money(sc.rate)}</span>
-        <button class="del" data-scdel="${esc(sc.id)}">&#128465;</button></div></div>`).join("")
-      : `<p class="note">No shortcuts yet — you'll be offered one after each invoice with a new line item.</p>`;
-    box.querySelectorAll("[data-scdel]").forEach((btn) => btn.onclick = async () => {
-      await booksApi({ action: "shortcut-delete", id: btn.dataset.scdel }).catch(() => {});
-      shortcuts = shortcuts.filter((x) => x.id !== btn.dataset.scdel);
-      paintShortcuts();
-    });
-  };
-  body().innerHTML = `
-    <div class="lanehead"><span class="eyebrow">Your brand</span></div>
-    <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px">
-      ${br.logo_url ? `<img src="${esc(br.logo_url)}" alt="" style="width:46px;height:46px;border-radius:11px;object-fit:cover" id="slogoimg">` : ""}
-      <button class="pillbtn" id="slogo">${br.logo_url ? "Replace logo" : "Upload logo"}</button>
-      <input type="file" id="slogofile" accept="image/jpeg,image/png,image/webp" hidden>
-    </div>
-    <label class="emailrow">Accent color (buttons and totals on your invoices)
-      <input id="saccent" type="color" value="${/^#[0-9a-fA-F]{6}$/.test(br.accent_color || "") ? esc(br.accent_color) : "#22d3ee"}" style="width:64px;height:36px;border:0;background:none;padding:0"></label>
-    <div class="lanehead"><span class="eyebrow">Invoice layout</span></div>
-    <div class="seg" id="stmpl">
-      ${["classic", "modern", "minimal"].map((t) => `<button class="${template.v === t ? "on" : ""}" data-stm="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}
-    </div>
-    <label class="emailrow">Business phone (shown on invoices)<input id="sphone" class="cmpinput" value="${esc(br.phone || "")}"></label>
-    <label class="emailrow">Invoice footer note (thank-you line, warranty, terms & conditions)
-      <textarea id="sfoot" class="cmpinput" rows="2">${esc(br.footer_note || "")}</textarea></label>
-    <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Default payment terms</span></div>
-    <div class="seg" id="sterms">
-      ${[[0, "COD"], [15, "Net 15"], [30, "Net 30"], [60, "Net 60"]].map(([d, lbl]) => `<button class="${termsDefault.v === d ? "on" : ""}" data-std="${d}">${lbl}</button>`).join("")}
-    </div>
-    <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Line-item shortcuts</span></div>
-    <div id="sclist"></div>
-    <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Tax &amp; numbering</span></div>
-    <label class="emailrow">Tax name<input id="stax" class="cmpinput" value="${esc(s.tax.name)}"></label>
-    <label class="emailrow">Tax rate %<input id="srate" type="number" min="0" max="100" step="0.01" class="cmpinput" value="${(Number(s.tax.rate) * 100).toFixed(2)}"></label>
-    <label class="emailrow">Tax registration # (shown on invoices)<input id="sreg" class="cmpinput" value="${esc(s.tax.registration_number || "")}"></label>
-    <label class="emailrow">Invoice prefix<input id="spre" class="cmpinput" value="${esc(s.numbering.prefix)}"></label>
-    <p class="note">Next invoice: ${esc(s.numbering.prefix)}${s.numbering.next_number}</p>
-    <label class="emailrow">How customers pay you (shown on unpaid invoices when card payments are off)
-      <textarea id="spay" class="cmpinput" rows="3">${esc(s.payment_instructions || "")}</textarea></label>
-    <button class="cta" id="ssave"><span><b>Save settings</b></span></button>
-    <p class="note err" id="serr"></p>`;
-  paintShortcuts();
-  on("[data-stm]", "click", (e) => {
-    template.v = e.currentTarget.dataset.stm;
-    wrap.querySelectorAll("[data-stm]").forEach((b) => b.classList.toggle("on", b.dataset.stm === template.v));
-  }, body());
-  on("[data-std]", "click", (e) => {
-    termsDefault.v = Number(e.currentTarget.dataset.std);
-    wrap.querySelectorAll("[data-std]").forEach((b) => b.classList.toggle("on", Number(b.dataset.std) === termsDefault.v));
-  }, body());
-  wrap.querySelector("#slogo").onclick = () => wrap.querySelector("#slogofile").click();
-  wrap.querySelector("#slogofile").onchange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const btn = wrap.querySelector("#slogo");
-    btn.disabled = true; btn.textContent = "Uploading…";
-    try {
-      const dataUrl = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file); });
-      const detail = await api("/workspace-profile", { action: "logo", image: { data: dataUrl, media_type: file.type } });
-      if (S.profile?.business) S.profile.business.logo_url = detail?.business?.logo_url ?? S.profile.business.logo_url;
-      btn.disabled = false; btn.textContent = "Replace logo"; toast("Logo updated");
-    } catch (err) { btn.disabled = false; btn.textContent = "Upload logo"; wrap.querySelector("#serr").textContent = err.message; }
-  };
-  wrap.querySelector("#ssave").onclick = async () => {
-    try {
-      await booksApi({ action: "settings-save",
-        tax_name: wrap.querySelector("#stax").value, tax_rate: Number(wrap.querySelector("#srate").value) / 100,
-        registration_number: wrap.querySelector("#sreg").value, prefix: wrap.querySelector("#spre").value,
-        payment_instructions: wrap.querySelector("#spay").value,
-        accent_color: wrap.querySelector("#saccent").value,
-        template: template.v,
-        business_phone: wrap.querySelector("#sphone").value,
-        footer_note: wrap.querySelector("#sfoot").value,
-        default_terms_days: termsDefault.v });
-      toast("Settings saved"); closeSheet();
-    } catch (e) { wrap.querySelector("#serr").textContent = e.message; }
-  };
-}
-
 const FINANCE_TITLE = { invoices: "Finance", profit: "Profit", receipts: "Receipts" };
 
 async function renderFinance() {
-  // Which ledger this workspace runs on decides the whole tab: native books
-  // hides the Profit lane (a QuickBooks P&L board) and swaps the invoice
-  // screens. Cached for the session; a connect/disconnect reloads the app.
-  if (S.booksProvider === undefined) {
-    try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
-    catch { S.booksProvider = "quickbooks"; }
-  }
-  const native = S.booksProvider === "native";
   const lane = S.financeLane === "profit" || S.financeLane === "receipts" ? S.financeLane : "invoices";
   view().innerHTML = `<div class="sect">
     ${osHead(FINANCE_CODE[lane], FINANCE_TITLE[lane])}
     <div class="seg">
-      <button class="${lane === "invoices" ? "on" : ""}" data-fl="invoices">${segIc("overview")}Overview</button>
-      <button class="${lane === "profit" ? "on" : ""}" data-fl="profit">${segIc("profit")}Profit</button>
-      <button class="${lane === "receipts" ? "on" : ""}" data-fl="receipts">${segIc("receipts")}Receipts</button>
+      <button class="${lane === "invoices" ? "on" : ""}" data-fl="invoices">Invoices</button>
+      <button class="${lane === "profit" ? "on" : ""}" data-fl="profit">Profit &amp; Loss</button>
+      <button class="${lane === "receipts" ? "on" : ""}" data-fl="receipts">Receipts</button>
     </div>
     <div id="finbody"><div class="skel"></div><div class="skel"></div></div>
   </div>`;
   on("[data-fl]", "click", (e) => { S.financeLane = e.currentTarget.dataset.fl; renderFinance(); });
-  if (lane === "profit") { if (native) loadNativeProfit(); else loadProfit(); }
+  if (lane === "profit") loadProfit();
   else if (lane === "receipts") loadReceipts();
-  else if (native) loadNativeInvoices();
   else loadInvoices();
 }
 
@@ -1395,10 +614,6 @@ async function loadInvoices() {
       <button class="cta" id="newinv">
         <span class="ic">&#43;</span>
         <span><b>Create Invoice</b><span>Draft, review, post to QuickBooks</span></span>
-      </button>
-      <button class="cta ghost" id="newest">
-        <span class="ic">&#128221;</span>
-        <span><b>Create Estimate</b><span>A quote on QuickBooks' EST numbering — posts nothing</span></span>
       </button>
       <div class="searchwrap"><span class="mag">${MAG}</span>
         <input id="invsearch" placeholder="Customer, invoice, email or phone" value="${esc(S.invoiceSearch || "")}"></div>
@@ -1438,7 +653,6 @@ async function loadInvoices() {
         </button>`).join("")}</div>`
         : (S.invoiceSearch ? "" : `<div class="empty">No invoices yet.</div>`)}`;
     $("newinv").onclick = () => composerSheet();
-    $("newest").onclick = () => composerSheet("estimate");
     if ($("clrsearch")) $("clrsearch").onclick = () => { S.invoiceSearch = ""; loadInvoices(); };
     on("[data-op]", "click", (e) => {
       const op = e.currentTarget.dataset.op;
@@ -1503,13 +717,9 @@ function salesIntel(invoices, k) {
 // Manual invoice composer — the web twin of iOS InvoiceComposerSheet.
 // Same single write path as chat: build → /quickbooks-invoice/draft → Confirm → /confirm.
 // The AI has no posting tool here either; the Confirm tap is the only thing that posts.
-async function composerSheet(kind) {
-  // kind "estimate" rides the same composer down the estimate-draft route: QBO's
-  // own EST numbering, no terms control (estimates expire, they don't come due),
-  // and nothing posts to the books until the customer accepts.
-  const isEst = kind === "estimate";
+async function composerSheet() {
   const C = { customer: null, lines: [], memo: "", items: [], itemsError: "", query: "", draft: null, busy: false, error: "" };
-  const wrap = sheet(`<h2>${isEst ? "New Estimate" : "New Invoice"}</h2><div id="cmpbody"><div class="skel"></div><div class="skel"></div></div>`);
+  const wrap = sheet(`<h2>New Invoice</h2><div id="cmpbody"><div class="skel"></div><div class="skel"></div></div>`);
   const body = () => wrap.querySelector("#cmpbody");
   const money2 = (n) => "$" + (Number(n) || 0).toFixed(2);
   const subtotal = () => C.lines.reduce((t, l) => t + Math.round(l.quantity * l.rate * 100) / 100, 0);
@@ -1569,10 +779,10 @@ async function composerSheet(kind) {
   function drawDraft() {
     const d = C.draft;
     body().innerHTML = `<div class="card" style="margin:0">
-      <h3>${isEst ? "ESTIMATE DRAFT" : "INVOICE DRAFT"}</h3><div class="cust">${esc(d.customer)}</div>
+      <h3>INVOICE DRAFT</h3><div class="cust">${esc(d.customer)}</div>
       <table>${(d.lines || []).map((l) => `<tr><td>${esc(l.description || l.item_name)} × ${l.quantity}</td><td>${money(l.amount)}</td></tr>`).join("")}
         <tr><td class="total">Subtotal</td><td class="total">${money(d.subtotal)}</td></tr></table>
-      ${isEst ? "" : termsRow(d.terms)}
+      ${termsRow(d.terms)}
       ${d.customer_email ? `<label class="emailrow"><input type="checkbox" id="cmpem" checked> Email to ${esc(d.customer_email)}</label>` : ""}
       <label class="emailrow"><input type="checkbox" id="cmppr" ${localStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
       <div class="row"><button class="btn cancel" id="cmpcancel">Cancel</button><button class="btn confirm" id="cmpconfirm">Confirm</button></div>
@@ -1586,19 +796,18 @@ async function composerSheet(kind) {
       const wantPrint = body().querySelector("#cmppr")?.checked ?? false;
       try {
         const terms = body().querySelector(".tm")?.value;
-        const r = await api(isEst ? "/quickbooks-invoice/estimate-confirm" : "/quickbooks-invoice/confirm",
-          { draft_id: d.draft_id, send_email: sendEmail, ...(terms ? { terms } : {}) });
+        const r = await api("/quickbooks-invoice/confirm", { draft_id: d.draft_id, send_email: sendEmail, ...(terms ? { terms } : {}) });
         note.className = "note ok";
         note.textContent = "✅ Posted" + (r.doc_number ? " — #" + r.doc_number : "") + (r.emailed ? " · emailed " + (r.emailed_to || "") : "");
         body().querySelector(".row").remove();
-        if (wantPrint && (r.qbo_invoice_id || r.id)) printPdfById(r.qbo_invoice_id || r.id, r.doc_number, isEst ? "estimate" : "invoice");
+        if (wantPrint && (r.qbo_invoice_id || r.id)) printPdfById(r.qbo_invoice_id || r.id, r.doc_number, "invoice");
         S.qboStale = true;
         setTimeout(() => { closeSheet(); loadInvoices(); }, 1400);
       } catch (e) { draftBtns().forEach((b) => b.disabled = false); note.className = "note err"; note.textContent = postedMessage(e); }
     };
     body().querySelector("#cmpcancel").onclick = async () => {
       draftBtns().forEach((b) => b.disabled = true);
-      try { await api(isEst ? "/quickbooks-invoice/estimate-cancel" : "/quickbooks-invoice/cancel", { draft_id: d.draft_id }); } catch {}
+      try { await api("/quickbooks-invoice/cancel", { draft_id: d.draft_id }); } catch {}
       C.draft = null; draw();
     };
   }
@@ -1636,7 +845,7 @@ async function composerSheet(kind) {
           return e;
         }) };
         if (C.memo) payload.memo = C.memo;
-        C.draft = (await api(isEst ? "/quickbooks-invoice/estimate-draft" : "/quickbooks-invoice/draft", payload)).draft;
+        C.draft = (await api("/quickbooks-invoice/draft", payload)).draft;
       } catch (e) { C.error = e.message; }
       C.busy = false; draw();
     };
@@ -1724,38 +933,6 @@ async function withPdf(inv, sh, fn) {
 }
 
 /* ---------------- PROFIT ---------------- */
-// Built-in books P&L — income is payments received, expenses are logged
-// costs, straight off the books summary. Rendered even when empty: a new
-// shop should see the board it is about to fill, not a blank lane.
-async function loadNativeProfit() {
-  const slot = $("finbody"); if (!slot) return;
-  let summary;
-  try { summary = await booksApi({ action: "summary" }); }
-  catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
-  const months = (summary.months || []).slice(-12).reverse();
-  const nowKey = new Date().toISOString().slice(0, 7);
-  const cur = months.find((m) => m.month === nowKey) || { income: 0, expenses: 0, net: 0 };
-  const ytdRows = months.filter((m) => m.month.slice(0, 4) === nowKey.slice(0, 4));
-  const ytdNet = ytdRows.reduce((s, m) => s + Number(m.net || 0), 0);
-  const monthLabel = (k) => new Date(k + "-15").toLocaleDateString(undefined, { month: "long", year: "numeric" });
-  slot.innerHTML = `
-    <div class="fintiles">
-      <div class="fintile"><small>THIS MONTH NET</small><b>${money(cur.net || 0)}</b></div>
-      <div class="fintile"><small>YEAR TO DATE NET</small><b>${money(ytdNet)}</b></div>
-    </div>
-    <div class="panel">
-      <h3>&#128200; Month by month</h3>
-      <p class="sub">Income is payments received; expenses are the costs you've logged on jobs and receipts.</p>
-    </div>
-    ${months.length ? `<div class="list">${months.map((m) => `
-      <div class="item">
-        <div class="main"><div class="ttl">${esc(monthLabel(m.month))}</div>
-          <div class="sub">${money(m.income || 0)} in &middot; ${money(m.expenses || 0)} out</div></div>
-        <div class="amt" style="color:${Number(m.net || 0) >= 0 ? "var(--emerald)" : "var(--red)"}">${money(m.net || 0)}</div>
-      </div>`).join("")}</div>`
-    : `<div class="panel" style="text-align:center"><p class="sub" style="margin:0">No activity yet — your first paid invoice starts this board.</p></div>`}`;
-}
-
 async function loadProfit() {
   const slot = $("finbody"); if (!slot) return;
   let refreshError = null;
@@ -2332,7 +1509,7 @@ function drawCalendar() {
     if (!d) return `<span class="cd empty"></span>`;
     const k = dayKey(d);
     const n = Math.min(countOn(k), 3);
-    const cls = [k === CAL.sel ? "on" : "", k === todayKey ? "now" : "", n ? "e" + n : ""].filter(Boolean).join(" ");
+    const cls = [k === CAL.sel ? "on" : "", k === todayKey ? "now" : ""].filter(Boolean).join(" ");
     return `<button class="cd ${cls}" data-day="${k}"><b>${d.getDate()}</b>
       <i>${n ? Array.from({ length: n }, () => "<u></u>").join("") : ""}</i></button>`;
   }).join("");
@@ -2351,92 +1528,20 @@ function drawCalendar() {
     .sort((a, b) => new Date(a.start) - new Date(b.start));
   const nextSelId = CAL.sel === todayKey ? (dayEvents.find((e) => new Date(e.start) > now) || {}).id : null;
 
-  // ---- Command-center intelligence (iOS build 42 parity) ----
-  const timed = (e) => (e.start || "").length > 10; // all-day rows carry no clock and stay off the run sheet
-  const clock = (d) => d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  const todayTimed = all.filter((e) => evDayKey(e.start) === todayKey && timed(e))
-    .sort((a, b) => new Date(a.start) - new Date(b.start));
-
-  const nextToday = todayTimed.find((e) => new Date(e.start) > now);
-  const todayDetail = nextToday ? "next " + clock(new Date(nextToday.start))
-    : todayCount > 0 ? "all wrapped" : "wide open";
-  const weekEvents = all.filter((e) => inRange(e.start, weekFrom, weekTo));
-  let weekDetail = "quiet week";
-  if (weekEvents.length) {
-    const byDay = {};
-    weekEvents.forEach((e) => { const k = evDayKey(e.start); byDay[k] = (byDay[k] || 0) + 1; });
-    const busiest = Object.entries(byDay).sort((a, b) => b[1] - a[1])[0];
-    weekDetail = new Date(busiest[0] + "T12:00:00").toLocaleDateString(undefined, { weekday: "short" }) + " ×" + busiest[1];
-  }
-  const monthEvents = all.filter((e) => inRange(e.start, monthFrom, monthTo));
-  const bookedDays = new Set(monthEvents.map((e) => evDayKey(e.start))).size;
-  const monthDetail = bookedDays ? bookedDays + " booked day" + (bookedDays === 1 ? "" : "s") : "clear board";
-
-  // Run sheet: today's timed jobs, open gaps of an hour or more, and a NOW line.
-  const runRows = [];
-  if (todayTimed.length) {
-    todayTimed.forEach((e) => runRows.push({ at: new Date(e.start), kind: "event", e }));
-    for (let i = 0; i < todayTimed.length - 1; i++) {
-      const endA = new Date(todayTimed[i].end || todayTimed[i].start);
-      const startB = new Date(todayTimed[i + 1].start);
-      const mins = (startB - endA) / 60000;
-      if (mins >= 60) runRows.push({ at: new Date(endA.getTime() + 1000), kind: "gap",
-        label: clock(endA) + " – " + clock(startB), slots: Math.floor(mins / 60) });
-    }
-    runRows.push({ at: now, kind: "now" });
-    runRows.sort((a, b) => a.at - b.at);
-  }
-  const runSheet = runRows.length ? `<div class="runsheet">
-    <div class="rshead">&#128421; TODAY'S RUN SHEET</div>
-    ${runRows.map((r) => {
-      if (r.kind === "now") return `<div class="rsnow"><i></i><span>NOW · ${esc(clock(now))}</span><u></u></div>`;
-      if (r.kind === "gap") return `<div class="rsgap"><span>&#10022; OPEN · ${esc(r.label)}</span>
-        <small>room for ${r.slots} job${r.slots === 1 ? "" : "s"}</small></div>`;
-      const past = new Date(r.e.end || r.e.start) < now;
-      return `<button class="rsrow${past ? " past" : ""}" data-ev="${esc(r.e.id)}">
-        <b>${esc(clock(new Date(r.e.start)))}</b><i class="bar"></i>
-        <span>${esc(r.e.title)}</span>${past ? `<em>&#10003;</em>` : ""}</button>`;
-    }).join("")}
-  </div>` : "";
-
-  // Schedule intelligence: this month's load by weekday.
-  let intel = "";
-  if (monthEvents.length) {
-    const wd = [0, 0, 0, 0, 0, 0, 0];
-    monthEvents.forEach((e) => { const d = new Date(evDayKey(e.start) + "T12:00:00"); if (!isNaN(d)) wd[d.getDay()]++; });
-    const maxWd = Math.max(1, ...wd);
-    const names = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-    const fullNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const busiestIdx = wd.indexOf(Math.max(...wd));
-    const dim2 = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    intel = `<div class="calintel">
-      <div class="cihead">&#129504; SCHEDULE INTELLIGENCE</div>
-      ${names.map((n, i) => `<div class="cibar">
-        <b>${n}</b><div class="track"><i style="width:${wd[i] ? Math.max(6, Math.round(wd[i] / maxWd * 100)) : 0}%"></i></div>
-        <em class="${wd[i] === maxWd && wd[i] > 0 ? "hot" : ""}">${wd[i]}</em></div>`).join("")}
-      ${wd[busiestIdx] > 1 ? `<p class="ciline">&#128293; ${fullNames[busiestIdx]}s carry the month — ${wd[busiestIdx]} bookings.</p>` : ""}
-      <p class="ciline dim">&#128197; ${bookedDays} of ${dim2} days booked this month — ${dim2 - bookedDays} still open to sell.</p>
-    </div>`;
-  }
-
   view().innerHTML = `<div class="sect">
     ${osHead("CAL.03 · SCHEDULE", "Calendar")}
     <div class="searchwrap"><span class="mag">${MAG}</span>
       <input id="calsearch" placeholder="Search selected day" value="${esc(CAL.q)}"></div>
-    ${next ? `<button class="nexthero" data-ev="${esc(next.id)}">
-      <div class="t"><span class="dot"></span><span class="lbl">NEXT UP</span><span class="go">&#10132;</span></div>
-      <div class="big">${esc(countdown(next.start))}</div>
-      <b>${esc(next.title)}</b>
-      <div class="meta"><span>&#128337; ${esc(timeLabel(next.start))}${next.end && timed(next) ? " – " + esc(timeLabel(next.end)) : ""}</span>
-        ${next.location ? `<span>&#128205; ${esc(next.location)}</span>` : ""}</div>
-    </button>` : ""}
     <div class="calstats">
-      <div class="calstat"><i style="background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></i><b>${todayCount}</b><small>Today</small><em>${esc(todayDetail)}</em></div>
-      <div class="calstat"><i style="background:var(--emerald);box-shadow:0 0 8px var(--emerald)"></i><b>${weekCount}</b><small>This week</small><em>${esc(weekDetail)}</em></div>
-      <div class="calstat"><i style="background:var(--magenta);box-shadow:0 0 8px var(--magenta)"></i><b>${monthCount}</b><small>This month</small><em>${esc(monthDetail)}</em></div>
+      <div class="calstat"><i style="background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></i><b>${todayCount}</b><small>Today</small></div>
+      <div class="calstat"><i style="background:var(--emerald);box-shadow:0 0 8px var(--emerald)"></i><b>${weekCount}</b><small>This week</small></div>
+      <div class="calstat"><i style="background:var(--magenta);box-shadow:0 0 8px var(--magenta)"></i><b>${monthCount}</b><small>This month</small></div>
     </div>
-    ${runSheet}
-    ${intel}
+    ${next ? `<button class="nextup" data-ev="${esc(next.id)}">
+      <div class="ic">&#9203;</div>
+      <div class="m"><small>&#9679; Next up · ${esc(countdown(next.start))}</small><b>${esc(next.title)}</b>
+        <span>${esc(timeLabel(next.start))}${next.location ? " · " + esc(next.location) : ""}</span></div>
+      <div class="go">&#8594;</div></button>` : ""}
     <div class="bookcal">
       <div class="bchead">
         <div><span class="eyebrow">Booking calendar</span>
@@ -2454,11 +1559,6 @@ function drawCalendar() {
       <span class="ic">&#128197;</span>
       <span class="m"><b>BOOK ${selDate.toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()}</b>
         <span>Live availability · verified Calendar write</span></span>
-      <span class="go">&#8599;</span></button>
-    <button class="bookbtn" id="crewbtn">
-      <span class="ic">&#128119;</span>
-      <span class="m"><b>CREW</b>
-        <span>Hours, time cards, roster &amp; shifts</span></span>
       <span class="go">&#8599;</span></button>
     <div class="dayhead">
       <div><span class="eyebrow">Day schedule</span>
@@ -2487,7 +1587,6 @@ function drawCalendar() {
   on("[data-day]", "click", (e) => { CAL.sel = e.currentTarget.dataset.day; drawCalendar(); });
   on("[data-ev]", "click", (e) => eventSheet(all.find((x) => x.id === e.currentTarget.dataset.ev)));
   $("bookday").onclick = () => bookingSheet(CAL.sel);
-  $("crewbtn").onclick = () => crewHoursSheet();
   if ($("bookempty")) $("bookempty").onclick = () => bookingSheet(CAL.sel);
 }
 
@@ -2617,36 +1716,7 @@ async function loadReceipts() {
     const shown = !rq ? S.receipts : S.receipts.filter((r) =>
       ((r.vendor || "") + " " + (r.category || "") + " " + (r.received_at || "") + " " + (r.subject || "") + " " + (r.summary || ""))
         .toLowerCase().includes(rq));
-    // Same intake math as iOS ReceiptIntakeSummary: unposted excludes Personal
-    // but includes uncategorised rows — that pile is the money not yet in the books.
-    const unposted = S.receipts.filter((r) => !r.qbo_purchase_id && r.category !== "Personal");
-    const unpostedValue = unposted.reduce((t, r) => t + (Number(r.total) || 0), 0);
     slot.innerHTML = `
-      <div class="fintiles" style="grid-template-columns:1fr 1fr 1.35fr">
-        <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">&#128246;</span><small>ON RADAR</small><b>${S.receipts.length}</b><i>shot + emailed</i></div>
-        <div class="fintile em"><span class="tic" style="background:rgba(47,224,160,.15);color:var(--emerald)">&#10004;</span><small>READY</small><b>${ready.length}</b><i>priced &amp; filed</i></div>
-        <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#8987;</span><small>UNPOSTED</small><b>${money(unpostedValue)}</b><i>${unposted.length === 1 ? "1 waiting" : unposted.length + " waiting"}</i></div>
-      </div>
-      <div class="lanehead"><span class="eyebrow">Intake</span><span class="note">camera · library</span></div>
-      <div class="panel">
-        <h3>&#9635; Capture a receipt</h3>
-        <p class="sub">Shoot it and Ledger reads the vendor, total and tax, then files it for QuickBooks.</p>
-        <div class="rowbtns" style="margin-top:12px">
-          <button class="cta" id="rcptshoot" style="flex:1;margin:0">
-            <span class="ic">&#128247;</span>
-            <span><b>Photograph</b><span>Reads it for you</span></span>
-          </button>
-          <button class="btn ghost" id="rcptpick" style="flex:0 0 auto;display:flex;flex-direction:column;gap:4px;align-items:center;justify-content:center;min-width:78px">&#128444;<small style="font-size:10px;font-weight:800;letter-spacing:.6px">LIBRARY</small></button>
-        </div>
-        <label class="preclass" style="margin-top:12px;display:flex;align-items:center;gap:9px;padding:11px 13px;border-radius:13px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09)">
-          <span style="color:var(--gold)">&#127991;</span>
-          <span style="font-size:10px;font-weight:800;letter-spacing:1.3px;color:var(--dim)">PRE-CLASSIFY</span>
-          <select id="preclassify" style="margin-left:auto;background:none;border:0;color:var(--gold);font-weight:700;font-family:inherit;text-align:right">
-            <option value="">Let Ledger read it</option>
-            ${Object.entries(CATEGORIES).map(([g, cats]) => `<optgroup label="${esc(g)}">${cats.map((c) =>
-              `<option value="${esc(c)}" ${S.preClassify === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</optgroup>`).join("")}
-          </select>
-        </label>
       <button class="queue" id="batchqueue">
         <div class="ic">&#128229;</div>
         <div class="m"><small>QuickBooks batch queue</small>
@@ -2654,19 +1724,25 @@ async function loadReceipts() {
           <span>Categorised receipts waiting to post as expenses.</span></div>
         <div class="chev">&#8250;</div>
       </button>
+      <div class="panel">
+        <h3>&#128247; Photograph a receipt</h3>
+        <p class="sub">Snap the paper. Ledger reads the vendor, date and total, then it queues like any other receipt.</p>
+        <div class="rowbtns" style="margin-top:12px">
+          <button class="btn primary" id="rcptshoot">Take photo</button>
+          <button class="btn ghost" id="rcptpick">Choose from library</button>
+        </div>
         <input type="file" id="rcptcam" accept="image/*" capture="environment" hidden>
         <input type="file" id="rcptlib" accept="image/*" hidden>
         <p class="note" id="rcptcamnote" style="margin-top:8px"></p>
       </div>
-      <div class="lanehead"><span class="eyebrow" style="color:var(--red)">Cost ledger</span><span class="note">${S.receipts.length === 1 ? "1 record" : S.receipts.length + " records"}</span></div>
-      <div class="panel" style="border-color:rgba(248,113,113,.35);box-shadow:0 0 18px rgba(248,113,113,.08)">
-        <h3 style="color:var(--red)">&#128231; Receipt Radar</h3>
-        <p class="sub">Ledger scans your inbox daily at ${hourLabel(d.scan_hour ?? 18)} for receipts and supplier invoices. Photos land here too.</p>
+      <div class="panel">
+        <h3>&#128231; Email Receipt Radar</h3>
+        <p class="sub">Ledger reads supplier receipts out of your inbox and turns them into expenses.</p>
         <div class="rowbtns" style="margin-top:12px;align-items:center">
           <select id="scanhour" class="hourpick" title="Daily scan time">
             ${Array.from({ length: 24 }, (_, h) => `<option value="${h}" ${h === (d.scan_hour ?? 18) ? "selected" : ""}>Daily at ${hourLabel(h)}</option>`).join("")}
           </select>
-          <button class="btn em" id="scannow" style="background:linear-gradient(140deg,rgba(248,113,113,.85),rgba(251,146,60,.85));color:#fff;border:0">&#8635; Scan now</button>
+          <button class="btn ghost" id="scannow">Scan now</button>
           ${ready.length >= 2 ? `<button class="btn em" id="batch">Post all ready (${ready.length})</button>` : ""}
         </div>
         <p class="note" style="margin-top:8px">${d.last_scan_at ? "Last scan " + esc(new Date(d.last_scan_at).toLocaleString()) : "Not scanned yet"}</p>
@@ -2689,9 +1765,6 @@ async function loadReceipts() {
         : `<div class="empty">${rq ? "No receipts match that search." : "No receipts found yet.<br>Run a scan, or forward one to your inbox."}</div>`}`;
     $("rcptshoot").onclick = () => $("rcptcam").click();
     $("rcptpick").onclick = () => $("rcptlib").click();
-    // Pre-classify is a hint, same as iOS: Ledger's own read of the photo wins;
-    // this fills the category only when the read comes back without one.
-    $("preclassify").onchange = (e) => { S.preClassify = e.target.value || null; };
     $("rcptcam").onchange = (e) => captureReceipt(e.target.files?.[0]);
     $("rcptlib").onchange = (e) => captureReceipt(e.target.files?.[0]);
     $("scannow").onclick = async (e) => {
@@ -2826,7 +1899,7 @@ async function captureReceipt(file) {
     // loadReceipts rebuilds the panel, so the in-flight note is gone by now —
     // a toast is what actually survives to be read.
     toast("Receipt read — check the details");
-    receiptSheet(d.receipt, d.suggested_category || S.preClassify);
+    receiptSheet(d.receipt, d.suggested_category);
   } catch (err) {
     busy(false);
     if (note) { note.className = "note err"; note.textContent = err.message; }
@@ -2933,37 +2006,30 @@ async function renderPhone() {
     S.phone = d;
     view().innerHTML = `<div class="sect">
       ${osHead("COM.06 · CALL LINE", "Phone")}
-      ${d.hasNumber ? "" : requestNumberCard(d.pendingRequest, d.numberLocked)}
-      ${/* The number and its setup guide sit ABOVE the lane switcher, not in a
-            lane. Call forwarding is the thing that has to be working before any
-            of this tab means anything, and a setup guide found at the bottom of
-            a third sub-tab is a setup guide nobody reads. */""}
-      ${d.hasNumber ? phoneNumberCard(d) : ""}
-      ${d.hasNumber ? phoneLaneSwitcher(d) : ""}
-      ${d.hasNumber ? phoneLaneBody(d) : ""}
+      ${d.hasNumber ? phoneStatusStrip(d) : ""}
+      ${d.hasNumber ? phoneNumberCard(d) : requestNumberCard(d.pendingRequest)}
+      ${d.hasNumber ? frontDeskCard(d) : ""}
+      ${d.hasNumber ? `<div id="vmlane"><div class="skel"></div></div>` : ""}
+      ${d.hasNumber ? phoneThreadsPanel(d) : ""}
+      ${d.hasNumber ? phoneFeedPanel(d) : ""}
+      ${d.hasNumber ? phoneSettingsSummary(d) : ""}
+      ${d.hasNumber ? `<div id="phoneleads"><div class="skel"></div></div>` : ""}
     </div>`;
-    if (!d.hasNumber) wireRequestNumber(d.pendingRequest, d.numberLocked);
+    if (!d.hasNumber) wireRequestNumber(d.pendingRequest);
     if (d.hasNumber) on("[data-pevt]", "click", (e) => phoneEventSheet(d.events.find((ev) => ev.id === e.currentTarget.dataset.pevt)));
     if (d.hasNumber) on("[data-pthread]", "click", (e) => phoneThreadSheet((d.threads || []).find((t) => t.id === e.currentTarget.dataset.pthread)));
     if (d.hasNumber) {
       $("phsetup").onclick = () => phoneSetupSheet(d);
-      if ($("phsettings")) $("phsettings").onclick = () => phoneSettingsSheet(d);
-      on("[data-plane]", "click", (e) => { S.phoneLane = e.currentTarget.dataset.plane; renderPhone(); });
-      if ($("remindall")) $("remindall").onclick = () => apptReminderPreviewSheet();
-      on("[data-needs]", "click", (e) => openNeedsYou(d, e.currentTarget.dataset.needs));
-      on("[data-auto]", "click", (e) => openAutomation(d, e.currentTarget.dataset.auto));
+      $("phsettings").onclick = () => phoneSettingsSheet(d);
       if ($("fdtoggle")) $("fdtoggle").onclick = () => toggleFrontDesk(d);
-      if ($("remtoggle")) $("remtoggle").onclick = () => toggleApptReminders(d);
-      if ($("remtune")) $("remtune").onclick = () => apptReminderSheet(d);
-      if ($("rempreview")) $("rempreview").onclick = () => apptReminderPreviewSheet();
       if ($("fdtune")) $("fdtune").onclick = () => frontDeskSheet(d);
       if ($("fdlog")) $("fdlog").onclick = () => frontDeskLogSheet();
       // First time a number goes live, open the setup guide once — same
       // one-shot pattern as the iOS onboarding interview's @AppStorage flag.
       const seenKey = "ledger.phoneSetupSeen." + d.number.id;
       if (!localStorage.getItem(seenKey)) { localStorage.setItem(seenKey, "1"); phoneSetupSheet(d); }
-      if (phoneLane() === "inbox") loadVoicemails(d);
-      if (phoneLane() === "activity") loadPhoneLeads();
+      loadVoicemails(d);
+      loadPhoneLeads();
     }
   } catch (e) {
     view().innerHTML = `<div class="sect">${osHead("COM.06 · CALL LINE", "Phone")}<div class="empty">${esc(e.message)}</div></div>`;
@@ -3310,828 +2376,6 @@ async function playVoicemail(eventId) {
 // The switch that lets the AI answer a missed caller on its own. Deliberately
 // loud about what it does and does not do: an owner should never be surprised
 // by what they just turned on.
-// Night-before appointment reminders. The reminder is not the valuable half —
-// the reply is: a cancellation at 6pm the night before is a bay that can still
-// be refilled, where the same cancellation at 9am is an hour that is gone.
-// ---------------------------------------------------------------------------
-// The two new zones. Everything the old tab did is still here — this only
-// changes what is loud.
-// ---------------------------------------------------------------------------
-//
-// Nine cards laid out by system component meant an owner had to read all nine
-// to find out a voicemail arrived 20 minutes ago. NEEDS YOU answers the
-// question people actually open this tab with; RUNNING FOR YOU replaces two
-// fat marketing cards with three measured lines.
-
-const PHONE_LANES = [["inbox", "INBOX"], ["autopilot", "AUTOPILOT"], ["activity", "ACTIVITY"]];
-function phoneLane() { return PHONE_LANES.some(([k]) => k === S.phoneLane) ? S.phoneLane : "inbox"; }
-
-// Same three-lane shape Finance uses, for the same reason: one screen per
-// question. What needs me / what is running for me / what happened.
-function phoneLaneSwitcher(d) {
-  const lane = phoneLane();
-  const need = (d.needsYou || []).length;
-  return `<div class="plane">${PHONE_LANES.map(([k, label]) => `
-    <button class="${lane === k ? "on" : ""}" data-plane="${k}">${segIc(k)}${label}${k === "inbox" && need ? `<i class="badge">${need}</i>` : ""}</button>`).join("")}</div>`;
-}
-
-function phoneLaneBody(d) {
-  const lane = phoneLane();
-  if (lane === "autopilot") return phoneAutopilotLane(d);
-  if (lane === "activity") return phoneActivityLane(d);
-  return phoneInboxLane(d);
-}
-
-function heroStrip(cells) {
-  return `<div class="panel hero">${cells.map(([n, l]) =>
-    `<div><p class="n">${esc(String(n))}</p><p class="l">${esc(l)}</p></div>`).join("")}</div>`;
-}
-
-function phoneInboxLane(d) {
-  const items = (d.needsYou || []).filter((i) => i.kind !== "unconfirmed");
-  const appt = (d.needsYou || []).find((i) => i.kind === "unconfirmed");
-  return `
-    ${items.length ? `<div class="panel flush">${items.map((it) => `
-      <div class="prow" data-needs="${esc(it.id)}">
-        <span class="needsdot" style="background:${NEEDS_TONE[it.tone] || "var(--cyan)"}"></span>
-        <div style="flex:1;min-width:0">
-          <div class="needst">${esc(it.title)}</div>
-          ${it.detail ? `<div class="needsm">${esc(it.detail)}</div>` : ""}
-          <div class="needsw">${esc(it.meta || "")}</div>
-        </div><span class="pchev">&rsaquo;</span></div>`).join("")}</div>`
-      : `<div class="panel" style="text-align:center;padding:26px">
-           <p class="sub" style="margin:0">Nothing waiting on you. Every call, text and voicemail has been handled.</p></div>`}
-    ${appt ? `<p class="zonehead">TOMORROW</p>
-      <div class="panel flush"><div class="prow" style="cursor:default">
-        <span class="needsdot" style="background:var(--cyan)"></span>
-        <div style="flex:1;min-width:0">
-          <div class="needst">${esc(appt.title)}</div>
-          <div class="needsm">${esc(appt.detail || "")}</div>
-          <button class="btn em" id="remindall" style="margin-top:11px">Send them all a confirmation text</button>
-        </div></div></div>` : ""}
-    <div id="vmlane"></div>`;
-}
-
-function phoneAutopilotLane(d) {
-  const a = d.autopilot || {};
-  const render = (text) => esc(text).replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--gold)">$1</b>');
-  return `
-    ${heroStrip([[a.textedBack ?? 0, "TEXTED BACK"], [a.replied ?? 0, "ANSWERED"], [a.booked ?? 0, "BOOKED"]])}
-    <p class="zonehead">THIS WEEK, WITHOUT YOU TOUCHING IT</p>
-    <div class="panel flush">${(d.automations || []).map((x) => `
-      <div class="prow" data-auto="${esc(x.key)}">
-        <span class="needsdot" style="background:${x.enabled ? "var(--emerald)" : "#39424f"};${x.enabled ? "box-shadow:0 0 9px rgba(47,224,160,.6)" : ""}"></span>
-        <div style="flex:1;min-width:0">
-          <div class="needst">${esc(x.title)} <span class="pill ${x.enabled ? "live" : ""}">${x.enabled ? "ON" : "OFF"}</span></div>
-          <div class="needsm">${render(x.result)}</div>
-        </div><span class="pchev">&rsaquo;</span></div>`).join("")}</div>`;
-}
-
-function phoneActivityLane(d) {
-  const m = d.metrics || {};
-  return `
-    ${heroStrip([[m.callsToday ?? 0, "CALLS TODAY"], [m.textsToday ?? 0, "TEXTS"], [m.leads7d ?? 0, "NEW LEADS"]])}
-    <div id="phoneleads"><div class="skel"></div></div>
-    ${phoneThreadsPanel(d)}
-    ${phoneFeedPanel(d)}
-    <p class="zonehead">YOUR LINE</p>
-    ${phoneSettingsSummary(d)}`;
-}
-
-const NEEDS_TONE = { urgent: "var(--red)", warn: "var(--gold)", info: "var(--cyan)" };
-
-function needsYouZone(d) {
-  const items = d.needsYou || [];
-  if (!items.length) {
-    return `<p class="zonehead">NEEDS YOU</p>
-      <div class="panel" style="text-align:center;padding:22px">
-        <p class="sub" style="margin:0">Nothing waiting on you. Every call, text and voicemail has been handled.</p>
-      </div>`;
-  }
-  return `<p class="zonehead hot">NEEDS YOU · ${items.length}</p>
-    ${items.map((it) => `<div class="needsrow" data-needs="${esc(it.id)}">
-      <span class="needsdot" style="background:${NEEDS_TONE[it.tone] || "var(--cyan)"}"></span>
-      <div style="min-width:0">
-        <div class="needst">${esc(it.title)}</div>
-        ${it.detail ? `<div class="needsm">${esc(it.detail)}</div>` : ""}
-        <div class="needsw">${esc(it.meta)}</div>
-      </div></div>`).join("")}`;
-}
-
-function automationsZone(d) {
-  const rows = d.automations || [];
-  if (!rows.length) return "";
-  // The result line carries **bold** for the number that should land first.
-  const render = (text) => esc(text).replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--gold)">$1</b>');
-  return `<p class="zonehead">RUNNING FOR YOU</p>
-    <div class="panel" style="padding:0;overflow:hidden">
-      ${rows.map((a, i) => `<div class="autorow" data-auto="${esc(a.key)}" style="${i ? "" : "border-top:0"}">
-        <span class="needsdot" style="margin-top:6px;background:${a.enabled ? "var(--emerald)" : "#4a5563"}"></span>
-        <div style="flex:1;min-width:0">
-          <div class="needst">${esc(a.title)} <span class="pill ${a.enabled ? "live" : ""}">${a.enabled ? "ON" : "OFF"}</span></div>
-          <div class="needsm">${render(a.result)}</div>
-        </div>
-        <span style="color:var(--dim2)">&rsaquo;</span></div>`).join("")}
-    </div>`;
-}
-
-// A row is a shortcut to the thing it is about, never a dead end.
-function openNeedsYou(d, id) {
-  const item = (d.needsYou || []).find((x) => x.id === id);
-  if (!item) return;
-  if (item.kind === "voicemail") { const ev = (d.events || []).find((e) => "vm:" + e.id === id); if (ev) phoneEventSheet(ev); return; }
-  if (item.kind === "missed") { const ev = (d.events || []).find((e) => "mc:" + e.id === id); if (ev) phoneEventSheet(ev); return; }
-  if (item.kind === "text") { const t = (d.threads || []).find((x) => "tx:" + x.id === id); if (t) phoneThreadSheet(t); return; }
-  if (item.kind === "unconfirmed") apptReminderPreviewSheet();
-}
-
-// Tapping a row opens the whole automation — what it did, the on/off switch,
-// and its own settings. The switch has to live here now that the two fat cards
-// that used to carry it are gone.
-function openAutomation(d, key) {
-  const a = (d.automations || []).find((x) => x.key === key);
-  if (!a) return;
-  const render = (text) => esc(text).replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--gold)">$1</b>');
-  const extra = {
-    frontdesk: '<button class="btn" id="autoset">Settings</button><button class="btn" id="autolog">What it did</button>',
-    reminders: '<button class="btn" id="autoprev">See tonight\'s list</button><button class="btn" id="autoset">Change time</button>',
-    autoreply: '<button class="btn" id="autoset">Wording &amp; hours</button>',
-    dispatcher: '<button class="btn" id="autoorder">Dispatch order</button>',
-    "crew-reminders": '<button class="btn" id="autocrewlist">Your reminders</button><button class="btn" id="autocrewhours">Crew hours</button><button class="btn" id="autocrewshifts">Clock-out timing</button>',
-  }[key] || "";
-  const blurb = {
-    frontdesk: "When a missed caller texts back, Ledger answers them — quoting your real QuickBooks prices and offering real open times. It can never invoice, take a payment or discuss a bill.",
-    reminders: "The night before, everyone booked in gets a text asking them to confirm or say they need to move it. Each customer is texted once per appointment, ever.",
-    autoreply: "A missed call gets an instant text back so the caller knows you exist and can reply.",
-    dispatcher: "New bookings text your first-call crew member their job from the business line, and you can tell Ledger to dispatch anyone by name. It can only ever text people on your crew roster.",
-    "crew-reminders": "Two things. After a crew member's shift ends, anyone still clocked in gets a text — replying DONE clocks them out. And any reminder you write yourself goes out from the business line at the time you set it. Each punch is nudged once, each reminder sends once a day, and only people on your roster can ever be texted.",
-  }[key] || "";
-  sheet(`<h2>${esc(a.title)} ${a.enabled ? '<span class="pill live">ON</span>' : '<span class="pill">OFF</span>'}</h2>
-    <p class="sub">${render(a.result)}</p>
-    <p class="note" style="margin-top:10px">${esc(blurb)}</p>
-    <div class="rowbtns" style="margin-top:16px">${extra}</div>
-    <div class="rowbtns" style="margin-top:8px">
-      <button class="btn ${a.enabled ? "" : "em"}" id="autotoggle">${a.enabled ? "Turn off" : "Turn on"}</button>
-    </div>`, (sh) => {
-    const set = sh.querySelector("#autoset"), log = sh.querySelector("#autolog"), prev = sh.querySelector("#autoprev");
-    if (set) set.onclick = () => { closeSheet(); key === "frontdesk" ? frontDeskSheet(d) : key === "reminders" ? apptReminderSheet(d) : phoneSettingsSheet(d); };
-    if (log) log.onclick = () => { closeSheet(); frontDeskLogSheet(); };
-    if (prev) prev.onclick = () => { closeSheet(); apptReminderPreviewSheet(); };
-    const order = sh.querySelector("#autoorder");
-    if (order) order.onclick = () => { closeSheet(); dispatchOrderSheet(); };
-    const crewHours = sh.querySelector("#autocrewhours");
-    if (crewHours) crewHours.onclick = () => { closeSheet(); crewHoursSheet(); };
-    const crewShifts = sh.querySelector("#autocrewshifts");
-    if (crewShifts) crewShifts.onclick = () => { closeSheet(); crewTimingSheet(d); };
-    const crewList = sh.querySelector("#autocrewlist");
-    if (crewList) crewList.onclick = () => { closeSheet(); crewRemindersSheet(); };
-    sh.querySelector("#autotoggle").onclick = async () => {
-      closeSheet();
-      if (key === "frontdesk") return toggleFrontDesk(d);
-      if (key === "reminders") return toggleApptReminders(d);
-      if (key === "crew-reminders") {
-        const turningOn = d.crewReminderEnabled !== true;
-        try {
-          await api("/phone", { action: "settings-save", crewReminderEnabled: turningOn });
-          toast(turningOn ? "Crew reminders are on" : "Crew reminders are off");
-          renderPhone();
-          // Turning it on with nobody's shift hours set would run silently
-          // forever — send the owner straight to where the hours live.
-          if (turningOn) {
-            const roster = await api("/crew", { action: "list" });
-            const withShift = (roster.employees || []).filter((e) => e.active !== false && e.workEnd);
-            if (!withShift.length) { toast("Set shift hours on the roster so Ledger knows when shifts end"); crewRosterSheet(); }
-          }
-        } catch (err) { toast(err.message, "err"); }
-        return;
-      }
-      if (key === "dispatcher") {
-        const turningOn = !a.enabled;
-        try {
-          await api("/phone", { action: "settings-save", dispatcherEnabled: turningOn });
-          toast(turningOn ? "Dispatcher is on" : "Dispatcher is off");
-          renderPhone();
-          // Kyle 2026-08-30: flipping it on with 2+ crew immediately asks for
-          // the standing dispatch order — the machine always knows who's first.
-          if (turningOn) {
-            const roster = await api("/crew", { action: "list" });
-            const dispatchable = (roster.employees || []).filter((e) => e.active !== false && (e.phone || "").trim());
-            if (dispatchable.length >= 2) dispatchOrderSheet(dispatchable);
-          }
-        } catch (err) { toast(err.message, "err"); }
-        return;
-      }
-      try {
-        await api("/phone", { action: "settings-save", autoReplyEnabled: d.autoReplyEnabled === false });
-        toast(d.autoReplyEnabled === false ? "Auto text-back is on" : "Auto text-back is off");
-        renderPhone();
-      } catch (err) { toast(err.message); }
-    };
-  });
-}
-
-// Dispatcher: standing dispatch order. 1 = first call. Arrows, not drag —
-// works the same with a thumb on a phone and a mouse on a laptop.
-async function dispatchOrderSheet(preloaded) {
-  let crew = preloaded;
-  if (!crew) {
-    try {
-      const roster = await api("/crew", { action: "list" });
-      crew = (roster.employees || []).filter((e) => e.active !== false && (e.phone || "").trim());
-    } catch (err) { toast(err.message, "err"); return; }
-  }
-  if (!crew.length) { toast("No crew members with phone numbers yet — add them on the Calendar tab first."); return; }
-  crew = crew.slice().sort((a, b) => (a.dispatchRank ?? a.dispatch_rank ?? 9999) - (b.dispatchRank ?? b.dispatch_rank ?? 9999));
-  const wrap = sheet(`<h2>Dispatch order</h2>
-    <p class="sub">Who gets the job first. When a booking lands with nobody assigned, <b>1st call</b> gets the text.</p>
-    <div id="dorder"></div>
-    <button class="btn em wide" style="margin-top:14px" id="dsave">Save order</button>
-    <div class="note" id="dnote" style="margin-top:8px"></div>`);
-  const paint = () => {
-    wrap.querySelector("#dorder").innerHTML = crew.map((e, i) => `
-      <div class="item" style="display:flex;align-items:center;gap:10px;padding:11px 4px">
-        <b style="color:var(--cyan);min-width:52px;font-family:var(--mono);font-size:11px">${i === 0 ? "1ST CALL" : (i + 1) + (i === 1 ? "ND" : i === 2 ? "RD" : "TH")}</b>
-        <span style="flex:1"><b>${esc(e.name)}</b><br><small style="color:var(--dim)">${esc(e.phone || "")}</small></span>
-        <button class="pillbtn" data-dup="${i}" ${i === 0 ? "disabled" : ""}>&#8593;</button>
-        <button class="pillbtn" data-ddn="${i}" ${i === crew.length - 1 ? "disabled" : ""}>&#8595;</button>
-      </div>`).join("");
-    wrap.querySelectorAll("[data-dup]").forEach((b) => b.onclick = () => { const i = Number(b.dataset.dup); [crew[i - 1], crew[i]] = [crew[i], crew[i - 1]]; paint(); });
-    wrap.querySelectorAll("[data-ddn]").forEach((b) => b.onclick = () => { const i = Number(b.dataset.ddn); [crew[i], crew[i + 1]] = [crew[i + 1], crew[i]]; paint(); });
-  };
-  paint();
-  wrap.querySelector("#dsave").onclick = async (e) => {
-    e.currentTarget.disabled = true;
-    const note = wrap.querySelector("#dnote");
-    try {
-      await api("/phone", { action: "dispatch-order", employee_ids: crew.map((c) => c.id) });
-      toast("Dispatch order saved");
-      closeSheet();
-    } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
-  };
-}
-
-/* ---------------- CREW (2026-08-31) — hours view, roster & shifts --------- */
-// The web twin of iOS Crew Command's Time Cards: every employee's punches,
-// daily totals and overtime for a range, plus roster shift hours (which drive
-// the Crew Reminders clock-out nudge) and the workspace overtime rules.
-
-const CREW_DAY_LABELS = [["mon", "M"], ["tue", "T"], ["wed", "W"], ["thu", "T"], ["fri", "F"], ["sat", "S"], ["sun", "S"]];
-const crewH = (sec) => `${(Math.round((sec || 0) / 360) / 10).toFixed(1)}h`;
-const crewT = (iso) => iso ? new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "—";
-
-function crewShiftLabel(e) {
-  if (!e.workStart && !e.workEnd) return "No shift set";
-  const days = (e.workDays || []).map((d) => d[0].toUpperCase() + d.slice(1, 3)).join(" ");
-  return `${e.workStart || "?"}–${e.workEnd || "?"}${days ? " · " + days : ""}`;
-}
-
-function crewRangeDates(range) {
-  const day = (d) => d.toLocaleDateString("en-CA");
-  const today = new Date();
-  if (range === "today") return [day(today), day(today)];
-  const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-  if (range === "week") { const sun = new Date(monday); sun.setDate(monday.getDate() + 6); return [day(monday), day(sun)]; }
-  if (range === "last-week") {
-    const lm = new Date(monday); lm.setDate(monday.getDate() - 7);
-    const ls = new Date(monday); ls.setDate(monday.getDate() - 1);
-    return [day(lm), day(ls)];
-  }
-  return [day(new Date(today.getFullYear(), today.getMonth(), 1)), day(today)];
-}
-
-const CREW_RANGES = [["today", "Today"], ["week", "This week"], ["last-week", "Last week"], ["month", "Month"]];
-
-async function crewHoursSheet(range = "week") {
-  const [from, to] = crewRangeDates(range);
-  let d;
-  try { d = await api("/crew", { action: "timecards", from, to }); }
-  catch (err) { toast(err.message, "err"); return; }
-  const cards = (d.cards || []).filter((c) => c.total_seconds > 0 || c.on_clock || c.active);
-  const otBits = [];
-  if (d.ot_daily_hours != null) otBits.push(`over ${d.ot_daily_hours}h/day`);
-  if (d.ot_weekly_hours != null) otBits.push(`over ${d.ot_weekly_hours}h/week`);
-  const otLabel = otBits.length ? `Overtime counts hours ${otBits.join(" or ")}.` : "Overtime tracking is off.";
-  sheet(`<h2>Crew hours</h2>
-    <p class="sh-sub">${esc(from)} → ${esc(to)}</p>
-    <div class="rowbtns" style="margin-top:8px">${CREW_RANGES.map(([k, l]) =>
-      `<button class="btn ${k === range ? "em" : ""}" data-crange="${k}">${l}</button>`).join("")}</div>
-    ${cards.length ? cards.map((c) => `
-      <div class="panel" style="margin-top:12px">
-        <h3 style="display:flex;gap:8px;align-items:center">${esc(c.name)}
-          ${c.on_clock ? '<span class="pill live">ON THE CLOCK</span>' : ""}
-          <span style="margin-left:auto;font-weight:800">${crewH(c.total_seconds)}</span></h3>
-        <p class="note" style="margin-top:2px">Regular ${crewH(c.regular_seconds)}${c.ot_seconds > 0 ? ` · <b style="color:var(--gold)">OT ${crewH(c.ot_seconds)}</b>` : " · no OT"}</p>
-        ${(c.days || []).map((day) => `
-          <div class="kv" style="margin-top:6px"><span>${esc(day.date)}</span><span>${crewH(day.seconds)}</span></div>
-          ${(day.punches || []).map((p) => `<p class="note" style="margin:2px 0 0 4px">${crewT(p.in)} → ${p.out ? crewT(p.out) : "<b>still on the clock</b>"}${p.corrected ? " · corrected" : ""}${p.note ? " · " + esc(p.note) : ""}</p>`).join("")}
-        `).join("") || '<p class="note" style="margin-top:6px">No punches in this range.</p>'}
-      </div>`).join("")
-      : '<div class="panel" style="margin-top:12px;text-align:center"><p class="sub" style="margin:0">No crew members yet — add them under Roster &amp; shifts.</p></div>'}
-    <p class="note" style="margin-top:10px">${esc(otLabel)}</p>
-    <div class="rowbtns" style="margin-top:10px">
-      <button class="btn" id="crewroster">Roster &amp; shifts</button>
-      <button class="btn" id="crewot">Overtime rules</button>
-      ${cards.length ? '<button class="btn" id="crewcsv">Export CSV</button>' : ""}
-    </div>`, (sh) => {
-    on("[data-crange]", "click", (e) => { closeSheet(); crewHoursSheet(e.currentTarget.dataset.crange); }, sh);
-    sh.querySelector("#crewroster").onclick = () => { closeSheet(); crewRosterSheet(); };
-    sh.querySelector("#crewot").onclick = () => { closeSheet(); crewOtSheet(d, range); };
-    const csv = sh.querySelector("#crewcsv");
-    if (csv) csv.onclick = () => {
-      const rows = [["Employee", "Date", "In", "Out", "Hours", "Corrected", "Note"]];
-      for (const c of cards) for (const day of c.days || []) for (const p of day.punches || []) {
-        rows.push([c.name, day.date, p.in || "", p.out || "", "", p.corrected ? "yes" : "", p.note || ""]);
-      }
-      for (const c of cards) rows.push([c.name, "TOTAL", "", "", crewH(c.total_seconds), c.ot_seconds > 0 ? `OT ${crewH(c.ot_seconds)}` : "", ""]);
-      const blob = new Blob([rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")], { type: "text/csv" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob); a.download = `crew-hours-${from}-to-${to}.csv`; a.click();
-      URL.revokeObjectURL(a.href);
-    };
-  });
-}
-
-function crewOtSheet(d, backRange) {
-  sheet(`<h2>Overtime rules</h2>
-    <p class="sh-sub">Hours past these thresholds count as overtime on every time card. Leave a box blank to turn that rule off.</p>
-    <label class="fld" style="margin-top:12px">DAILY — OT AFTER THIS MANY HOURS IN A DAY</label>
-    <input id="otdaily" class="cmpinput" type="number" min="1" max="24" step="0.5" value="${d.ot_daily_hours ?? ""}" placeholder="off">
-    <label class="fld" style="margin-top:10px">WEEKLY — OT AFTER THIS MANY HOURS IN A WEEK</label>
-    <input id="otweekly" class="cmpinput" type="number" min="1" max="168" step="0.5" value="${d.ot_weekly_hours ?? ""}" placeholder="off">
-    <p class="note" style="margin-top:8px">Alberta's rules are 8 daily / 44 weekly — the starting defaults.</p>
-    <button class="btn em wide" style="margin-top:13px" id="otsave">Save</button>
-    <div class="note" id="otnote" style="margin-top:8px"></div>`, (sh) => {
-    sh.querySelector("#otsave").onclick = async (e) => {
-      e.currentTarget.disabled = true;
-      const note = sh.querySelector("#otnote");
-      try {
-        await api("/crew", {
-          action: "set-ot-rules",
-          daily_hours: sh.querySelector("#otdaily").value.trim(),
-          weekly_hours: sh.querySelector("#otweekly").value.trim(),
-        });
-        toast("Overtime rules saved");
-        closeSheet();
-        crewHoursSheet(backRange || "week");
-      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
-    };
-  });
-}
-
-// ---- Crew availability (Kyle 2026-08-31) ---------------------------------
-// The crew flip their own pill on their link. This is the owner's view of the
-// same table: who is off right now, who is off next week, and the ability to
-// book or cancel it for someone who phoned in instead of tapping.
-const ABSENCE_LABELS = { sick: "Sick", appointment: "Appointment", personal: "Personal", "time-off": "Time off" };
-const ABSENCE_SPANS = [
-  ["today", "Today"],
-  ["today-tomorrow", "Today + tomorrow"],
-  ["tomorrow", "Tomorrow"],
-  ["week", "This week"],
-];
-
-function absenceDay(iso) {
-  const d = new Date(`${iso}T12:00:00`);
-  return isNaN(d.getTime()) ? iso : d.toLocaleDateString([], { month: "short", day: "numeric" });
-}
-
-// Always ends with when they are back — an absence with no visible end is the
-// thing this whole feature exists to prevent.
-function absenceLine(a) {
-  if (!a) return "";
-  const label = ABSENCE_LABELS[a.reason] || "Off";
-  const back = new Date(`${a.endOn}T12:00:00`);
-  back.setDate(back.getDate() + 1);
-  const backLabel = isNaN(back.getTime()) ? "" : ` · back ${back.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}`;
-  const span = a.startOn === a.endOn ? absenceDay(a.startOn) : `${absenceDay(a.startOn)}\u2013${absenceDay(a.endOn)}`;
-  const who = a.source === "self" ? "called in" : "booked off";
-  return `${label} · ${span}${backLabel} · ${who}`;
-}
-
-async function crewRosterSheet() {
-  let roster;
-  try { roster = await api("/crew", { action: "list" }); }
-  catch (err) { toast(err.message, "err"); return; }
-  const crew = roster.employees || [];
-  sheet(`<h2>Roster &amp; shifts</h2>
-    <p class="sh-sub">Regular working hours drive both shift texts — no shift set means no reminders for that person. Anyone marked off is skipped by the reminders and by auto-dispatch.</p>
-    ${crew.length ? `<div class="panel" style="padding:0;overflow:hidden;margin-top:10px">
-      ${crew.map((e, i) => `<div class="autorow" data-crewid="${esc(e.id)}" style="${i ? "" : "border-top:0"}">
-        <div style="flex:1;min-width:0">
-          <div class="needst">${esc(e.name)} ${e.active === false ? '<span class="pill">INACTIVE</span>' : ""}${e.absence ? '<span class="pill" style="border-color:rgba(248,113,113,.5);color:#f87171">OFF TODAY</span>' : ""}</div>
-          <div class="needsm">${e.absence ? esc(absenceLine(e.absence)) : (e.upcomingAbsence ? esc(`Off ${absenceDay(e.upcomingAbsence.startOn)}`) + " · " + esc(crewShiftLabel(e)) : esc(e.phone || "no phone") + " · " + esc(crewShiftLabel(e)))}</div>
-        </div>
-        <span style="color:var(--dim2)">&rsaquo;</span></div>`).join("")}
-    </div>` : '<div class="panel" style="margin-top:10px;text-align:center"><p class="sub" style="margin:0">No crew members yet.</p></div>'}
-    <div class="rowbtns" style="margin-top:12px">
-      <button class="btn em" id="crewadd">&#43; Add crew member</button>
-      <button class="btn" id="crewhoursback">Crew hours</button>
-    </div>`, (sh) => {
-    on("[data-crewid]", "click", (e) => {
-      const emp = crew.find((x) => x.id === e.currentTarget.dataset.crewid);
-      if (emp) { closeSheet(); crewMemberSheet(emp); }
-    }, sh);
-    sh.querySelector("#crewadd").onclick = () => { closeSheet(); crewMemberSheet(null); };
-    sh.querySelector("#crewhoursback").onclick = () => { closeSheet(); crewHoursSheet(); };
-  });
-}
-
-function crewMemberSheet(emp) {
-  const days = new Set(emp?.workDays || ["mon", "tue", "wed", "thu", "fri"]);
-  sheet(`<h2>${emp ? esc(emp.name) : "New crew member"}</h2>
-    <label class="fld" style="margin-top:10px">NAME</label>
-    <input id="cmName" class="cmpinput" value="${esc(emp?.name || "")}">
-    <label class="fld" style="margin-top:10px">PHONE — WHERE THEIR TEXTS GO</label>
-    <input id="cmPhone" class="cmpinput" inputmode="tel" value="${esc(emp?.phone || "")}">
-    <label class="fld" style="margin-top:12px">REGULAR SHIFT — DRIVES BOTH SHIFT TEXTS</label>
-    <div class="timerow" style="margin-top:6px">
-      <input type="time" id="cmStart" value="${esc(emp?.workStart || "")}">
-      <span class="note">to</span>
-      <input type="time" id="cmEnd" value="${esc(emp?.workEnd || "")}">
-    </div>
-    <div class="daypick" style="margin-top:10px">
-      ${CREW_DAY_LABELS.map(([k, l]) => `<button class="daybtn ${days.has(k) ? "on" : ""}" data-cmday="${k}" type="button">${l}</button>`).join("")}
-    </div>
-    <p class="note" style="margin-top:6px">Clear both times to turn their shift texts off. Start time drives the clock-in link, end time the clock-out nudge.</p>
-    ${emp ? `<label class="fld" style="margin-top:14px">TIME OFF</label>
-    ${emp.absence ? `<div class="panel" style="margin-top:6px">
-      <p class="sub" style="margin:0">${esc(absenceLine(emp.absence))}</p>
-      <button class="btn wide" style="margin-top:9px" id="cmAbsCancel">Cancel this time off</button>
-    </div>` : `<div class="panel" style="margin-top:6px">
-      <p class="sub" style="margin:0 0 8px">Book them off if they phoned in instead of using their link. They stop getting shift texts and drop out of auto-dispatch.</p>
-      <select id="cmAbsReason" class="cmpinput">${Object.entries(ABSENCE_LABELS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
-      <select id="cmAbsSpan" class="cmpinput" style="margin-top:8px">${ABSENCE_SPANS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
-      <button class="btn wide" style="margin-top:9px" id="cmAbsSet">Book time off</button>
-    </div>`}
-    <div class="rowbtns" style="margin-top:12px">
-      <button class="btn ghost" id="cmActive">${emp.active === false ? "Reactivate" : "Deactivate"}</button>
-    </div>` : ""}
-    <button class="btn em wide" style="margin-top:13px" id="cmSave">Save</button>
-    <div class="note" id="cmNote" style="margin-top:8px"></div>`, (sh) => {
-    on("[data-cmday]", "click", (e) => {
-      const k = e.currentTarget.dataset.cmday;
-      days.has(k) ? days.delete(k) : days.add(k);
-      e.currentTarget.classList.toggle("on");
-    }, sh);
-    const note = sh.querySelector("#cmNote");
-    const absSet = sh.querySelector("#cmAbsSet");
-    if (absSet) absSet.onclick = async (e) => {
-      e.currentTarget.disabled = true;
-      try {
-        await api("/crew", {
-          action: "absence-set",
-          employee_id: emp.id,
-          reason: sh.querySelector("#cmAbsReason").value,
-          span: sh.querySelector("#cmAbsSpan").value,
-        });
-        toast(`${emp.name.split(" ")[0]} booked off`);
-        closeSheet(); crewRosterSheet();
-      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
-    };
-    const absCancel = sh.querySelector("#cmAbsCancel");
-    if (absCancel) absCancel.onclick = async (e) => {
-      e.currentTarget.disabled = true;
-      try {
-        await api("/crew", { action: "absence-cancel", id: emp.absence.id });
-        toast("Time off cancelled");
-        closeSheet(); crewRosterSheet();
-      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
-    };
-    const active = sh.querySelector("#cmActive");
-    if (active) active.onclick = async (e) => {
-      e.currentTarget.disabled = true;
-      try {
-        await api("/crew", { action: "update", id: emp.id, active: emp.active === false });
-        toast(emp.active === false ? "Reactivated" : "Deactivated");
-        closeSheet(); crewRosterSheet();
-      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
-    };
-    sh.querySelector("#cmSave").onclick = async (e) => {
-      e.currentTarget.disabled = true;
-      const name = sh.querySelector("#cmName").value.trim();
-      if (!name) { note.className = "note err"; note.textContent = "Name is required."; e.currentTarget.disabled = false; return; }
-      const body = {
-        action: emp ? "update" : "add",
-        name,
-        phone: sh.querySelector("#cmPhone").value.trim(),
-        work_start: sh.querySelector("#cmStart").value,
-        work_end: sh.querySelector("#cmEnd").value,
-        work_days: [...days],
-      };
-      if (emp) body.id = emp.id;
-      try {
-        await api("/crew", body);
-        toast(emp ? "Saved" : `${name} added`);
-        closeSheet(); crewRosterSheet();
-      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
-    };
-  });
-}
-
-// Crew Reminders timing: how long after shift end the nudge goes out, plus a
-// shortcut to the roster where the shift hours themselves live.
-function crewTimingSheet(d) {
-  const lead = Number.isFinite(Number(d.crewReminderLeadMin)) ? Number(d.crewReminderLeadMin) : 5;
-  sheet(`<h2>Shifts &amp; timing</h2>
-    <p class="sh-sub">Each crew member's shift hours live on the roster. These set when the two shift texts go out. Both carry their personal clock-in link.</p>
-    <label class="fld" style="margin-top:12px">MINUTES BEFORE SHIFT START</label>
-    <input id="crewlead" class="cmpinput" type="number" min="0" max="240" step="5" value="${lead}">
-    <p class="sh-sub" style="margin-top:6px">"Your shift starts at 8:00 AM" with a tap-to-clock-in link. Skipped for anyone already on the clock or off that day.</p>
-    <label class="fld" style="margin-top:12px">MINUTES AFTER SHIFT END</label>
-    <input id="crewdelay" class="cmpinput" type="number" min="5" max="240" step="5" value="${Number(d.crewReminderDelayMin) > 0 ? Number(d.crewReminderDelayMin) : 30}">
-    <p class="sh-sub" style="margin-top:6px">Techs often work past their scheduled end — 20&ndash;30 minutes stops this catching everyone mid&#8209;cleanup.</p>
-    <button class="btn em wide" style="margin-top:13px" id="crewdelaysave">Save</button>
-    <button class="btn wide" style="margin-top:9px" id="crewrosterlink">Roster &amp; shift hours</button>
-    <div class="note" id="crewdelaynote" style="margin-top:8px"></div>`, (sh) => {
-    sh.querySelector("#crewrosterlink").onclick = () => { closeSheet(); crewRosterSheet(); };
-    sh.querySelector("#crewdelaysave").onclick = async (e) => {
-      e.currentTarget.disabled = true;
-      const note = sh.querySelector("#crewdelaynote");
-      try {
-        await api("/phone", {
-          action: "settings-save",
-          crewReminderDelayMin: sh.querySelector("#crewdelay").value,
-          crewReminderLeadMin: sh.querySelector("#crewlead").value,
-        });
-        toast("Timing saved");
-        closeSheet();
-        renderPhone();
-      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
-    };
-  });
-}
-
-// ---- The owner's own crew reminders (Kyle 2026-08-31) ---------------------
-// The clock-out nudge is derived from an open punch. These are written by the
-// owner: a message, a time, and who gets it. Same card, same switch, separate
-// records — see the migration for why they are not one table.
-
-// "Every Mon Tue Wed at 7:30 AM · everyone" — the whole schedule in the row,
-// so nobody has to open a reminder to find out when it goes.
-function crewReminderWhen(r, crew) {
-  const time = apptPrettyTime(r.send_time || "08:00");
-  const who = r.audience === "selected"
-    ? (r.employee_ids || []).map((id) => (crew.find((e) => e.id === id) || {}).name).filter(Boolean).join(", ") || "nobody on the roster"
-    : "everyone";
-  if (r.send_on) {
-    const [y, m, dd] = String(r.send_on).slice(0, 10).split("-").map(Number);
-    const when = new Date(y, (m || 1) - 1, dd || 1).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-    return `Once on ${when} at ${time} · ${who}`;
-  }
-  const labels = CREW_DAY_LABELS.filter(([k]) => (r.days || []).includes(k)).map(([, l]) => l);
-  return `Every ${labels.join(" ") || "—"} at ${time} · ${who}`;
-}
-
-function crewRemindersSheet() {
-  sheet(`<h2>Your reminders</h2>
-    <p class="sh-sub">Texted to your crew from the business line at the time you set. The clock-out nudge is separate and always on with this switch.</p>
-    <div id="crlist" class="note" style="margin-top:12px">Loading…</div>
-    <button class="btn em wide" style="margin-top:13px" id="cradd">New reminder</button>`, async (sh) => {
-    sh.querySelector("#cradd").onclick = () => { closeSheet(); crewReminderEditSheet(null); };
-    try {
-      const [data, roster] = await Promise.all([
-        api("/phone", { action: "crew-reminder-list" }),
-        api("/crew", { action: "list" }),
-      ]);
-      const crew = (roster.employees || []).filter((e) => e.active !== false);
-      const rows = data.reminders || [];
-      const list = sh.querySelector("#crlist");
-      if (!rows.length) {
-        list.innerHTML = `<p class="note">Nothing yet. A reminder is one text on a schedule — "Trailer inspection today", "Sign your time card", anything you say twice a week.</p>`;
-        return;
-      }
-      list.className = "panel";
-      list.style.padding = "0";
-      list.style.overflow = "hidden";
-      list.innerHTML = rows.map((r, i) => `<div class="autorow" data-crid="${esc(r.id)}" style="${i ? "" : "border-top:0"}">
-        <div style="flex:1;min-width:0">
-          <div class="needst">${esc(r.message)} ${r.active === false ? '<span class="pill">OFF</span>' : ""}</div>
-          <div class="needsm">${esc(crewReminderWhen(r, crew))}${r.last_sent_on ? ` · last sent ${esc(r.last_sent_on)}` : ""}</div>
-        </div>
-        <span style="color:var(--dim2)">&rsaquo;</span></div>`).join("");
-      on("[data-crid]", "click", (e) => {
-        const r = rows.find((x) => x.id === e.currentTarget.dataset.crid);
-        if (r) { closeSheet(); crewReminderEditSheet(r, crew); }
-      }, sh);
-    } catch (err) {
-      sh.querySelector("#crlist").className = "note err";
-      sh.querySelector("#crlist").textContent = err.message;
-    }
-  });
-}
-
-function crewReminderEditSheet(rem, crewCache) {
-  const days = new Set(rem?.days?.length ? rem.days : ["mon", "tue", "wed", "thu", "fri"]);
-  const picked = new Set(rem?.employee_ids || []);
-  let mode = rem?.send_on ? "once" : "repeat";
-  let audience = rem?.audience === "selected" ? "selected" : "all";
-  sheet(`<h2>${rem ? "Edit reminder" : "New reminder"}</h2>
-    <label class="fld" style="margin-top:10px">WHAT IT SAYS</label>
-    <textarea id="crMsg" class="cmpinput" rows="3" maxlength="320" placeholder="Sign your time card before you leave">${esc(rem?.message || "")}</textarea>
-    <p class="note" style="margin-top:6px">Your business name goes on the front of it automatically.</p>
-    <label class="fld" style="margin-top:12px">WHAT TIME</label>
-    <input type="time" id="crTime" class="cmpinput" value="${esc(rem?.send_time || "08:00")}">
-    <div class="rowbtns" style="margin-top:12px">
-      <button class="btn ${mode === "repeat" ? "em" : ""}" id="crModeRepeat" type="button">Every week</button>
-      <button class="btn ${mode === "once" ? "em" : ""}" id="crModeOnce" type="button">Just once</button>
-    </div>
-    <div id="crRepeatWrap" style="display:${mode === "repeat" ? "block" : "none"}">
-      <div class="daypick" style="margin-top:10px">
-        ${CREW_DAY_LABELS.map(([k, l]) => `<button class="daybtn ${days.has(k) ? "on" : ""}" data-crday="${k}" type="button">${l}</button>`).join("")}
-      </div>
-    </div>
-    <div id="crOnceWrap" style="display:${mode === "once" ? "block" : "none"}">
-      <input type="date" id="crDate" class="cmpinput" style="margin-top:10px" value="${esc(String(rem?.send_on || "").slice(0, 10))}">
-      <p class="note" style="margin-top:6px">It sends that day and then switches itself off.</p>
-    </div>
-    <label class="fld" style="margin-top:14px">WHO GETS IT</label>
-    <div class="rowbtns" style="margin-top:6px">
-      <button class="btn ${audience === "all" ? "em" : ""}" id="crWhoAll" type="button">Everyone on the crew</button>
-      <button class="btn ${audience === "selected" ? "em" : ""}" id="crWhoSome" type="button">Only who I pick</button>
-    </div>
-    <div id="crPickWrap" style="display:${audience === "selected" ? "block" : "none"}">
-      <div class="daypick" id="crPick" style="margin-top:10px;flex-wrap:wrap"></div>
-    </div>
-    ${rem ? `<div class="rowbtns" style="margin-top:14px">
-      <button class="btn ghost" id="crToggle" type="button">${rem.active === false ? "Turn this one back on" : "Turn this one off"}</button>
-      <button class="btn ghost" id="crDelete" type="button">Delete</button>
-    </div>` : ""}
-    <button class="btn em wide" style="margin-top:13px" id="crSave">Save</button>
-    <div class="note" id="crNote" style="margin-top:8px"></div>`, async (sh) => {
-    const note = sh.querySelector("#crNote");
-    const setMode = (next) => {
-      mode = next;
-      sh.querySelector("#crRepeatWrap").style.display = next === "repeat" ? "block" : "none";
-      sh.querySelector("#crOnceWrap").style.display = next === "once" ? "block" : "none";
-      sh.querySelector("#crModeRepeat").classList.toggle("em", next === "repeat");
-      sh.querySelector("#crModeOnce").classList.toggle("em", next === "once");
-    };
-    sh.querySelector("#crModeRepeat").onclick = () => setMode("repeat");
-    sh.querySelector("#crModeOnce").onclick = () => setMode("once");
-    on("[data-crday]", "click", (e) => {
-      const k = e.currentTarget.dataset.crday;
-      days.has(k) ? days.delete(k) : days.add(k);
-      e.currentTarget.classList.toggle("on");
-    }, sh);
-    const setAudience = (next) => {
-      audience = next;
-      sh.querySelector("#crPickWrap").style.display = next === "selected" ? "block" : "none";
-      sh.querySelector("#crWhoAll").classList.toggle("em", next === "all");
-      sh.querySelector("#crWhoSome").classList.toggle("em", next === "selected");
-    };
-    sh.querySelector("#crWhoAll").onclick = () => setAudience("all");
-    sh.querySelector("#crWhoSome").onclick = () => setAudience("selected");
-
-    let crew = crewCache;
-    if (!crew) {
-      try { crew = ((await api("/crew", { action: "list" })).employees || []).filter((e) => e.active !== false); }
-      catch { crew = []; }
-    }
-    // Only people who can actually be texted. Someone with no number on the
-    // roster is shown as unavailable rather than silently missing.
-    sh.querySelector("#crPick").innerHTML = crew.map((e) => {
-      const textable = String(e.phone || "").trim();
-      return `<button class="daybtn ${picked.has(e.id) ? "on" : ""}" data-crwho="${esc(e.id)}" type="button" style="flex:0 0 auto;padding:10px 13px" ${textable ? "" : "disabled"}>${esc(e.name)}${textable ? "" : " (no number)"}</button>`;
-    }).join("") || `<p class="note">Nobody on the roster yet.</p>`;
-    on("[data-crwho]", "click", (e) => {
-      const id = e.currentTarget.dataset.crwho;
-      picked.has(id) ? picked.delete(id) : picked.add(id);
-      e.currentTarget.classList.toggle("on");
-    }, sh);
-
-    const save = async (patch) => {
-      const message = sh.querySelector("#crMsg").value.trim();
-      if (!message) { note.className = "note err"; note.textContent = "Say what the text should say."; return false; }
-      const body = {
-        action: "crew-reminder-save",
-        message,
-        sendTime: sh.querySelector("#crTime").value || "08:00",
-        days: mode === "repeat" ? [...days] : [],
-        sendOn: mode === "once" ? sh.querySelector("#crDate").value : "",
-        audience,
-        employeeIds: [...picked],
-        active: rem ? rem.active !== false : true,
-        ...patch,
-      };
-      if (rem) body.id = rem.id;
-      try {
-        await api("/phone", body);
-        return true;
-      } catch (err) { note.className = "note err"; note.textContent = err.message; return false; }
-    };
-
-    sh.querySelector("#crSave").onclick = async (e) => {
-      e.currentTarget.disabled = true;
-      if (await save({})) { toast("Reminder saved"); closeSheet(); crewRemindersSheet(); renderPhone(); }
-      else e.currentTarget.disabled = false;
-    };
-    const toggle = sh.querySelector("#crToggle");
-    if (toggle) toggle.onclick = async (e) => {
-      e.currentTarget.disabled = true;
-      if (await save({ active: rem.active === false })) {
-        toast(rem.active === false ? "Reminder is on" : "Reminder is off");
-        closeSheet(); crewRemindersSheet(); renderPhone();
-      } else e.currentTarget.disabled = false;
-    };
-    const del = sh.querySelector("#crDelete");
-    if (del) del.onclick = async (e) => {
-      if (!confirm("Delete this reminder? Your crew stops getting it.")) return;
-      e.currentTarget.disabled = true;
-      try {
-        await api("/phone", { action: "crew-reminder-delete", id: rem.id });
-        toast("Reminder deleted");
-        closeSheet(); crewRemindersSheet(); renderPhone();
-      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
-    };
-  });
-}
-
-function apptReminderCard(d) {
-  const r = d.reminders || {};
-  const on = r.enabled === true;
-  const when = apptPrettyTime(r.time || "18:00");
-  const ahead = Number(r.daysAhead || 1);
-  const aheadLabel = ahead === 1 ? "the night before" : `${ahead} days ahead`;
-  return `<div class="panel">
-    <h3>&#128276; Appointment reminders ${on ? '<span class="pill live">ON</span>' : '<span class="pill">OFF</span>'}</h3>
-    <p class="sub">${on
-      ? `Every day at <b>${esc(when)}</b>, everyone booked ${esc(aheadLabel)} gets a text asking them to confirm or tell you they need to move it.`
-      : "Text tomorrow's customers automatically and ask them to confirm. The ones who can't make it tell you the night before, while you can still fill the slot."}</p>
-    <p class="note" style="margin-top:8px">Each customer is texted <b>once per appointment</b>, ever. Anyone whose appointment has no phone number on it is reported to you, never skipped quietly.</p>
-    ${on && r.lastRunAt ? `<p class="note" style="margin-top:6px">Last run ${esc(new Date(r.lastRunAt).toLocaleString())}.</p>` : ""}
-    <div class="rowbtns" style="margin-top:12px">
-      <button class="btn" id="rempreview">See tonight's list</button>
-      <button class="btn ${on ? "" : "em"}" id="remtoggle">${on ? "Turn off" : "Turn on reminders"}</button>
-      ${on ? '<button class="btn" id="remtune">Change time</button>' : ""}
-    </div>
-  </div>`;
-}
-
-function apptPrettyTime(hhmm) {
-  const [h, m] = String(hhmm || "18:00").split(":").map(Number);
-  const hour = ((h + 11) % 12) + 1;
-  return `${hour}:${String(m || 0).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
-}
-
-// Nothing is ever turned on without the owner having seen the actual list and
-// the actual wording first — so the dry run is offered right here in the
-// confirm, not buried behind a settings screen.
-async function toggleApptReminders(d) {
-  const r = d.reminders || {};
-  if (r.enabled !== true) {
-    const ok = confirm(`Turn on appointment reminders?\n\nEvery day at ${apptPrettyTime(r.time || "18:00")}, Ledger will text everyone booked in for the next day from your business number, asking them to reply Y to confirm or C to change it.\n\nEach customer is texted once per appointment, ever. Nobody is texted twice.\n\nIf you haven't already, check "See tonight's list" first — it shows you exactly who would get a text and exactly what it says, and sends nothing.\n\nYou can turn this off any time.`);
-    if (!ok) return;
-  }
-  try {
-    await api("/phone", { action: "settings-save", reminderEnabled: r.enabled !== true });
-    toast(r.enabled !== true ? "Reminders are on" : "Reminders are off");
-    renderPhone();
-  } catch (err) { toast(err.message); }
-}
-
-function apptReminderSheet(d) {
-  const r = d.reminders || {};
-  sheet(`<h2>Reminder settings</h2>
-    <label class="lab">What time to send</label>
-    <input class="inp" id="remtime" type="time" value="${esc(r.time || "18:00")}">
-    <p class="note">Your local time. Evening works best — late enough that the day is settled, early enough not to bother anyone.</p>
-    <label class="lab" style="margin-top:12px">How far ahead</label>
-    <select class="inp" id="remahead">
-      ${[1, 2, 3].map((n) => `<option value="${n}" ${Number(r.daysAhead || 1) === n ? "selected" : ""}>${n === 1 ? "The night before" : `${n} days ahead`}</option>`).join("")}
-    </select>
-    <div class="rowbtns" style="margin-top:16px"><button class="btn em" id="remsave">Save</button></div>`, (sh) => {
-    sh.querySelector("#remsave").onclick = async () => {
-      try {
-        await api("/phone", {
-          action: "settings-save",
-          reminderTime: sh.querySelector("#remtime").value || "18:00",
-          reminderDaysAhead: Number(sh.querySelector("#remahead").value || 1),
-        });
-        toast("Saved"); closeSheet(); renderPhone();
-      } catch (err) { toast(err.message); }
-    };
-  });
-}
-
-// The dry run. Shows the real recipients and the real wording, sends nothing.
-async function apptReminderPreviewSheet() {
-  sheet(`<h2>Tonight's reminders</h2><div id="rembody"><div class="skel"></div></div>`, async (sh) => {
-    let d;
-    try { d = await api("/phone", { action: "reminder-preview" }); }
-    catch (err) { sh.querySelector("#rembody").innerHTML = `<p class="note">${esc(err.message)}</p>`; return; }
-    if (d.error) { sh.querySelector("#rembody").innerHTML = `<p class="note">${esc(d.error)}</p>`; return; }
-    const items = d.items || [];
-    const label = { will_send: '<span class="pill live">WILL SEND</span>', already_sent: '<span class="pill">ALREADY SENT</span>', no_number: '<span class="pill" style="color:var(--red)">NO PHONE NUMBER</span>' };
-    sh.querySelector("#rembody").innerHTML = `
-      <p class="sub">${d.appointments} appointment${d.appointments === 1 ? "" : "s"} on ${esc(d.day)} — <b>${d.would_send}</b> would get a text.${d.no_number ? ` <b>${d.no_number}</b> have no phone number on the appointment and would need you to text them yourself.` : ""}</p>
-      <p class="note">Nothing has been sent. This is exactly what would go out.</p>
-      ${items.length ? items.map((it) => `<div class="kv" style="display:block"><div>${label[it.state] || ""} <b>${esc(it.title)}</b></div>
-        <div><small style="color:var(--dim)">${esc(it.when)}${it.to ? " · " + esc(it.to) : ""}</small></div>
-        ${it.message ? `<div style="margin-top:6px;padding:9px 11px;border-radius:10px;background:rgba(255,255,255,.05)"><small>${esc(it.message)}</small></div>` : ""}</div>`).join("")
-        : '<p class="note">Nothing booked for that day.</p>'}`;
-  });
-}
-
 function frontDeskCard(d) {
   const fd = d.frontDesk || {};
   const on = fd.enabled === true;
@@ -4239,9 +2483,6 @@ function phoneSettingsSheet(d) {
     <label class="fld" style="margin-top:10px">AUTO-REPLY · AFTER HOURS</label>
     <textarea id="phauto2" rows="3">${esc(d.autoReplyAfter || "")}</textarea>
     <p class="note" style="margin-top:6px">Use <code>{business}</code> and <code>{hours}</code> — they fill in automatically.</p>
-    <label class="fld" style="margin-top:10px">VOICEMAIL GREETING — SPOKEN TO CALLERS</label>
-    <textarea id="phvmgreet" rows="3" placeholder="${esc(d.vmGreetingDefault || "You have reached your business. Please leave a message after the tone, and we will text you right back.")}">${esc(d.vmGreeting || "")}</textarea>
-    <p class="note" style="margin-top:6px">Your own words, read aloud when a call goes to voicemail. Leave blank to use the built-in greeting above.</p>
     <button class="btn em wide" style="margin-top:13px" id="phsave">Save</button>
     <div class="note" id="phnote" style="margin-top:8px"></div>`, (sh) => {
     let days = new Set(d.hoursDays || []);
@@ -4258,7 +2499,6 @@ function phoneSettingsSheet(d) {
           action: "settings-save",
           hoursStart: sh.querySelector("#phstart").value, hoursEnd: sh.querySelector("#phend").value,
           hoursDays: [...days], autoReplyHours: sh.querySelector("#phauto1").value, autoReplyAfter: sh.querySelector("#phauto2").value,
-          voicemailGreeting: sh.querySelector("#phvmgreet").value,
         });
         toast("Phone settings saved");
         closeSheet();
@@ -4268,18 +2508,7 @@ function phoneSettingsSheet(d) {
   });
 }
 
-function requestNumberCard(pending, locked) {
-  // Subscription-only since 2026-08-31. Show what the line DOES and the way to
-  // get it, rather than a form whose only possible answer is "subscribe first".
-  if (locked && !pending) {
-    return `<div class="panel">
-      <h3>&#128241; Your own business line &#128664;</h3>
-      <p class="sub">A local number of your own, included with your subscription: missed calls text the caller back automatically, every lead lands in your Leads list, and you can reply right from this tab.</p>
-      <p class="note" style="margin-top:10px">Included with Ledger AI &mdash; your line is live seconds after you subscribe.</p>
-      <button class="btn em wide" style="margin-top:13px" id="rnsubscribe">Subscribe to get your number</button>
-      <div class="note" id="rnnote" style="margin-top:8px"></div>
-    </div>`;
-  }
+function requestNumberCard(pending) {
   if (pending) {
     return `<div class="panel">
       <h3>&#128241; Business number requested</h3>
@@ -4294,8 +2523,6 @@ function requestNumberCard(pending, locked) {
     <input id="rnbiz" placeholder="Your business name">
     <label class="fld" style="margin-top:10px">PREFERRED AREA CODE</label>
     <input id="rnarea" placeholder="e.g. 587" inputmode="numeric" maxlength="3">
-    <label class="fld" style="margin-top:10px">YOUR CELL — CALLS FORWARD HERE</label>
-    <input id="rncell" placeholder="e.g. 587 555 0123" inputmode="tel">
     <label class="fld" style="margin-top:10px">BUSINESS HOURS</label>
     <input id="rnhours" placeholder="e.g. Mon–Fri 8am–5pm">
     <label class="fld" style="margin-top:10px">AUTO-REPLY TEXT (OPTIONAL)</label>
@@ -4305,32 +2532,20 @@ function requestNumberCard(pending, locked) {
   </div>`;
 }
 
-function wireRequestNumber(pending, locked) {
+function wireRequestNumber(pending) {
   if (pending) return;
-  if (locked) {
-    const sub = $("rnsubscribe");
-    if (sub) sub.onclick = async () => {
-      try { const c = await api("/stripe-billing/checkout", {}); location.href = c.url; }
-      catch (err) { const note = $("rnnote"); note.className = "note err"; note.textContent = err.message; }
-    };
-    return;
-  }
   $("rnsubmit").onclick = async (e) => {
     const note = $("rnnote");
     const businessName = $("rnbiz").value.trim();
     if (businessName.length < 2) { note.className = "note err"; note.textContent = "Business name is required"; return; }
     e.currentTarget.disabled = true;
     try {
-      const res = await api("/phone", {
+      await api("/phone", {
         action: "request-number", businessName,
-        areaCode: $("rnarea").value.trim(), forwardTo: $("rncell").value.trim(),
-        hoursNote: $("rnhours").value.trim(),
+        areaCode: $("rnarea").value.trim(), hoursNote: $("rnhours").value.trim(),
         autoReplyTemplate: $("rntemplate").value.trim(),
       });
-      // Managed lane provisions instantly; the fallback queue answers with a
-      // pending request instead. Same endpoint, two possible outcomes.
-      if (res?.hasNumber && res?.number?.e164) toast(`Your business number is live: ${formatE164(res.number.e164)}`);
-      else toast("Request sent — we'll text you when your number is live");
+      toast("Request sent — we'll text you when your number is live");
       renderPhone();
     } catch (err) { e.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
   };
@@ -4342,7 +2557,7 @@ const LEAD_SOURCES = [["call-in", "Call-in"], ["walk-in", "Walk-in"], ["referral
   ["website", "Website"], ["social", "Social"], ["repeat", "Repeat"], ["other", "Other"]];
 const TODO_PRIORITIES = [["low", "Low"], ["normal", "Normal"], ["high", "High"], ["urgent", "Urgent"]];
 
-const LANE_CODE = { directory: "CRM.05 · RELATIONSHIPS", reviews: "CRM.05 · REPUTATION", todos: "CRM.05 · MISSION CONTROL" };
+const LANE_CODE = { directory: "CRM.05 · RELATIONSHIPS", todos: "CRM.05 · MISSION CONTROL" };
 
 // Red badge count on the lane switcher, same rule as iOS CustomerLaneSwitcher:
 // open to-dos due by end of today. Leads moved to the Phone tab — see
@@ -4358,10 +2573,10 @@ function laneAlerts() {
 
 async function renderCustomers() {
   view().innerHTML = `<div class="sect">
-    ${osHead(LANE_CODE[S.lane] || LANE_CODE.directory, S.lane === "todos" ? "To-Do" : S.lane === "reviews" ? "Reviews" : "Customers")}
+    ${osHead(LANE_CODE[S.lane] || LANE_CODE.directory, S.lane === "todos" ? "To-Do" : "Customers")}
     <div class="seg">
-      ${[["directory", "Directory", 0], ["reviews", "Reviews", 0], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
-        `<button class="${S.lane === k ? "on" : ""}" data-lane="${k}">${segIc(k)}${l}${n ? `<i class="badge">${n}</i>` : ""}</button>`).join("")}
+      ${[["directory", "Directory", 0], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
+        `<button class="${S.lane === k ? "on" : ""}" data-lane="${k}">${l}${n ? `<i class="badge">${n}</i>` : ""}</button>`).join("")}
     </div>
     <div id="lanebody"><div class="skel"></div><div class="skel"></div></div>
   </div>`;
@@ -4370,90 +2585,7 @@ async function renderCustomers() {
     loadDirectory();
     // iOS keeps the To-Do badge live from the same board; fetch it once so Directory shows it too.
     if (!S.board) api("/leads", { action: "board" }).then((b) => { S.board = b; if (S.tab === "customers") renderCustomers(); }).catch(() => {});
-  } else if (S.lane === "reviews") loadReviewsLane();
-  else loadBoard();
-}
-
-// Reviews lane — the web twin of iOS ReviewsCommandLane (build 40): live Google
-// reviews, the public score, and the playbook for growing it.
-async function loadReviewsLane() {
-  const slot = $("lanebody"); if (!slot) return;
-  const gold = "var(--gold, #fbbf24)";
-  let board;
-  try {
-    board = (await get("/google-business-profile/reviews?limit=10")).reviews;
-  } catch (e) {
-    const connect = e.status === 409, pending = e.status === 403;
-    slot.innerHTML = `<div class="revlane-err">
-      <div class="eyebrow" style="color:${gold}">${connect ? "&#128279; CONNECT GOOGLE REVIEWS" : pending ? "&#8987; REVIEW ACCESS PENDING" : "REVIEWS UNAVAILABLE"}</div>
-      <p class="note" style="margin-top:8px">${esc(e.message)}</p>
-      ${connect ? `<p class="note">Business profile &amp; settings → Google Business Profile → Connect. Your live reviews, rating and reply tools light up the moment it links.</p>` : ""}
-      <button class="pillbtn" id="rvretry" style="margin-top:10px"><b>Try again</b></button>
-    </div>`;
-    $("rvretry").onclick = () => { slot.innerHTML = `<div class="skel"></div>`; loadReviewsLane(); };
-    return;
-  }
-  const items = board.items || [];
-  const five = items.filter((r) => r.star_rating === 5).length;
-  const low = items.filter((r) => r.star_rating <= 3).length;
-  const stars = (n) => "&#9733;".repeat(Math.max(0, Math.min(5, n))) + "&#9734;".repeat(5 - Math.max(0, Math.min(5, n)));
-  const rel = (iso) => {
-    const d = new Date(iso); if (isNaN(d)) return "";
-    const days = Math.floor((Date.now() - d) / 86400000);
-    return days < 1 ? "today" : days === 1 ? "yesterday" : days < 30 ? days + "d ago"
-      : days < 365 ? Math.floor(days / 30) + "mo ago" : Math.floor(days / 365) + "y ago";
-  };
-  const intel = [];
-  if (items.length) intel.push(["&#10024;", `${five} of your last ${items.length} reviews are five-star${five === items.length ? " — a perfect run." : "."}`, "var(--emerald)"]);
-  if (low > 0) intel.push(["&#10071;", `${low} recent review${low === 1 ? " sits" : "s sit"} at 3★ or below — a calm owner reply is the single strongest signal to the next reader.`, "var(--orange)"]);
-  if (board.unanswered_count > 0) intel.push(["&#8617;", `${board.unanswered_count} unanswered — say "reply to my latest review" in Ask Ledger and confirm the draft before it posts.`, "var(--cyan)"]);
-  else if (items.length) intel.push(["&#9989;", "Every recent review has an owner reply. That consistency is rare and customers notice.", "var(--emerald)"]);
-  if (items[0]) intel.push(["&#128337;", `Newest review landed ${rel(items[0].updated_at)}.`, "var(--magenta)"]);
-
-  slot.innerHTML = `
-    <div class="revhero">
-      <div class="t"><span class="eyebrow" style="color:${gold}">&#128737; Reputation command</span>
-        <span class="livechip">LIVE · GOOGLE</span></div>
-      <div class="score"><b>${board.average_rating > 0 ? board.average_rating.toFixed(1) : "—"}</b>
-        <div class="m"><span class="starrow">${stars(Math.round(board.average_rating))}</span>
-          <small>${board.total_review_count} Google review${board.total_review_count === 1 ? "" : "s"}</small></div></div>
-      <div class="pulse">
-        <div class="pm gold"><small>RATING</small><b>${board.average_rating > 0 ? board.average_rating.toFixed(2) : "—"}</b><i>public average</i></div>
-        <div class="pm cyan"><small>REVIEWS</small><b>${board.total_review_count}</b><i>all time</i></div>
-        <div class="pm ${board.unanswered_count === 0 ? "em" : "orange"}"><small>UNANSWERED</small><b>${board.unanswered_count}</b>
-          <i>${board.unanswered_count === 0 ? "all replied — elite" : "awaiting your reply"}</i></div>
-      </div>
-      ${board.business_name ? `<div class="bizname">${esc(board.business_name.toUpperCase())}</div>` : ""}
-    </div>
-    ${items.length ? `<div class="revintel">
-      <div class="cihead">&#129504; REVIEW INTELLIGENCE</div>
-      ${[5, 4, 3, 2, 1].map((s) => { const c = items.filter((r) => r.star_rating === s).length;
-        return `<div class="cibar"><b style="color:${gold}">${s}&#9733;</b>
-          <div class="track gold"><i style="width:${items.length ? Math.round(c / items.length * 100) : 0}%"></i></div><em>${c}</em></div>`; }).join("")}
-      ${intel.map(([ic, tx, tint]) => `<p class="ciline"><span class="icx" style="color:${tint}">${ic}</span>${esc(tx)}</p>`).join("")}
-    </div>` : ""}
-    <div class="revlist">
-      <div class="t"><span class="eyebrow" style="color:${gold}">&#128225; Last ${board.count} from Google</span>
-        <button class="pillbtn sm" id="rvreload">&#8635;</button></div>
-      ${items.length ? items.map((r) => `<div class="gcard">
-        <div class="t"><b>${esc(r.reviewer_anonymous ? "Google user" : r.reviewer_name)}</b>
-          <span class="starrow sm">${stars(r.star_rating)}</span><small>${esc(rel(r.updated_at))}</small></div>
-        ${r.comment ? `<p>${esc(r.comment)}</p>` : ""}
-        ${r.replied ? `<div class="reply"><small>&#8617; OWNER REPLY</small>${esc(r.reply_comment || "")}</div>`
-          : `<div class="noreply">&#9888; No owner reply yet</div>`}
-      </div>`).join("") : `<p class="note">No reviews yet — the moment your first Google review lands it appears here.</p>`}
-    </div>
-    <div class="revgrow">
-      <div class="cihead" style="color:var(--emerald)">&#128200; GROW YOUR REVIEWS WITH LEDGER</div>
-      ${[["01", "Ask at the high point", "Right after a job they loved. The Directory lane puts an Ask-for-review button on every customer — it sends your real Google review link."],
-        ["02", "Reply to every single one", "Ask Ledger to draft the reply — it answers what the customer actually said, and nothing posts until you confirm."],
-        ["03", "Make it a weekly habit", "Two asks a week compounds. A steady stream of fresh reviews outranks a burst from last year."]]
-        .map(([n, t, x]) => `<div class="playstep"><b>${n}</b><div><span>${t}</span><small>${x}</small></div></div>`).join("")}
-      <button class="cta gold" id="rvask"><span class="ic">&#11088;</span>
-        <span><b>Ask a customer for a review</b><span>Opens the Directory review queue</span></span></button>
-    </div>`;
-  $("rvreload").onclick = () => { slot.innerHTML = `<div class="skel"></div>`; loadReviewsLane(); };
-  $("rvask").onclick = () => { S.lane = "directory"; renderCustomers(); };
+  } else loadBoard();
 }
 
 const reviewAsked = () => new Set((localStorage.getItem("kmj.reviewRequestedCustomerIDs") || "").split(",").filter(Boolean));
@@ -4461,13 +2593,6 @@ const markReviewAsked = (id) => { const s = reviewAsked(); s.add(id); localStora
 
 async function loadDirectory() {
   const slot = $("lanebody"); if (!slot) return;
-  // Same branch iOS makes: built-in books gets its own directory off
-  // books_customers — the QuickBooks wall only belongs to QuickBooks shops.
-  if (S.booksProvider === undefined) {
-    try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
-    catch { S.booksProvider = "quickbooks"; }
-  }
-  if (S.booksProvider === "native") return loadNativeDirectory();
   try {
     if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
     const all = (S.qbo?.qbo?.customers || []).filter((c) => c.active !== false);
@@ -4638,244 +2763,14 @@ async function reviewSheet(c, already) {
 // duplicate-match guard: a 409 lists the existing matches before anything is created.
 // `prefill` is a lead row (iOS NewCustomerSheet(prefill:)); `onCreated` fires with
 // the created customer so the caller can mark that lead won and link it.
-// Built-in books directory: the same intelligence hero, review queue and
-// customer cards as the QuickBooks lane, fed by books_customers/invoices.
-async function loadNativeDirectory() {
-  const slot = $("lanebody"); if (!slot) return;
-  try {
-    const [cd, inv] = await Promise.all([
-      booksApi({ action: "customers" }),
-      booksApi({ action: "invoices" }).catch(() => ({ invoices: [] })),
-    ]);
-    const invoices = inv.invoices || [];
-    const balanceBy = {}, lastPaid = {}, lastInvoice = {};
-    const todayISO = localDay();
-    const overdueIds = new Set();
-    for (const i of invoices) {
-      if (!i.customer_id) continue;
-      balanceBy[i.customer_id] = (balanceBy[i.customer_id] || 0) + Number(i.balance || 0);
-      if (!lastInvoice[i.customer_id] || (i.issue_date || "") > lastInvoice[i.customer_id]) lastInvoice[i.customer_id] = i.issue_date || "";
-      if (Number(i.balance) === 0 && (!lastPaid[i.customer_id] || (i.issue_date || "") > lastPaid[i.customer_id])) lastPaid[i.customer_id] = i.issue_date || "";
-      if (Number(i.balance) > 0 && i.due_date && i.due_date < todayISO) overdueIds.add(i.customer_id);
-    }
-    const all = (cd.customers || []).map((c) => ({
-      id: c.id,
-      name: [c.first_name, c.last_name].filter(Boolean).join(" ") || c.company || "\u2014",
-      company: c.company || "", email: c.email || "", phone: c.phone || "",
-      balance: balanceBy[c.id] || 0, active: true, raw: c,
-    }));
-    const asked = reviewAsked();
-    const q = (S.custSearch || "").toLowerCase();
-    const sort = S.custSort || "name";
-    const reachable = all.filter((c) => c.phone || c.email).length;
-    const buyers = new Set(invoices.map((i) => i.customer_id).filter(Boolean)).size;
-    const lifetime = invoices.reduce((tt, i) => tt + (Number(i.total) || 0), 0);
-    const reviewQueue = all.filter((c) => (c.phone || c.email) && !asked.has(c.id) && lastPaid[c.id])
-      .sort((a, b) => (lastPaid[b.id] || "").localeCompare(lastPaid[a.id] || ""));
-    const qHead = reviewQueue.slice(0, 5);
-    let list = all.filter((c) => !q || (c.name + " " + c.email + " " + c.phone + " " + c.company).toLowerCase().includes(q));
-    if (S.custBalancesOnly) list = list.filter((c) => c.balance > 0);
-    list = list.slice().sort((a, b) =>
-      sort === "owing" ? b.balance - a.balance
-      : sort === "recent" ? (lastInvoice[b.id] || "").localeCompare(lastInvoice[a.id] || "")
-      : a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
-
-    slot.innerHTML = `
-      <div class="cihero">
-        <div class="t"><div><span class="eyebrow">Customer intelligence</span>
-          <b>Relationships, revenue &amp; reputation</b></div><span class="ic">&#128101;</span></div>
-        <div class="pulse">
-          <div class="pm cyan"><small>On file</small><b>${all.length}</b></div>
-          <div class="pm em"><small>Reachable</small><b>${reachable}</b></div>
-          <div class="pm purple"><small>Buyers</small><b>${buyers}</b></div>
-        </div>
-        <div class="split"><div><small>Customer revenue</small><b>${money0(lifetime)}</b></div>
-          <div class="r"><small>Reviews asked</small><b class="em">${asked.size}</b></div></div>
-      </div>
-      <div class="revpanel">
-        <div class="t"><div><span class="eyebrow" style="color:var(--magenta)">Review opportunities</span>
-          <b>${qHead.length ? "Recent customers ready to ask" : "You’re caught up"}</b></div>
-          <span class="cnt">${reviewQueue.length} READY</span></div>
-        ${qHead.length ? `<button class="asknext" data-review="${esc(qHead[0].id)}">
-            <span class="ic">&#11088;</span>
-            <span class="m"><small>Ask next</small><b>${esc(qHead[0].name)}</b>
-              <span>${esc(qHead[0].phone || qHead[0].email)}</span></span>
-            <span class="go">&#8594;</span></button>
-          ${qHead.length > 1 ? `<div class="askrow">${qHead.slice(1).map((c) =>
-            `<button class="askpill" data-review="${esc(c.id)}"><i>${esc(c.name.slice(0, 1).toUpperCase())}</i>${esc(c.name)} &#11088;</button>`).join("")}</div>` : ""}`
-          : `<p class="note">No eligible recent customers waiting for a review request.</p>`}
-      </div>
-      <div class="searchwrap"><span class="mag">${MAG}</span>
-        <input id="csearch" placeholder="Customer, email or phone" value="${esc(S.custSearch || "")}"></div>
-      <div class="dirbar">
-        <span class="eyebrow">Customer directory</span>
-        <button class="pillbtn em" id="cadd">+ Add</button>
-        <select class="pillbtn" id="csort">
-          ${[["name", "A\u2013Z"], ["owing", "Owing"], ["recent", "Recent"]].map(([k, l]) =>
-            `<option value="${k}" ${sort === k ? "selected" : ""}>${l}</option>`).join("")}
-        </select>
-        <button class="pillbtn ${S.custBalancesOnly ? "hot" : ""}" id="cbal">${S.custBalancesOnly ? "Balances" : "All"}</button>
-      </div>
-      ${list.length ? list.slice(0, S.custShowAll ? list.length : 120).map((c) => {
-        const contact = [c.email, c.phone].filter(Boolean).join(" \u00b7 ");
-        const od = overdueIds.has(c.id);
-        return `<div class="ccard">
-          <div class="top">
-            <div class="avaw"><div class="ava ${od ? "od" : c.balance > 0 ? "ow" : ""}">${sigilMark(c.name)}<i class="rail"></i></div></div>
-            <div class="who"><b>${esc(c.name)}</b>
-              ${contact ? `<span>${esc(contact)}</span>` : ""}
-              <i>${c.balance > 0
-                ? `<span style="color:${od ? "var(--red)" : "var(--orange)"}">${money(c.balance)} ${od ? "overdue" : "owing"}</span>`
-                : "Active"}</i></div>
-          </div>
-          <div class="acts">
-            <button class="actbtn" data-ncust="${esc(c.id)}">&#128100;&nbsp; Edit Details</button>
-            <button class="actbtn p" data-review="${esc(c.id)}">${asked.has(c.id) ? "&#10003;&nbsp; Review Asked" : "&#11088;&nbsp; Ask for Review"}</button>
-          </div>
-        </div>`;
-      }).join("")
-      : `<div class="panel" style="text-align:center"><p class="sub" style="margin:0">No customers yet \u2014 add your first one, or create an invoice and Ledger saves the customer with it.</p></div>`}`;
-    const sb = $("csearch");
-    sb.addEventListener("input", () => { S.custSearch = sb.value; clearTimeout(S._c); S._c = setTimeout(loadDirectory, 220); });
-    $("csort").onchange = (e) => { S.custSort = e.target.value; loadDirectory(); };
-    $("cbal").onclick = () => { S.custBalancesOnly = !S.custBalancesOnly; loadDirectory(); };
-    $("cadd").onclick = () => nativeCustomerSheet(null);
-    on("[data-ncust]", "click", (e) => nativeCustomerSheet(all.find((c) => c.id === e.currentTarget.dataset.ncust)?.raw), slot);
-    on("[data-review]", "click", (e) => {
-      const c = all.find((x) => x.id === e.currentTarget.dataset.review);
-      if (c) reviewSheet(c, asked.has(c.id));
-    }, slot);
-  } catch (e) {
-    slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`;
-  }
-}
-
-// Add or edit a built-in-books customer — same fields as the iOS
-// NewCustomerSheet's native mode, saved through books customer-save.
-function nativeCustomerSheet(existing) {
-  const c = existing || {};
-  sheet(`<h2>${existing ? "Edit Customer" : "New Customer"}</h2>
-    <div class="eyebrow">Name</div>
-    <div class="cmpsect">
-      <input id="ncFirst" class="cmpinput" placeholder="First name" value="${esc(c.first_name || "")}">
-      <input id="ncLast" class="cmpinput" placeholder="Last name" value="${esc(c.last_name || "")}">
-      <input id="ncCompany" class="cmpinput" placeholder="Company (optional)" value="${esc(c.company || "")}">
-    </div>
-    <div class="eyebrow">Contact</div>
-    <div class="cmpsect">
-      <input id="ncEmail" class="cmpinput" inputmode="email" placeholder="Email" value="${esc(c.email || "")}">
-      <input id="ncPhone" class="cmpinput" inputmode="tel" placeholder="Phone" value="${esc(c.phone || "")}">
-    </div>
-    <button class="btn em wide" style="margin-top:14px" id="ncSave">${existing ? "Save changes" : "Add customer"}</button>
-    <p class="note err" id="ncErr" style="margin-top:8px"></p>`, (sh) => {
-    sh.querySelector("#ncSave").onclick = async (e) => {
-      const v = (id) => sh.querySelector("#" + id).value.trim();
-      const first = v("ncFirst"), last = v("ncLast"), company = v("ncCompany");
-      if (!first && !last && !company) { sh.querySelector("#ncErr").textContent = "A name or company is required"; return; }
-      e.currentTarget.disabled = true;
-      try {
-        await booksApi({ action: "customer-save", customer: {
-          ...(existing ? { id: existing.id } : {}),
-          first_name: first, last_name: last, company, email: v("ncEmail"), phone: v("ncPhone"),
-        } });
-        closeSheet();
-        toast(existing ? "Customer updated" : "Customer added");
-        loadDirectory();
-      } catch (err) { e.currentTarget.disabled = false; sh.querySelector("#ncErr").textContent = err.message; }
-    };
-  });
-}
-
-// Splits one written name into first/last the way QuickBooks' own form does:
-// everything before the first space is the given name, the rest is the family
-// name. Only ever used to PRE-FILL a visible field — the owner sees the result
-// and corrects it before anything reaches QuickBooks. Twin of iOS
-// ledgerSplitPersonName.
-function splitPersonName(full) {
-  const t = String(full || "").trim();
-  const i = t.indexOf(" ");
-  return i < 0 ? { first: t, last: "" } : { first: t.slice(0, i), last: t.slice(i + 1).trim() };
-}
-
-// The display name QuickBooks lists a record under: the person when there is
-// one, otherwise the business. Twin of iOS ledgerComposeDisplayName.
-function composeDisplayName(first, last, company) {
-  const person = [first, last].map((v) => String(v || "").trim()).filter(Boolean).join(" ");
-  return person || String(company || "").trim();
-}
-
-// The Phone tab writes the caller's number into a new lead's name because that is
-// all a missed call gives it. That is a placeholder, never a person — it must not
-// pre-fill a name box, and it must never reach QuickBooks as a GivenName.
-function isPhonePlaceholderName(name) {
-  const t = String(name || "").trim();
-  if (!t) return false;
-  return /^[+()\-.\s\d]+$/.test(t) && t.replace(/\D/g, "").length >= 7;
-}
-
-// First/last for a lead: what was saved, else a split of the written name — but
-// never a company name and never a phone placeholder.
-function leadPersonName(l) {
-  let first = String(l?.firstName || "").trim(), last = String(l?.lastName || "").trim();
-  if (!first && !last) {
-    const n = String(l?.name || "").trim();
-    const co = String(l?.company || "").trim();
-    const isCompany = !!co && n.toLowerCase() === co.toLowerCase();
-    if (n && !isCompany && !isPhonePlaceholderName(n)) {
-      const sp = splitPersonName(n);
-      first = sp.first; last = sp.last;
-    }
-  }
-  return { first, last };
-}
-
-// Live "this is what QuickBooks will call them" line under the name boxes, plus
-// the pinning rule: typing in the display box pins it, emptying it hands control
-// back to the first/last boxes so there is always a way out of a bad override.
-function wireNameBoxes(sh, ids) {
-  const q = (id) => sh.querySelector("#" + id);
-  const first = q(ids.first), last = q(ids.last), co = q(ids.company), name = q(ids.name), filed = q(ids.filed);
-  if (!first || !last || !name) return;
-  const composed = () => composeDisplayName(first.value, last.value, co ? co.value : "");
-  let pinned = !!name.value.trim() && name.value.trim() !== composed() && !ids.unpinned;
-  const paint = () => {
-    if (!filed) return;
-    const shown = name.value.trim() || composed();
-    const ok = !!shown && !isPhonePlaceholderName(shown);
-    filed.className = ok ? "note" : "note err";
-    filed.innerHTML = ok
-      ? "Filed in QuickBooks as <b>" + esc(shown) + "</b>."
-      : shown
-        ? "That is the caller's number, not a name. Type the first and last name — the number stays in the phone box."
-        : "Type a first and last name — or a business name. That is how QuickBooks will list them.";
-  };
-  const sync = () => { if (!pinned) name.value = composed(); paint(); };
-  [first, last, co].forEach((el) => { if (el) el.addEventListener("input", sync); });
-  name.addEventListener("input", () => {
-    const typed = name.value.trim();
-    if (!typed) pinned = false; else if (typed !== composed()) pinned = true;
-    paint();
-  });
-  paint();
-}
-
 function newCustomerSheet(prefill, onCreated) {
   const pre = prefill || {};
-  const person = leadPersonName(pre);
-  // A lead the Phone tab named after the caller's number has no display name yet —
-  // blank it so a real name has to be typed before a customer is filed under it.
-  const preName = isPhonePlaceholderName(pre.name) ? "" : String(pre.name || "");
   const form = (force) => `<h2>New Customer</h2>
     ${prefill ? `<p class="sh-sub">Converting lead &ldquo;${esc(pre.name || "")}&rdquo; — creating the customer marks it WON.</p>` : ""}
     <div class="eyebrow">Customer</div>
     <div class="cmpsect">
-      <div class="namepair">
-        <input id="ncFirst" class="cmpinput" placeholder="First name" autocomplete="given-name" value="${esc(person.first)}">
-        <input id="ncLast" class="cmpinput" placeholder="Last name" autocomplete="family-name" value="${esc(person.last)}">
-      </div>
-      <input id="ncCompany" class="cmpinput" placeholder="Business name (optional)" value="${esc(pre.company || "")}">
-      <input id="ncName" class="cmpinput" placeholder="Display name (how QuickBooks lists them)" value="${esc(preName)}">
-      <div class="note" id="ncFiled"></div>
+      <input id="ncName" class="cmpinput" placeholder="Name (required)" value="${esc(pre.name || "")}">
+      <input id="ncCompany" class="cmpinput" placeholder="Company (optional)" value="${esc(pre.company || "")}">
     </div>
     <div class="eyebrow">Contact</div>
     <div class="cmpsect">
@@ -4897,19 +2792,15 @@ function newCustomerSheet(prefill, onCreated) {
     <div class="note" id="ncNote" style="margin-top:9px"></div>`;
 
   sheet(form(false), (sh) => {
-    wireNameBoxes(sh, { first: "ncFirst", last: "ncLast", company: "ncCompany", name: "ncName", filed: "ncFiled" });
     const note = sh.querySelector("#ncNote");
     const dup = sh.querySelector("#ncDup");
     const val = (id) => (sh.querySelector("#" + id)?.value || "").trim();
     const submit = async (force, btn) => {
-      // First/last are what QuickBooks stores as GivenName/FamilyName; the display
-      // name is what it lists the record under and falls back to the composed person.
-      const name = val("ncName") || composeDisplayName(val("ncFirst"), val("ncLast"), val("ncCompany"));
-      if (!name) { note.className = "note err"; note.textContent = "A first and last name — or a business name — is required."; return; }
+      const name = val("ncName");
+      if (!name) { note.className = "note err"; note.textContent = "A name is required."; return; }
       btn.disabled = true; note.className = "note"; note.textContent = "Creating…";
       const payload = { display_name: name, force };
-      [["given_name", "ncFirst"], ["family_name", "ncLast"], ["company", "ncCompany"],
-       ["email", "ncEmail"], ["phone", "ncPhone"], ["mobile", "ncMobile"], ["notes", "ncNotes"]]
+      [["company", "ncCompany"], ["email", "ncEmail"], ["phone", "ncPhone"], ["mobile", "ncMobile"], ["notes", "ncNotes"]]
         .forEach(([k, id]) => { const v = val(id); if (v) payload[k] = v; });
       if (val("ncLine1") || val("ncCity")) {
         payload.address = { line1: val("ncLine1"), city: val("ncCity"), region: val("ncRegion"), postal: val("ncPostal") };
@@ -5175,20 +3066,10 @@ function drawLeads() {
 
 function leadSheet(l) {
   const isNew = !l.id;
-  const person = leadPersonName(l);
-  // An auto-created missed-call lead is named after the number. Keep it in the
-  // display box so the lead still saves, but leave it unpinned — the first real
-  // name typed replaces it instead of sitting behind a phone number forever.
-  const placeholderName = isPhonePlaceholderName(l.name);
   sheet(`<h2>${isNew ? "New lead" : esc(l.name)}</h2>
     <p class="sh-sub">${isNew ? "Who is it, and when do you chase them?" : esc(l.company || "")}</p>
-    <div class="namepair">
-      <div><label class="fld">FIRST NAME</label><input id="lfirst" autocomplete="given-name" value="${esc(person.first)}"></div>
-      <div><label class="fld">LAST NAME</label><input id="llast" autocomplete="family-name" value="${esc(person.last)}"></div>
-    </div>
+    <label class="fld">NAME</label><input id="lname" value="${esc(l.name || "")}">
     <label class="fld">COMPANY</label><input id="lco" value="${esc(l.company || "")}">
-    <label class="fld">DISPLAY NAME</label><input id="lname" value="${esc(l.name || "")}">
-    <div class="note" id="lfiled" style="margin-top:6px"></div>
     <label class="fld">PHONE</label><input id="lph" type="tel" value="${esc(l.phone || "")}">
     <label class="fld">EMAIL</label><input id="lem" type="email" value="${esc(l.email || "")}">
     <label class="fld">ESTIMATED VALUE</label><input id="lval" inputmode="decimal" value="${l.valueEstimate ?? ""}">
@@ -5214,20 +3095,8 @@ function leadSheet(l) {
       <button class="btn primary" id="lsave">${isNew ? "Add lead" : "Save"}</button>
     </div>
     <div class="note" id="lnote" style="margin-top:9px"></div>`, (sh) => {
-    wireNameBoxes(sh, { first: "lfirst", last: "llast", company: "lco", name: "lname",
-      filed: "lfiled", unpinned: placeholderName });
     const conv = sh.querySelector("#lconv");
-    // Carry what is on screen, not what was last saved — typing the caller's real
-    // name and converting in one go must not file the customer under the old name.
-    const liveLead = () => ({ ...l,
-      name: sh.querySelector("#lname").value.trim(),
-      firstName: sh.querySelector("#lfirst").value.trim(),
-      lastName: sh.querySelector("#llast").value.trim(),
-      company: sh.querySelector("#lco").value.trim(),
-      phone: sh.querySelector("#lph").value.trim(),
-      email: sh.querySelector("#lem").value.trim(),
-      notes: sh.querySelector("#lnotes").value.trim() });
-    if (conv) conv.onclick = () => newCustomerSheet(liveLead(), async (created) => {
+    if (conv) conv.onclick = () => newCustomerSheet(l, async (created) => {
       // Same contract as iOS markWon(customerId:) — the lead is won and linked.
       try {
         S.board = await api("/leads", { action: "lead-save",
@@ -5241,8 +3110,6 @@ function leadSheet(l) {
       const lead = {
         ...(l.id ? { id: l.id } : {}),
         name: sh.querySelector("#lname").value.trim(),
-        first_name: sh.querySelector("#lfirst").value.trim(),
-        last_name: sh.querySelector("#llast").value.trim(),
         company: sh.querySelector("#lco").value.trim(),
         phone: sh.querySelector("#lph").value.trim(),
         email: sh.querySelector("#lem").value.trim(),
@@ -5987,8 +3854,7 @@ async function businessSheet() {
       try {
         const detail = await api("/workspace-profile", { action: "update", name: sh.querySelector("#bn").value.trim(), address: sh.querySelector("#ba").value.trim() });
         S.profile.business = { ...S.profile.business, ...detail };
-        const hdr = $("bizname");
-        if (hdr) hdr.textContent = S.profile.business.name || "Ledger AI";
+        $("bizname").textContent = S.profile.business.name || "Ledger AI";
         toast("Saved");
       } catch (err) { toast(err.message, "err"); }
       e.currentTarget.disabled = false;
@@ -6002,7 +3868,7 @@ async function businessSheet() {
       slot.innerHTML = `${(t.members || []).map((m) => `<div class="kv"><span>${esc(m.email)}</span><span>${esc(m.role)}</span></div>`).join("")}
         ${(t.invites || []).map((i) => `<div class="kv"><span>${esc(i.email)}</span><span style="color:var(--gold)">invited</span></div>`).join("")}
         ${(S.profile?.role || (S.team?.members || []).find((m) => (m.email || "").toLowerCase() === S.email)?.role) === "owner" ? `<div style="margin-top:10px"><input id="invmail" type="email" placeholder="teammate@business.com">
-          <button class="btn ghost wide" style="margin-top:8px" id="invgo">Invite — $299/mo per seat</button></div>` : ""}`;
+          <button class="btn ghost wide" style="margin-top:8px" id="invgo">Invite — $125/mo per seat</button></div>` : ""}`;
       const go = slot.querySelector("#invgo");
       if (go) go.onclick = async () => {
         go.disabled = true;
@@ -6146,7 +4012,7 @@ function supportChatSheet() {
 
 /* ---------------- AUTH / SETUP / JOIN ---------------- */
 function loginView(sent) {
-  root.innerHTML = `<div class="login"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>Ledger AI</h2>
+  root.innerHTML = `<div class="login"><div class="mark">L</div><h2>Ledger AI</h2>
     <p>${sent ? "Check your email — tap the sign-in link and you'll land right back here." : "Your business copilot. Sign in with your work email."}</p>
     ${sent ? "" : '<input id="email" type="email" placeholder="you@business.com" autocomplete="email"><button class="btn" id="go">Send sign-in link</button>'}
     <p style="margin-top:18px;font-size:12.5px"><a href="privacy.html" style="color:var(--dim)">Privacy</a> &middot; <a href="support.html" style="color:var(--dim)">Support</a></p></div>`;
@@ -6161,7 +4027,7 @@ function loginView(sent) {
 }
 
 function setupView() {
-  root.innerHTML = `<div class="login"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>Welcome to Ledger AI</h2>
+  root.innerHTML = `<div class="login"><div class="mark">L</div><h2>Welcome to Ledger AI</h2>
     <p>Let's set up your business. Your 14-day free trial starts now — no card needed.</p>
     <input id="bizname" placeholder="Business name" maxlength="160" autocomplete="organization">
     <select id="bizcur" style="margin-bottom:11px">
@@ -6192,7 +4058,7 @@ const ONBOARD_QUESTIONS = [
 ];
 
 function onboardInterview(bizName) {
-  root.innerHTML = `<div class="login" style="max-width:440px"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>Tell Ledger about ${esc(bizName)}</h2>
+  root.innerHTML = `<div class="login" style="max-width:440px"><div class="mark">L</div><h2>Tell Ledger about ${esc(bizName)}</h2>
     <p>Answer what you like, skip what you don't — Ledger remembers all of it and starts day one already knowing your business.</p>
     ${ONBOARD_QUESTIONS.map((o) => `<label class="fld" style="text-align:left;display:block;margin-top:12px">${esc(o.q).toUpperCase()}</label>
       <input id="${o.id}" placeholder="${esc(o.ph)}" maxlength="400">`).join("")}
@@ -6218,7 +4084,7 @@ function onboardInterview(bizName) {
 }
 
 function joinView(businessName) {
-  root.innerHTML = `<div class="login"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>You're invited ✨</h2>
+  root.innerHTML = `<div class="login"><div class="mark">L</div><h2>You're invited ✨</h2>
     <p><b>${esc(businessName)}</b> invited you to their Ledger AI team. Enter the 6-digit join code the owner gave you.</p>
     <input id="joincode" placeholder="6-digit code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="text-align:center;letter-spacing:8px;font-size:22px;font-weight:800">
     <button class="btn" id="joingo">Join the team →</button>

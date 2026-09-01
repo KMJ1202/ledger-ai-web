@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#05070b">
+<meta name="description" content="Ledger AI — the AI that runs your shop. Live books and invoicing, crew dispatch with live links and time cards, customer portals, booking — no per-seat fees, ever.">
+<meta property="og:title" content="Ledger AI — The AI that runs your shop">
+<meta property="og:description" content="Books, crew, and customers — one AI-run platform. Crew live links, time cards, client portals, AI invoicing. No per-seat fees, ever.">
+<meta property="og:url" content="https://heyledger.ai/">
+<meta property="og:image" content="https://heyledger.ai//assets/logo-full-640.png">
+<meta property="og:type" content="website">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/styles.css?v=31">
+<title>Ledger AI — Your business, on speaking terms</title>
+<link rel="canonical" href="https://heyledger.ai/">
+<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "Organization", "@id": "https://heyledger.ai/#org", "name": "Ledger AI", "url": "https://heyledger.ai/", "logo": "https://heyledger.ai//assets/logo-full-640.png", "email": "supportteam@heyledger.ai", "address": {"@type": "PostalAddress", "addressLocality": "Calgary", "addressRegion": "AB", "addressCountry": "CA"}, "description": "Ledger AI is the AI business platform for small service businesses: live QuickBooks answers, AI-drafted invoicing, crew dispatch with live job links and time cards, customer portals, and booking — with no per-seat fees."}, {"@type": "WebSite", "@id": "https://heyledger.ai/#website", "url": "https://heyledger.ai/", "name": "Ledger AI", "publisher": {"@id": "https://heyledger.ai/#org"}}, {"@type": "SoftwareApplication", "@id": "https://heyledger.ai/#app", "name": "Ledger AI", "operatingSystem": "iOS, Web", "applicationCategory": "BusinessApplication", "url": "https://heyledger.ai/", "publisher": {"@id": "https://heyledger.ai/#org"}, "offers": {"@type": "Offer", "price": "699", "priceCurrency": "CAD", "description": "One plan, everything included. $699/month USD or CAD, no per-seat fees for crew or customers."}, "description": "An AI copilot wired into QuickBooks Online, Gmail, and Google Calendar that runs a service business: conversational answers from live books, invoice and estimate drafting with tap-to-confirm, crew dispatch with no-app live job links, punch-clock time cards with overtime, customer Client Hub portals with one-tap quote approval, and a public booking page.", "featureList": ["AI copilot with live QuickBooks answers (text and voice)", "Invoice and estimate drafting with tap-to-confirm posting", "Mark invoices paid, print invoices, send payment reminders", "Receipt Radar: automatic receipt capture from Gmail plus photo receipts", "Crew dispatch: roster, one-tap dispatch emails, morning day sheets", "Crew live links: job status taps, turn-by-turn navigation, no app install", "Punch-clock time cards: server-stamped hours, Alberta overtime, payroll CSV export", "Client Hub: personal customer portals with live balance, invoices, one-tap quote approval, service history", "Public booking page with calendar conflict checking", "Leads pipeline with follow-up call list", "Dedicated business phone number with same-second missed-call auto-text and automatic lead capture", "Google review reply drafting with owner approval", "Business memory and Advisor Mode", "No per-seat fees for crew members or customers"]}]}</script>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <nav class="sitenav">
+      <a class="brand" href="/"><img src="/assets/logo-mark-96.png" alt="Ledger AI"><b>Ledger AI</b><span class="bcaret">▾</span></a>
+      <div class="links">
+        <a href="/">Home</a>
+        <div class="drop">
+          <span>Platform ▾</span>
+          <div class="menu">
+            <a href="/features/ai/">🧠 The AI Copilot</a>
+            <a href="/features/crew/">🛠 Crew Command</a>
+            <a href="/features/client-hub/">💎 Client Hub</a>
+            <a href="/features/invoicing/">📄 Invoicing &amp; Getting Paid</a>
+            <a href="/features/booking/">📅 Booking &amp; Front Desk</a>
+            <a href="/features/phone/">📞 Business Phone</a>
+          </div>
+        </div>
+        <div class="drop">
+          <span>Integrations ▾</span>
+          <div class="menu">
+            <a href="/integrations/quickbooks/"><img class="mico" src="/assets/icons/quickbooks.svg" alt=""> QuickBooks Online</a>
+            <a href="/integrations/gmail/"><img class="mico" src="/assets/icons/gmail.svg" alt=""> Gmail — Receipt Radar</a>
+            <a href="/integrations/google-calendar/"><img class="mico" src="/assets/icons/googlecalendar.svg" alt=""> Google Calendar</a>
+            <a href="/integrations/google-business/"><img class="mico" src="/assets/icons/googlebusiness.svg" alt=""> Google Business Profile</a>
+          </div>
+        </div>
+        <a href="#pricing">Pricing</a>
+        <a href="/support/">Support</a>
+        <a href="/privacy/">Privacy</a>
+      </div>
+      <div class="navcta">
+        <a class="btn ghost sm" href="/app.html">Sign in</a>
+        <a class="btn primary sm" href="/app.html">Open the app →</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap narrow">
+    <img class="mark-hero" src="/assets/logo-full-640.png" alt="Ledger AI logo">
+    <div class="say"><i class="dot"></i>Say "Hey Ledger" — or just type</div>
+    <h1>The AI that<br><span class="grad">runs your shop.</span></h1>
+    <p class="lead">Books, crew, and customers — one platform with an AI operator at the center. It answers from your live QuickBooks, dispatches your crew with live job links and time cards, gives every customer their own portal, and books the next job. Type it or talk to it — and nothing acts without your confirm.</p>
+    <div class="cta-row">
+      <a class="btn primary" href="/app.html">Open Ledger AI →</a>
+      <a class="btn ghost" href="#pricing">See pricing</a>
+    </div>
+
+    <div class="chatdemo herodemo" id="heroDemo">
+      <div class="chead">
+        <span class="hicon" id="heroChIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.5.6 3.8.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.6.6 3.8.1.4 0 .8-.3 1.1L6.6 10.8Z"/></svg></span>
+        <b id="heroChLabel">Missed-call feed</b>
+        <span class="live"><i></i><span id="heroChLive">Same-second auto-text</span></span>
+      </div>
+      <div class="hstage" id="heroStage">
+
+        <div class="hscene active" data-scene="0">
+          <div class="q"><span class="hicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.5.6 3.8.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.6.6 3.8.1.4 0 .8-.3 1.1L6.6 10.8Z"/></svg></span>Incoming call — (403) 555-0148 · 2:41 PM</div>
+          <div class="readout">
+            <div class="rline warn" style="--d:0"><span class="k">RANG OUT</span><span class="v">No answer</span><span class="k2">4 rings · to voicemail</span></div>
+            <div class="rsep" style="--d:1"></div>
+            <div class="rline sum" style="--d:2"><span class="k">AUTO-TEXT</span><span class="v">0:04 later</span><span class="k2">business-hours template</span></div>
+            <div class="rrow" style="--d:3"><span class="doc">Sent</span><span class="due">"Sorry we missed you! This is KMJ Tire — we'll call you right back. Text us here anytime."</span></div>
+            <div class="rsep" style="--d:4"></div>
+            <div class="rline" style="--d:5"><span class="k">CALLER</span><span class="v">Saved</span><span class="k2">landed in Leads · status: new</span></div>
+            <div class="rrow" style="--d:6"><span class="doc">Voicemail</span><span class="due">"Needs 4 tires for an F-150, wants Friday."</span></div>
+            <div class="rfoot" style="--d:7">Lead created — ready for callback<span class="cursor"></span></div>
+          </div>
+        </div>
+
+        <div class="hscene" data-scene="1">
+          <div class="q"><span class="prompt">›</span>Who owes me money right now?</div>
+          <div class="readout">
+            <div class="rline sum" style="--d:0"><span class="k">RECEIVABLE</span><span class="v">$9,764</span><span class="k2">19 open invoices</span></div>
+            <div class="rsep" style="--d:1"></div>
+            <div class="rline warn" style="--d:2"><span class="k">OVERDUE</span><span class="v">$890</span></div>
+            <div class="rrow" style="--d:3"><span class="doc">#7741</span><span class="due">due Aug 12</span><span class="amt">$162.75</span></div>
+            <div class="rrow" style="--d:4"><span class="doc">#7802</span><span class="due">due Aug 15</span><span class="amt">$351.75</span></div>
+            <div class="rsep" style="--d:5"></div>
+            <div class="rline" style="--d:6"><span class="k">LARGEST OUT</span><span class="v">$2,763.60</span><span class="k2">#7818 · due Tuesday</span></div>
+            <div class="rfoot" style="--d:7">Want me to chase them? → <b>2 reminders drafted</b><span class="cursor"></span></div>
+          </div>
+        </div>
+
+        <div class="hscene" data-scene="2">
+          <div class="q"><span class="hicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5a1 1 0 0 1 1-1h2.2l1-1.7A1 1 0 0 1 9 5.3h6a1 1 0 0 1 .9.5l1 1.7H19a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8.5Z"/><circle cx="12" cy="13" r="3.4"/></svg></span>Receipt photo captured · 4:12 PM</div>
+          <div class="readout">
+            <div class="rline" style="--d:0"><span class="k">PARSED</span><span class="v">Foothills Auto Supply</span><span class="k2">Shop Supplies</span></div>
+            <div class="rsep" style="--d:1"></div>
+            <div class="rline sum" style="--d:2"><span class="k">AMOUNT</span><span class="v">$84.00</span></div>
+            <div class="rrow" style="--d:3"><span class="doc">Filed</span><span class="due">Posted to QuickBooks as a Bill</span></div>
+            <div class="rsep" style="--d:4"></div>
+            <div class="rline" style="--d:5"><span class="k">PROFIT TODAY</span><span class="v">$1,184<span class="delta">was $1,268</span></span><span class="k2">updated live</span></div>
+            <div class="rfoot" style="--d:6">Today's profit updated automatically<span class="cursor"></span></div>
+          </div>
+        </div>
+
+      </div>
+      <div class="stabs" id="heroTabs">
+        <button type="button" class="stab active" data-idx="0" aria-label="Show missed-call rescue demo"></button>
+        <button type="button" class="stab" data-idx="1" aria-label="Show Ask Ledger demo"></button>
+        <button type="button" class="stab" data-idx="2" aria-label="Show receipt to profit demo"></button>
+      </div>
+    </div>
+
+    <div class="badgerow">
+      <span>iPhone</span><span>Android</span><span>Web</span><span>Live Voice</span><span>Built in Canada</span>
+    </div>
+  </div>
+</div>
+
+
+<section>
+  <div class="wrap">
+    <div class="oshead"><span class="dash"></span><span class="code">Ledger OS // Platform</span></div>
+    <h2 class="sectitle">One platform. <span class="grad">The whole operation.</span></h2>
+    <p class="subtext">Five pillars, each deep enough to replace something you're paying for today — and none of them charge per seat.</p>
+    <div style="height:40px"></div>
+    <div class="grid two intgrid">
+      <a class="intcard gold" href="/features/ai/">
+        <span class="glow"></span>
+        <div class="top"><div class="ic">🧠</div><h3>The AI Copilot</h3><span class="go">→</span></div>
+        <p>An executive operator wired into everything below. Ask anything, act with one confirm, get briefed like an owner.</p>
+      </a>
+      <a class="intcard cyan" href="/features/crew/">
+        <span class="glow"></span>
+        <div class="top"><div class="ic">🛠</div><h3>Crew Command</h3><span class="go">→</span></div>
+        <p>Dispatch, day sheets, live job links with turn-by-turn, a real punch clock, and payroll-ready time cards with overtime — your crew needs no app and costs $0/seat.</p>
+      </a>
+      <a class="intcard purple" href="/features/client-hub/">
+        <span class="glow"></span>
+        <div class="top"><div class="ic">💎</div><h3>Client Hub</h3><span class="go">→</span></div>
+        <p>Every customer gets a personal portal: live balance, itemized invoices, one-tap quote approval, appointments, history. No accounts, no apps.</p>
+      </a>
+      <a class="intcard emerald" href="/features/invoicing/">
+        <span class="glow"></span>
+        <div class="top"><div class="ic">📄</div><h3>Invoicing &amp; Getting Paid</h3><span class="go">→</span></div>
+        <p>Invoices and estimates drafted by conversation, confirmed by you. Mark-paid, printing, reminders, and a live who-owes-you watch.</p>
+      </a>
+      <a class="intcard orange" href="/features/booking/">
+        <span class="glow"></span>
+        <div class="top"><div class="ic">📅</div><h3>Booking &amp; Front Desk</h3><span class="go">→</span></div>
+        <p>A public booking page with no signup wall, conflict-checked scheduling, a leads pipeline with a call list, and to-dos that keep score.</p>
+      </a>
+      <a class="intcard blue" href="/features/phone/">
+        <span class="glow"></span>
+        <div class="top"><div class="ic">📞</div><h3>Business Phone</h3><span class="go">→</span></div>
+        <p>A dedicated business number: missed calls get a same-second auto-text, the caller lands as a saved lead, and voicemail plays right in the feed.</p>
+      </a>
+      <a class="intcard red" href="/#pricing">
+        <span class="glow"></span>
+        <div class="top"><div class="ic">🚫</div><h3>No per-seat fees. Ever.</h3><span class="go">→</span></div>
+        <p>Crew links, client portals, time cards — the things others meter by the user — are simply included. Five crew or fifteen: same price.</p>
+      </a>
+    </div>
+  </div>
+</section>
+<section>
+  <div class="wrap">
+    <div class="oshead"><span class="dash"></span><span class="code">Ledger OS // Capabilities</span></div>
+    <h2 class="sectitle">An employee who <span class="grad">never sleeps</span></h2>
+    <p class="subtext">Not a chatbot with opinions — a copilot wired into the tools you already run your business on, live.</p>
+    <div style="height:44px"></div>
+    <div class="grid">
+      <div class="card purple">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 12.5h5"/></svg></div>
+        <h3>Type it, or talk to it</h3>
+        <p>Ask in plain text, or hold the mic and just talk — live voice conversation, not a script. "Sales this month?" "Who's overdue?" "What's booked Monday?" Answers come from your real numbers, never made up.</p>
+      </div>
+      <div class="card orange">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></div>
+        <h3>Receipt Radar</h3>
+        <p>Connect your inbox and Ledger watches it for you — supplier bills and receipts get pulled out, read for vendor, total, GST and date, and queued for your review. Nothing posts to QuickBooks until you confirm the category.</p>
+      </div>
+      <div class="card gold">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
+        <h3>Photo receipts</h3>
+        <p>No inbox trail? Snap a picture of a paper receipt and it joins the exact same review-then-post pipeline as your email receipts — vendor, tax, and total read automatically.</p>
+      </div>
+      <div class="card cyan">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 16.5h6"/></svg></div>
+        <h3>Invoicing, drafted and printed</h3>
+        <p>Ledger drafts the invoice or estimate from the conversation; you tap Confirm before anything posts to QuickBooks. Ask it to print any invoice or estimate by number and it pulls the document straight from your books.</p>
+      </div>
+      <div class="card emerald">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18M9.5 15.5l2 2 3.5-3.5"/></svg></div>
+        <h3>Bookings that actually check your calendar</h3>
+        <p>Ledger drafts the appointment, checks Google Calendar for a real time conflict before it books, and blocks the double-booking unless you deliberately override it.</p>
+      </div>
+      <div class="card blue">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>
+        <h3>Missed calls, recovered automatically</h3>
+        <p>A dedicated business number auto-texts anyone who calls and can't reach you, saves them as a lead, and plays their voicemail right in the feed. <a href="/features/phone/" style="color:inherit;text-decoration:underline">The whole phone story →</a></p>
+      </div>
+      <div class="card red">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M15 9.5c0-1.4-1.3-2-3-2s-3 .7-3 2c0 2.8 6 1.4 6 4.5 0 1.4-1.3 2-3 2s-3-.6-3-2"/></svg></div>
+        <h3>Who-owes-you-money watch</h3>
+        <p>Open invoices, overdue amounts, and the biggest ones coming due — surfaced the moment you ask, pulled live from QuickBooks, never a stale export.</p>
+      </div>
+      <div class="card purple">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.3.8-4.6 4.3 1.2 6.1L12 16.9l-5.6 2.9 1.2-6.1L3 9.4l6.3-.8z"/></svg></div>
+        <h3>Google review replies</h3>
+        <p>Ledger reads your Google Business reviews and drafts a reply in your voice. It never publishes on its own — you approve every word before it goes live.</p>
+      </div>
+      <div class="card cyan">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 7V4M14 7V4M10 20v-3M14 20v-3M7 10H4M7 14H4M20 10h-3M20 14h-3"/><circle cx="12" cy="12" r="1.6"/></svg></div>
+        <h3>Business memory that learns</h3>
+        <p>Tell it a rate you charge, a policy, a supplier — it remembers, permanently, and uses it in every future conversation. Live numbers always come fresh from your books; only the facts about how you run things get remembered.</p>
+      </div>
+      <div class="card cyan">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <h3>Crew dispatch &amp; live links</h3>
+        <p>Assign a job and dispatch it in one tap — your crew get a personal link with the route, turn-by-turn navigation, and On my way → On site → Done taps that land on your calendar live. <a href="/features/crew/" style="color:inherit;text-decoration:underline">The whole crew story →</a></p>
+      </div>
+      <div class="card emerald">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></div>
+        <h3>Punch clock &amp; time cards</h3>
+        <p>Crew clock in and out on their own link — server-stamped, correction-safe, with Alberta overtime split automatically and a one-tap payroll export. <a href="/features/crew/" style="color:inherit;text-decoration:underline">See time cards →</a></p>
+      </div>
+      <div class="card purple">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M12 22V12M3 7l9 5 9-5"/></svg></div>
+        <h3>Client Hub portals</h3>
+        <p>Every customer gets a personal magic link — live balance, itemized invoices, quotes they approve with one tap, appointments, and history. <a href="/features/client-hub/" style="color:inherit;text-decoration:underline">Inside the Client Hub →</a></p>
+      </div>
+      <div class="card gold">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 1 3.7 10.7c-.7.6-.7 1.3-.7 2.3h-6c0-1 0-1.7-.7-2.3A6 6 0 0 1 12 3z"/></svg></div>
+        <h3>Advisor Mode</h3>
+        <p>Flip one switch and it becomes your business consultant — marketing, pricing, hiring, growth — grounded in your actual sales and customer data, not generic tips.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="tight">
+  <div class="wrap">
+    <div class="oshead"><span class="dash"></span><span class="code">Ledger OS // Integrations</span></div>
+    <h2 class="sectitle">Plugs into what you <span class="grad">already run</span></h2>
+    <p class="subtext">Four connections, each read-and-confirm — Ledger never acts without your say-so.</p>
+    <div style="height:40px"></div>
+    <div class="grid two intgrid">
+      <a class="intcard cyan" href="/integrations/quickbooks/">
+        <span class="glow"></span>
+        <div class="top"><div class="ic"><img src="/assets/icons/quickbooks.svg" alt="QuickBooks"></div><h3>QuickBooks Online</h3><span class="go">→</span></div>
+        <p>Your books, live. Invoices, customers, P&amp;L and sales — read for every answer, written only when you confirm.</p>
+      </a>
+      <a class="intcard orange" href="/integrations/gmail/">
+        <span class="glow"></span>
+        <div class="top"><div class="ic"><img src="/assets/icons/gmail.svg" alt="Gmail"></div><h3>Gmail — Receipt Radar</h3><span class="go">→</span></div>
+        <p>Supplier bills detected the moment they land, extracted, and queued for your review before anything posts.</p>
+      </a>
+      <a class="intcard emerald" href="/integrations/google-calendar/">
+        <span class="glow"></span>
+        <div class="top"><div class="ic"><img src="/assets/icons/googlecalendar.svg" alt="Google Calendar"></div><h3>Google Calendar</h3><span class="go">→</span></div>
+        <p>Real conflict-checking on every booking Ledger drafts — no accidental double-books, ever.</p>
+      </a>
+      <a class="intcard purple" href="/integrations/google-business/">
+        <span class="glow"></span>
+        <div class="top"><div class="ic"><img src="/assets/icons/googlebusiness.svg" alt="Google Business Profile"></div><h3>Google Business Profile</h3><span class="go">→</span></div>
+        <p>Reviews land in the app; Ledger drafts the reply, you approve it, then it publishes.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="wrap">
+    <div class="oshead"><span class="dash"></span><span class="code">Ledger OS // Pricing</span></div>
+    <h2 class="sectitle">One plan. <span class="grad">Everything on.</span></h2>
+    <p class="subtext">Priced in your own currency — no conversion surprises.</p>
+    <div style="height:40px"></div>
+    <div class="price"><div class="inner">
+      <div class="plantag">Everything included</div>
+      <div class="amount">$699</div>
+      <div class="per">per month · USD or CAD</div>
+      <ul>
+        <li><em><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></em><span><b>Unlimited conversations</b> within your monthly AI allowance, against your live books &amp; calendar</span></li>
+        <li><em><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></em><span><b>Built-in business phone number</b> — missed-call auto-text, voicemail transcripts, every caller saved as a lead</span></li>
+        <li><em><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></em><span><b>Invoice, estimate &amp; booking drafting</b> with tap-to-confirm</span></li>
+        <li><em><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></em><span><b>Advisor Mode</b> business guidance</span></li>
+        <li><em><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></em><span><b>Automatic receipt capture</b> from your inbox, plus photo receipts</span></li>
+        <li><em><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></em><span><b>$150/month AI allowance</b> included — top-ups anytime</span></li>
+        <li><em><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></em><span><b>Crew Command</b> — dispatch, live links, day sheets, punch clock &amp; time cards, unlimited crew</span></li>
+        <li><em><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></em><span><b>Client Hub</b> — a personal portal for every customer, quote approvals included</span></li>
+        <li><em><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></em><span><b>No per-seat fees</b> — crew and customers are always included</span></li>
+        <li><em><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></em><span><b>iPhone, Android &amp; web</b> — type or talk</span></li>
+      </ul>
+      <a class="btn primary wide" href="/app.html">Get started →</a>
+      <p class="fine">Sign in, connect QuickBooks, and you're talking to your books in minutes.</p>
+    </div></div>
+  </div>
+</section>
+
+<section class="tight">
+  <div class="wrap narrow">
+    <div class="ctaband">
+      <h2>Ready to talk to your books?</h2>
+      <p>No setup calls, no onboarding project. Sign in and connect QuickBooks in under a minute.</p>
+      <a class="btn primary" href="/app.html">Open Ledger AI →</a>
+    </div>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="fwrap">
+      <div class="fbrand"><img src="/assets/logo-mark-96.png" alt=""> Ledger AI — built by business owners, for business owners.</div>
+      <div class="flinks">
+        <a href="/features/ai/">AI Copilot</a>
+        <a href="/features/crew/">Crew</a>
+        <a href="/features/client-hub/">Client Hub</a>
+        <a href="/features/invoicing/">Invoicing</a>
+        <a href="/features/booking/">Booking</a>
+        <a href="/features/phone/">Business Phone</a>
+        <a href="/privacy/">Privacy</a>
+        <a href="/support/">Support</a>
+        <a href="/integrations/quickbooks/">QuickBooks</a>
+        <a href="/integrations/gmail/">Gmail</a>
+        <a href="/integrations/google-calendar/">Calendar</a>
+        <a href="/integrations/google-business/">Reviews</a>
+        <a href="mailto:supportteam@heyledger.ai">supportteam@heyledger.ai</a>
+      </div>
+      <div class="copy">© 2026 Ledger AI — made in Calgary, Alberta, Canada.</div>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/nav.js?v=28"></script>
+<script src="/assets/herodemo.js?v=1"></script>
+</body>
+</html>

@@ -56,6 +56,27 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
 .clockbtn:disabled{opacity:.5}
 .clockbtn.in{color:#03181d;background:linear-gradient(135deg,var(--emerald),#6ee7b7);box-shadow:0 10px 34px rgba(52,211,153,.35)}
 .clockbtn.out{color:#1a1002;background:linear-gradient(135deg,var(--amber),#fcd34d);box-shadow:0 10px 34px rgba(251,191,36,.3)}
+/* Availability pill. Sits under the punch clock because it answers the same
+   question the clock does — am I working — and because a man who is off is
+   about to look for the clock and should find this instead. */
+.availcard{border:1px solid var(--line);border-radius:18px;background:rgba(16,21,28,.7);padding:14px 15px;margin:0 0 16px}
+.availcard.off{border-color:rgba(248,113,113,.4);background:rgba(38,20,24,.6)}
+.availrow{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.availlabel{font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+.availnow{font-size:16px;font-weight:700;margin-top:3px}
+.availsub{color:var(--dim);font-size:12px;margin-top:3px}
+.availtoggle{flex-shrink:0;display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:5px;background:rgba(7,9,13,.6);cursor:pointer}
+.availtoggle span{padding:8px 13px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.03em;color:var(--dim);transition:all .18s}
+.availtoggle .on{color:#03181d;background:linear-gradient(135deg,var(--emerald),#6ee7b7)}
+.availtoggle .offsel{color:#2a0f12;background:linear-gradient(135deg,var(--red),#fca5a5)}
+.availsheet{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.availsheet h4{margin:0 0 9px;font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+.chiprow{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.chip{border:1px solid var(--line);background:rgba(7,9,13,.6);color:var(--text);border-radius:999px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+.chip[aria-pressed="true"]{border-color:var(--cyan);background:rgba(34,211,238,.16);color:var(--cyan)}
+.availgo{width:100%;padding:14px;border:0;border-radius:14px;font-size:14px;font-weight:800;letter-spacing:.04em;cursor:pointer;color:#2a0f12;background:linear-gradient(135deg,var(--red),#fca5a5)}
+.availgo:disabled{opacity:.5}
+.availcancel{width:100%;margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:14px;background:transparent;color:var(--dim);font-size:13px;font-weight:700;cursor:pointer}
 .daymeter{display:flex;align-items:center;gap:10px;margin:2px 0 18px;padding:13px 15px;border-radius:16px;background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.25)}
 .daymeter .bar{flex:1;height:7px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
 .daymeter .fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--cyan),var(--emerald));box-shadow:0 0 12px rgba(52,211,153,.6);transition:width .5s ease}
@@ -98,6 +119,7 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
       <span class="badge"><span class="dot"></span><span id="datebadge"></span></span>
     </div>
     <div id="clock"></div>
+    <div id="avail"></div>
     <div id="jobs"></div>
   </div>
 
@@ -281,8 +303,112 @@ function renderClock(clock) {
   };
 }
 
+// ---- Availability (Kyle 2026-08-31) ----
+// One pill, two taps, no typing and no date picker. A tech does this at 6 AM
+// with one thumb, sometimes from bed. Everything here optimises for that.
+const REASON_LABELS = { sick: "Sick", appointment: "Appointment", personal: "Personal", "time-off": "Time off" };
+const SPANS = [
+  { key: "today", label: "Today" },
+  { key: "today-tomorrow", label: "Today + tomorrow" },
+  { key: "tomorrow", label: "Tomorrow" },
+  { key: "week", label: "This week" },
+];
+let availOpen = false;
+let availReason = "sick";
+let availSpan = "today";
+
+function prettyDay(iso) {
+  const d = new Date(`${iso}T12:00:00`);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+}
+
+// "Back Wednesday" is the whole point of forcing an end date — the tech can
+// see the shop is not going to forget he exists.
+function absenceSummary(a) {
+  const label = REASON_LABELS[a.reason] || "Off";
+  const one = a.startOn === a.endOn;
+  const back = new Date(`${a.endOn}T12:00:00`);
+  back.setDate(back.getDate() + 1);
+  const backLabel = back.toLocaleDateString([], { weekday: "long" });
+  return one
+    ? `${label} — ${prettyDay(a.startOn)}. Back ${backLabel}.`
+    : `${label} — ${prettyDay(a.startOn)} to ${prettyDay(a.endOn)}. Back ${backLabel}.`;
+}
+
+function renderAvail(availability) {
+  const host = $("avail");
+  if (!availability) { host.innerHTML = ""; return; }
+  const a = availability.absence;
+  const off = !!a;
+  host.innerHTML = `<div class="availcard${off ? " off" : ""}">
+    <div class="availrow">
+      <div>
+        <div class="availlabel">Availability</div>
+        <div class="availnow">${off ? "Unavailable" : "Available"}</div>
+        <div class="availsub">${off ? escapeHtml(absenceSummary(a)) : "You're on the schedule and can be dispatched."}</div>
+      </div>
+      <div class="availtoggle" id="availtoggle" role="button" tabindex="0">
+        <span class="${off ? "" : "on"}">Available</span>
+        <span class="${off ? "offsel" : ""}">Off</span>
+      </div>
+    </div>
+    ${off ? `<button class="availcancel" id="availback">I'm back — cancel this</button>` : ""}
+    ${(!off && availOpen) ? `<div class="availsheet">
+      <h4>Reason</h4>
+      <div class="chiprow">${Object.keys(REASON_LABELS).map((k) =>
+        `<button class="chip" data-reason="${k}" aria-pressed="${availReason === k}">${REASON_LABELS[k]}</button>`).join("")}</div>
+      <h4>How long</h4>
+      <div class="chiprow">${SPANS.map((sp) =>
+        `<button class="chip" data-span="${sp.key}" aria-pressed="${availSpan === sp.key}">${sp.label}</button>`).join("")}</div>
+      <button class="availgo" id="availgo">LET THE SHOP KNOW</button>
+    </div>` : ""}
+  </div>`;
+
+  $("availtoggle").onclick = () => {
+    if (off) return; // Coming back is the explicit button below, never a stray tap.
+    availOpen = !availOpen;
+    renderAvail(availability);
+  };
+  document.querySelectorAll("[data-reason]").forEach((b) => {
+    b.onclick = () => { availReason = b.dataset.reason; renderAvail(availability); };
+  });
+  document.querySelectorAll("[data-span]").forEach((b) => {
+    b.onclick = () => { availSpan = b.dataset.span; renderAvail(availability); };
+  });
+  if ($("availgo")) $("availgo").onclick = () => sendAvailability({ reason: availReason, span: availSpan }, $("availgo"));
+  if ($("availback")) $("availback").onclick = () => sendAvailability({ available: true }, $("availback"));
+}
+
+async function sendAvailability(payload, btn) {
+  if (busy) return;
+  busy = true; btn.disabled = true;
+  const restore = btn.textContent;
+  btn.textContent = "…";
+  try {
+    const r = await fetch(FN, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "crew-link/availability", token, ...payload }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      if (r.status === 404) { showExpired(d.error || "This link is no longer active."); busy = false; return; }
+      alert(d.error || "Couldn't update that — try again.");
+      busy = false; btn.disabled = false; btn.textContent = restore; return;
+    }
+    availOpen = false;
+    busy = false;
+    render(d);
+  } catch (e) {
+    alert("Couldn't update that — check your connection.");
+    busy = false; btn.disabled = false; btn.textContent = restore;
+  }
+}
+
 function render(data) {
   renderClock(data.clock);
+  renderAvail(data.availability);
   $("greeting").textContent = `Hi, ${data.crewMemberName || "there"}`;
   $("bizline").textContent = data.business ? `${data.business} — today's jobs` : "Today's jobs";
   const d = new Date(`${data.date}T12:00:00`);
