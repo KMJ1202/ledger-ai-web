@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://lbzkyyehmgudlxmfpzzh.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b0f14">
-<meta name="description" content="Ledger AI privacy policy — what we collect, where it lives, who processes it, and how to delete your data.">
+<meta name="description" content="Ledger AI support — how to reach us and what to include in a support request.">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<title>Privacy Policy — Ledger AI</title>
-<link rel="stylesheet" href="/assets/styles.css?v=39">
+<title>Support — Ledger AI</title>
+<link rel="stylesheet" href="/assets/styles.css?v=38">
+<link rel="stylesheet" href="/assets/support-widget.css?v=2">
 <style>
 
 
@@ -22,7 +23,6 @@ h1{font-size:clamp(28px,5vw,40px);font-weight:900;letter-spacing:-1px;margin-bot
 .meta{color:var(--dim);font-size:14px;margin-bottom:36px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px 26px;margin-bottom:18px}
 h2{font-size:19px;font-weight:800;margin-bottom:12px;color:var(--text)}
-h2 .ico{margin-right:8px}
 p{color:var(--dim);font-size:15px;margin-bottom:10px}
 p:last-child{margin-bottom:0}
 ul{list-style:none;margin:6px 0 4px}
@@ -30,7 +30,8 @@ li{padding:6px 0 6px 20px;position:relative;color:var(--dim);font-size:14.5px}
 li:before{content:"→";position:absolute;left:0;color:var(--cyan)}
 li b{color:var(--text)}
 a{color:var(--cyan)}
-.callout{border:1px solid rgba(34,211,238,.35);background:rgba(34,211,238,.06);border-radius:14px;padding:16px 18px;margin-top:14px;font-size:14px;color:var(--dim)}
+.emailbox{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.35);border-radius:14px;padding:18px 20px;margin-top:8px}
+.emailbox b{font-size:17px}
 footer{border-top:1px solid var(--line);padding:34px 0;color:var(--dim);font-size:13px;text-align:center}
 footer a{color:var(--dim)}
 </style>
@@ -62,7 +63,6 @@ footer a{color:var(--dim)}
             <a href="/integrations/google-business/"><img class="mico" src="/assets/icons/googlebusiness.svg" alt=""> Google Business Profile</a>
           </div>
         </div>
-        <a href="/#app">In the app</a>
         <a href="#pricing">Pricing</a>
         <a href="/support/">Support</a>
         <a href="/privacy/">Privacy</a>
@@ -77,79 +77,40 @@ footer a{color:var(--dim)}
 <div class="pagewrap">
 
   <main>
-    <h1>Privacy Policy</h1>
-    <div class="meta">Effective August 22, 2026 &middot; Ledger AI, Calgary, Alberta, Canada</div>
+    <h1>Support</h1>
+    <div class="meta">Ledger AI, Calgary, Alberta, Canada</div>
 
     <div class="card">
-      <p>Ledger AI is a business copilot: it connects to the tools you already run your business on and answers questions about your own data. This page explains, plainly, what we collect, why, where it lives, who else touches it, and how to get rid of it.</p>
+      <h2>Get in touch</h2>
+      <div class="emailbox">
+        <span>Email us anytime:</span>
+        <b><a href="mailto:supportteam@heyledger.ai">supportteam@heyledger.ai</a></b>
+      </div>
+      <p style="margin-top:14px">We aim to reply within <b style="color:var(--text)">1 business day</b>.</p>
     </div>
 
     <div class="card">
-      <h2>What we collect, and why</h2>
-      <p>We only collect what's needed to run the features you turn on. Every connection below requires your explicit OAuth consent — nothing connects itself.</p>
+      <h2>What to include</h2>
+      <p>To get you sorted faster, please include:</p>
       <ul>
-        <li><b>Account &amp; billing</b> — your name, email, and subscription status, so you can sign in and we know your plan is active. Card details are handled entirely by Stripe; they never reach our servers.</li>
-        <li><b>QuickBooks Online</b> — invoices, customers, and sales/P&amp;L data, so the assistant can answer questions about your books and, when you ask it to, draft invoices or expenses. Nothing posts to QuickBooks without your confirmation.</li>
-        <li><b>Gmail</b> — read access to find supplier receipt and invoice emails for the Receipt Radar feature, so incoming costs get captured automatically instead of you forwarding them by hand.</li>
-        <li><b>Google Calendar</b> — read and create access, so the assistant can tell you what's booked and add appointments you ask it to schedule.</li>
-        <li><b>Google Business Profile</b> — your business reviews, so the assistant can surface and help you respond to them.</li>
-        <li><b>Receipt photos</b> — images you snap of paper receipts, stored privately and accessed only through signed, time-limited URLs.</li>
-        <li><b>Conversations with the assistant</b> — what you type or say, plus the business data needed to answer it, so the assistant can hold a conversation and remember context within a session.</li>
-        <li><b>Usage metering</b> — token counts and cost per request, so we can enforce your plan's monthly AI allowance.</li>
+        <li>The <b>email address</b> your Ledger AI account is registered under.</li>
+        <li>What you were doing when the issue happened (e.g. "asking about overdue invoices," "connecting QuickBooks," "photographing a receipt").</li>
+        <li>What you expected to happen, and what happened instead.</li>
+        <li>A screenshot, if you have one — it helps a lot.</li>
       </ul>
     </div>
 
     <div class="card">
-      <h2>Where it lives</h2>
-      <p>Your account data, receipts, and conversation history are stored with <b>Supabase</b> (database, authentication, and file storage), running in their cloud infrastructure. Receipt images are kept in private storage and served only through signed URLs that expire — they are not publicly accessible.</p>
-    </div>
-
-    <div class="card">
-      <h2>Who processes it</h2>
-      <p>We don't build our own AI models or payment rails — we use a small number of named processors to run the service:</p>
+      <h2>Common requests</h2>
       <ul>
-        <li><b>Anthropic</b> (Claude models) — receives your conversation content and the business data needed to answer it, as the processor behind the AI assistant's text responses.</li>
-        <li><b>OpenAI</b> (Realtime API) — receives audio/conversation content when you use voice mode, as the processor behind spoken conversations.</li>
-        <li><b>Supabase</b> — hosts our database, authentication, and file storage.</li>
-        <li><b>Stripe</b> — processes subscription payments. Your card number never touches Ledger AI's servers.</li>
-        <li><b>Google</b> (Gmail, Calendar, Business Profile) and <b>Intuit</b> (QuickBooks Online) — the source systems you connect; we read from and, where you direct us to, write to their APIs under the OAuth permissions you grant.</li>
+        <li><b>Reconnect QuickBooks, Gmail, or Calendar</b> — go to Settings → Connections in the app, or ask us and we'll help.</li>
+        <li><b>Billing / subscription questions</b> — email us; we can look up your Stripe subscription status.</li>
+        <li><b>Delete your account</b> — Settings → Delete account in the app, or email us and we'll remove it for you. This is permanent and removes your workspace, receipts, conversations, and connections.</li>
       </ul>
     </div>
 
     <div class="card">
-      <h2>What we never do</h2>
-      <ul>
-        <li>We do not sell your data to anyone.</li>
-        <li>We do not use your data to train AI models — yours or anyone else's.</li>
-        <li>We do not share your data beyond the named processors above, and only for the purpose of running the service.</li>
-      </ul>
-    </div>
-
-    <div class="card">
-      <h2>Retention</h2>
-      <p>We keep your workspace data — receipts, conversations, and connected-account data — for as long as your account is active. If you delete your account, that data is permanently removed rather than archived. Usage metering records are kept for billing and support purposes for the life of the account.</p>
-    </div>
-
-    <div class="card">
-      <h2>Deletion</h2>
-      <p>You can delete your account and all associated data two ways:</p>
-      <ul>
-        <li><b>In-app</b> — Settings → Delete account.</li>
-        <li><b>By email</b> — write to <a href="mailto:supportteam@heyledger.ai">supportteam@heyledger.ai</a> and ask us to delete your account.</li>
-      </ul>
-      <p>Either path permanently removes your workspace, receipts, conversations, and connected-account tokens. This cannot be undone.</p>
-    </div>
-
-    <div class="card">
-      <h2>Gmail and Google user data</h2>
-      <p>Ledger AI's use and transfer of information received from Google APIs to any other app will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
-      <div class="callout">In practice: Gmail access is read-only and used solely to detect supplier receipt/invoice emails for Receipt Radar. We do not use Gmail content for advertising, and we do not let humans read your email except as needed to debug a support request you've raised, with your knowledge.</div>
-    </div>
-
-    <div class="card">
-      <h2>Contact</h2>
-      <p>Questions about this policy or your data: <a href="mailto:supportteam@heyledger.ai">supportteam@heyledger.ai</a>.</p>
-      <p>Ledger AI, Calgary, Alberta, Canada.</p>
+      <p>Read the <a href="/privacy/">Privacy Policy</a> for details on what we collect and how it's handled, or head back to the <a href="/">Ledger AI home page</a>.</p>
     </div>
   </main>
 
@@ -177,7 +138,6 @@ footer a{color:var(--dim)}
         <a href="/integrations/google-business/">Google Business Profile</a>
       </div>
       <div class="fcol"><h5>Company</h5>
-        <a href="/#app">In the app</a>
         <a href="/#pricing">Pricing</a>
         <a href="/support/">Support</a>
         <a href="/privacy/">Privacy</a>
@@ -189,5 +149,6 @@ footer a{color:var(--dim)}
 </footer>
 </div>
 <script src="/assets/nav.js?v=29"></script>
+<script src="/assets/support-widget.js?v=1" defer></script>
 </body>
 </html>

@@ -12,7 +12,7 @@
 <meta property="og:image" content="https://heyledger.ai//assets/logo-full-640.png">
 <meta property="og:type" content="website">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/assets/styles.css?v=39">
+<link rel="stylesheet" href="/assets/styles.css?v=38">
 <title>Ledger AI — Your business, on speaking terms</title>
 <link rel="canonical" href="https://heyledger.ai/">
 <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "Organization", "@id": "https://heyledger.ai/#org", "name": "Ledger AI", "url": "https://heyledger.ai/", "logo": "https://heyledger.ai//assets/logo-full-640.png", "email": "supportteam@heyledger.ai", "address": {"@type": "PostalAddress", "addressLocality": "Calgary", "addressRegion": "AB", "addressCountry": "CA"}, "description": "Ledger AI is the AI business platform for small service businesses: live QuickBooks answers, AI-drafted invoicing, crew dispatch with live job links and time cards, customer portals, and booking — with no per-seat fees."}, {"@type": "WebSite", "@id": "https://heyledger.ai/#website", "url": "https://heyledger.ai/", "name": "Ledger AI", "publisher": {"@id": "https://heyledger.ai/#org"}}, {"@type": "SoftwareApplication", "@id": "https://heyledger.ai/#app", "name": "Ledger AI", "operatingSystem": "iOS, Web", "applicationCategory": "BusinessApplication", "url": "https://heyledger.ai/", "publisher": {"@id": "https://heyledger.ai/#org"}, "offers": {"@type": "Offer", "price": "699", "priceCurrency": "CAD", "description": "One plan, everything included. $699/month USD or CAD. Crew and customer access is always free; additional owner-level teammates are $299/month each."}, "description": "An AI copilot that runs a service business on QuickBooks Online or its own built-in books, wired into Gmail and Google Calendar: conversational answers from live books, invoice and estimate drafting with tap-to-confirm, crew dispatch with no-app live job links, punch-clock time cards with overtime, customer Client Hub portals with one-tap quote approval, and a public booking page.", "featureList": ["AI copilot with live QuickBooks answers (text and voice)", "Invoice and estimate drafting with tap-to-confirm posting", "Built-in books: numbered, taxed invoicing without QuickBooks", "Online card payments via Stripe with hosted payment pages", "Estimate share pages customers accept or decline in one tap", "Night-before appointment reminder texts", "Mark invoices paid, print invoices, send payment reminders", "Receipt Radar: automatic receipt capture from Gmail plus photo receipts", "Crew dispatch: roster, one-tap dispatch emails, morning day sheets", "Crew live links: job status taps, turn-by-turn navigation, no app install", "Punch-clock time cards: server-stamped hours, adjustable overtime rules, payroll CSV export", "Client Hub: personal customer portals with live balance, invoices, one-tap quote approval, service history", "Public booking page with calendar conflict checking", "Leads pipeline with follow-up call list", "Dedicated business phone number with same-second missed-call auto-text and automatic lead capture", "Google review reply drafting with owner approval", "Business memory and Advisor Mode", "No per-seat fees for crew members or customers"]}]}</script>
@@ -45,7 +45,6 @@
             <a href="/integrations/google-business/"><img class="mico" src="/assets/icons/googlebusiness.svg" alt=""> Google Business Profile</a>
           </div>
         </div>
-        <a href="/#app">In the app</a>
         <a href="#pricing">Pricing</a>
         <a href="/support/">Support</a>
         <a href="/privacy/">Privacy</a>
@@ -69,7 +68,10 @@
       <a class="btn ghost" href="#pricing">See pricing</a>
     </div>
 
-    <div class="phonewrap"><div class="phoneframe floaty"><div class="screen tint-home"><div class="lbar" aria-hidden="true"><span class="lmark"><img src="/assets/logo-mark-96.png" alt=""></span><span class="lname">Ledger AI</span><span class="lbtn av"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a4.2 4.2 0 1 0 0-8.4 4.2 4.2 0 0 0 0 8.4zm0 2c-4 0-7.5 2-7.5 4.6V20h15v-1.4C19.5 16 16 14 12 14z"/></svg></span></div><div class="lbody"><div class="idcard"><span class="logo"><img src="/assets/logo-mark-96.png" alt=""></span><div><h4>Ledger AI</h4><p>Your business, answered.</p><div class="st"><i></i>Ready</div></div></div><div class="setrow"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span><div><b>Business profile &amp; settings</b><small>Connections · branding · team</small></div><span class="go">↗</span></div><div class="gcard pu"><div class="askhead"><b><i></i><span id="heroChLabel">Ask Ledger</span></b><span class="lv"><i></i><span id="heroChLive">Live</span><span id="heroChIcon" hidden></span></span></div><div class="chatdemo herodemo" id="heroDemo"><div class="hstage" id="heroStage">
+    <div class="phonewrap"><div class="phoneframe floaty"><div class="screen">
+    <div class="apphead"><div class="aposhead"><span class="dash"></span><span class="code">LEDGER OS // <b id="heroChLabel">Missed-call feed</b></span><span class="eq"><i></i><i></i><i></i></span></div><h3 class="apostitle">Ledger</h3><div class="aposrule"></div><div class="apstatus"><i class="dot"></i><span id="heroChLive">Same-second auto-text</span><span id="heroChIcon" hidden></span></div></div>
+    <div class="chatdemo herodemo" id="heroDemo">
+      <div class="hstage" id="heroStage">
 
         <div class="hscene active" data-scene="0">
           <div class="appchat">
@@ -100,11 +102,16 @@
           </div>
         </div>
 
-      </div><div class="stabs" id="heroTabs">
+      </div>
+      <div class="stabs" id="heroTabs">
         <button type="button" class="stab active" data-idx="0" aria-label="Show missed-call rescue demo"></button>
         <button type="button" class="stab" data-idx="1" aria-label="Show Ask Ledger demo"></button>
         <button type="button" class="stab" data-idx="2" aria-label="Show receipt to profit demo"></button>
-      </div></div><div class="acomposer" aria-hidden="true"><span class="field">How much profit did we make today?</span><span class="send">↑</span></div><div class="chips" aria-hidden="true"><span><i style="background:var(--emerald)"></i>Profit today</span><span><i style="background:var(--gold)"></i>Reply to review</span><span><i style="background:var(--orange)"></i>Who owes me?</span><span><i style="background:var(--blue)"></i>Missed calls</span><span><i style="background:var(--magenta)"></i>Tomorrow's day</span><span><i style="background:var(--red)"></i>File this receipt</span></div></div></div><div class="apptabs" aria-hidden="true"><span class="on"><svg viewBox="0 0 24 24"><path d="M12 2.6l1.9 4.4 4.4 1.9-4.4 1.9L12 15.2l-1.9-4.4L5.7 8.9l4.4-1.9L12 2.6zm6.4 11.1l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1zm-12 1.2l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7L4 18l1.7-.7.7-1.7z"/></svg>Ledger</span><span><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm.9 15.4v1.2h-1.6v-1.2c-1.6-.2-2.8-1.1-3-2.7h1.8c.1.8.8 1.3 2 1.3 1.1 0 1.8-.5 1.8-1.2 0-.7-.5-1-2-1.4-2.1-.5-3.3-1.2-3.3-2.9 0-1.5 1.1-2.5 2.7-2.7V6.6h1.6v1.2c1.6.3 2.6 1.3 2.7 2.7h-1.8c-.1-.8-.7-1.3-1.7-1.3-1 0-1.7.5-1.7 1.1 0 .7.6 1 2 1.3 2.2.5 3.3 1.3 3.3 3 0 1.5-1.1 2.6-2.8 2.8z"/></svg>Finance</span><span><svg viewBox="0 0 24 24"><path d="M7 2v2H5.5A2.5 2.5 0 003 6.5v13A2.5 2.5 0 005.5 22h13a2.5 2.5 0 002.5-2.5v-13A2.5 2.5 0 0018.5 4H17V2h-2v2H9V2H7zm12 8v9.2c0 .4-.3.8-.8.8H5.8a.8.8 0 01-.8-.8V10h14zM7.5 12a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zM7.5 16a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2z"/></svg>Calendar</span><span><b class="bd" data-n="2"></b><svg viewBox="0 0 24 24"><path d="M6.6 2.6l3.6.6.9 4.2-2.3 1.8c.9 2.3 2.7 4.1 5 5l1.8-2.3 4.2.9.6 3.6c0 1.4-1.1 2.6-2.6 2.6C9.8 19 5 14.2 5 5.2c0-1.4 1.2-2.6 1.6-2.6z"/></svg>Phone</span><span><svg viewBox="0 0 24 24"><path d="M9 4.5a3.4 3.4 0 110 6.8 3.4 3.4 0 010-6.8zm7.6 1a2.7 2.7 0 110 5.4 2.7 2.7 0 010-5.4zM9 13c3.1 0 6 1.5 6 3.4V19H3v-2.6C3 14.5 5.9 13 9 13zm7.6.6c2.6 0 4.4 1.2 4.4 2.7V19h-4.6v-2.6c0-1.1-.5-2-1.3-2.7h1.5z"/></svg>Customers</span></div></div></div></div>
+      </div>
+    </div>
+    <div class="acomposer" aria-hidden="true"><span class="field">Ask Ledger anything…</span><span class="send">↑</span></div>
+    <div class="apptabs" aria-hidden="true"><span class="on"><svg viewBox="0 0 24 24"><path d="M12 2.6l1.9 4.4 4.4 1.9-4.4 1.9L12 15.2l-1.9-4.4L5.7 8.9l4.4-1.9L12 2.6zm6.4 11.1l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1zm-12 1.2l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7L4 18l1.7-.7.7-1.7z"/></svg>Ledger</span><span><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm.9 15.4v1.2h-1.6v-1.2c-1.6-.2-2.8-1.1-3-2.7h1.8c.1.8.8 1.3 2 1.3 1.1 0 1.8-.5 1.8-1.2 0-.7-.5-1-2-1.4-2.1-.5-3.3-1.2-3.3-2.9 0-1.5 1.1-2.5 2.7-2.7V6.6h1.6v1.2c1.6.3 2.6 1.3 2.7 2.7h-1.8c-.1-.8-.7-1.3-1.7-1.3-1 0-1.7.5-1.7 1.1 0 .7.6 1 2 1.3 2.2.5 3.3 1.3 3.3 3 0 1.5-1.1 2.6-2.8 2.8z"/></svg>Finance</span><span><svg viewBox="0 0 24 24"><path d="M7 2v2H5.5A2.5 2.5 0 003 6.5v13A2.5 2.5 0 005.5 22h13a2.5 2.5 0 002.5-2.5v-13A2.5 2.5 0 0018.5 4H17V2h-2v2H9V2H7zm12 8v9.2c0 .4-.3.8-.8.8H5.8a.8.8 0 01-.8-.8V10h14zM7.5 12a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zM7.5 16a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2z"/></svg>Calendar</span><span><svg viewBox="0 0 24 24"><path d="M6.6 2.6l3.6.6.9 4.2-2.3 1.8c.9 2.3 2.7 4.1 5 5l1.8-2.3 4.2.9.6 3.6c0 1.4-1.1 2.6-2.6 2.6C9.8 19 5 14.2 5 5.2c0-1.4 1.2-2.6 1.6-2.6z"/></svg>Phone</span><span><svg viewBox="0 0 24 24"><path d="M9 4.5a3.4 3.4 0 110 6.8 3.4 3.4 0 010-6.8zm7.6 1a2.7 2.7 0 110 5.4 2.7 2.7 0 010-5.4zM9 13c3.1 0 6 1.5 6 3.4V19H3v-2.6C3 14.5 5.9 13 9 13zm7.6.6c2.6 0 4.4 1.2 4.4 2.7V19h-4.6v-2.6c0-1.1-.5-2-1.3-2.7h1.5z"/></svg>Customers</span></div>
+    </div></div></div>
 
     <div class="badgerow">
       <span>iPhone</span><span>Android</span><span>Web</span><span>Live Voice</span><span>Built in Canada</span>
@@ -117,7 +124,7 @@
   <div class="wrap">
     <div class="oshead"><span class="dash"></span><span class="code">Ledger OS // Platform</span></div>
     <h2 class="sectitle">One platform. <span class="grad">The whole operation.</span></h2>
-    <p class="subtext">Eight pillars, each deep enough to replace something you're paying for today — and none of them charge per seat.</p>
+    <p class="subtext">Seven pillars, each deep enough to replace something you're paying for today — and none of them charge per seat.</p>
     <div style="height:40px"></div>
     <div class="grid two intgrid">
       <a class="intcard gold" href="/features/ai/">
@@ -163,54 +170,6 @@
     </div>
   </div>
 </section>
-<section id="app" class="tight">
-  <div class="wrap">
-    <div class="oshead"><span class="dash"></span><span class="code">Ledger OS // In the app</span></div>
-    <h2 class="sectitle">Five tabs. <span class="grad">Everything in plain sight.</span></h2>
-    <p class="subtext">This is the whole app — every tab and every lane inside it, exactly as it ships on iPhone, Android and the web today. Nothing here is a roadmap.</p>
-    <div style="height:34px"></div>
-    <div class="tabmap">
-      <a class="tm cy" href="/features/ai/"><span class="ti"><svg viewBox="0 0 24 24"><path d="M12 2.6l1.9 4.4 4.4 1.9-4.4 1.9L12 15.2l-1.9-4.4L5.7 8.9l4.4-1.9L12 2.6zm6.4 11.1l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1zm-12 1.2l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7L4 18l1.7-.7.7-1.7z"/></svg></span><h3>Ledger</h3><div class="lanes"><span>Home</span><span>Ask Ledger</span><span>Live voice</span></div>
-        <ul><li><b>Business pulse</b> — sales, profit, bookings and calls for today, at a glance</li><li><b>Ask Ledger</b> — type or talk; answers come from your live books</li><li><b>Attention center</b> — what needs you, ranked, with a one-tap action</li><li><b>Reviews pulse</b>, tomorrow's day, inbox and shortcuts</li><li><b>Business profile &amp; settings</b> — connections, branding, team</li></ul><span class="more">The AI Copilot →</span></a>
-      <a class="tm em" href="/features/invoicing/"><span class="ti"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm.9 15.4v1.2h-1.6v-1.2c-1.6-.2-2.8-1.1-3-2.7h1.8c.1.8.8 1.3 2 1.3 1.1 0 1.8-.5 1.8-1.2 0-.7-.5-1-2-1.4-2.1-.5-3.3-1.2-3.3-2.9 0-1.5 1.1-2.5 2.7-2.7V6.6h1.6v1.2c1.6.3 2.6 1.3 2.7 2.7h-1.8c-.1-.8-.7-1.3-1.7-1.3-1 0-1.7.5-1.7 1.1 0 .7.6 1 2 1.3 2.2.5 3.3 1.3 3.3 3 0 1.5-1.1 2.6-2.8 2.8z"/></svg></span><h3>Finance</h3><div class="lanes"><span>Overview</span><span>Profit</span><span>Receipts</span></div>
-        <ul><li><b>Overview</b> — live sales, month-over-month, year-over-year, average sale, forecast</li><li><b>Profit</b> — sell minus real supplier cost per invoice, cost of operations, "needs cost" flags</li><li><b>Receipts</b> — Receipt Radar from Gmail plus snap-a-receipt, filed in a tap</li><li>Invoices and estimates drafted by conversation, posted on your confirm</li><li>Card payments, mark-paid, print, reminders, who-owes-you watch</li></ul><span class="more">Invoicing &amp; getting paid →</span></a>
-      <a class="tm go" href="/features/booking/"><span class="ti"><svg viewBox="0 0 24 24"><path d="M7 2v2H5.5A2.5 2.5 0 003 6.5v13A2.5 2.5 0 005.5 22h13a2.5 2.5 0 002.5-2.5v-13A2.5 2.5 0 0018.5 4H17V2h-2v2H9V2H7zm12 8v9.2c0 .4-.3.8-.8.8H5.8a.8.8 0 01-.8-.8V10h14zM7.5 12a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zM7.5 16a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2z"/></svg></span><h3>Calendar</h3><div class="lanes"><span>Next up</span><span>Run sheet</span><span>Crew</span></div>
-        <ul><li><b>Next up</b> — the countdown to your next job, who, what, which bay</li><li><b>Today · this week · this month</b> tiles and busiest-days chart</li><li><b>Today's run sheet</b> — every job in order, ticked as it's done</li><li>Public booking page with conflict checks; night-before reminder texts</li><li><b>Crew Command</b> — dispatch, day sheets, live job links, punch-clock time cards</li></ul><span class="more">Booking &amp; Crew →</span></a>
-      <a class="tm bl" href="/features/phone/"><span class="ti"><svg viewBox="0 0 24 24"><path d="M6.6 2.6l3.6.6.9 4.2-2.3 1.8c.9 2.3 2.7 4.1 5 5l1.8-2.3 4.2.9.6 3.6c0 1.4-1.1 2.6-2.6 2.6C9.8 19 5 14.2 5 5.2c0-1.4 1.2-2.6 1.6-2.6z"/></svg></span><h3>Phone</h3><div class="lanes"><span>Needs You</span><span>Today</span><span>Auto</span></div>
-        <ul><li><b>Needs You</b> — the customer waiting on you, with Call · Text · Book right on the card</li><li><b>Today</b> — every call, text and voicemail, written out</li><li><b>Auto</b> — Front Desk, missed-call auto-text, appointment reminders: on or off per lane</li><li>A dedicated business number, or keep the one you have</li><li>Missed caller saved as a lead the same second</li></ul><span class="more">Business Phone →</span></a>
-      <a class="tm mg" href="/features/client-hub/"><span class="ti"><svg viewBox="0 0 24 24"><path d="M9 4.5a3.4 3.4 0 110 6.8 3.4 3.4 0 010-6.8zm7.6 1a2.7 2.7 0 110 5.4 2.7 2.7 0 010-5.4zM9 13c3.1 0 6 1.5 6 3.4V19H3v-2.6C3 14.5 5.9 13 9 13zm7.6.6c2.6 0 4.4 1.2 4.4 2.7V19h-4.6v-2.6c0-1.1-.5-2-1.3-2.7h1.5z"/></svg></span><h3>Customers</h3><div class="lanes"><span>Directory</span><span>Reviews</span><span>To-do</span></div>
-        <ul><li><b>Directory</b> — every customer, revenue, owing, live from your books</li><li><b>Client Hub</b> — a personal portal per customer: balance, invoices, one-tap quote approval</li><li><b>Reviews</b> — Google reviews with a reply drafted in your voice, published on your approval</li><li><b>Ask for a review</b> — the recent customers worth asking, one tap</li><li><b>To-do</b> — follow-ups and call lists that keep score</li></ul><span class="more">Client Hub →</span></a>
-    </div>
-    <div class="fullfeat">
-      <div><span class="tick">✓</span><span><b>Live QuickBooks answers</b> — text or voice, from your real books</span></div>
-      <div><span class="tick">✓</span><span><b>Built-in books</b> — numbered, taxed invoicing without QuickBooks</span></div>
-      <div><span class="tick">✓</span><span><b>Invoice &amp; estimate drafting</b> — tap-to-confirm, never auto-posted</span></div>
-      <div><span class="tick">✓</span><span><b>Card payments</b> by Stripe with hosted pay pages</span></div>
-      <div><span class="tick">✓</span><span><b>Estimate share pages</b> — accept or decline in one tap</span></div>
-      <div><span class="tick">✓</span><span><b>Profit per invoice</b> — sell minus matched supplier cost</span></div>
-      <div><span class="tick">✓</span><span><b>Receipt Radar</b> — receipts pulled from Gmail, plus photo receipts</span></div>
-      <div><span class="tick">✓</span><span><b>Mark paid, print, remind</b> — and a live who-owes-you watch</span></div>
-      <div><span class="tick">✓</span><span><b>Crew dispatch</b> — roster, one-tap dispatch, morning day sheets</span></div>
-      <div><span class="tick">✓</span><span><b>Crew live links</b> — job status and turn-by-turn, no app install</span></div>
-      <div><span class="tick">✓</span><span><b>Punch-clock time cards</b> — server-stamped, overtime rules, payroll CSV</span></div>
-      <div><span class="tick">✓</span><span><b>Client Hub portals</b> — live balance, invoices, history, quote approval</span></div>
-      <div><span class="tick">✓</span><span><b>Public booking page</b> with calendar conflict checking</span></div>
-      <div><span class="tick">✓</span><span><b>Night-before reminder texts</b> — automatic, per appointment</span></div>
-      <div><span class="tick">✓</span><span><b>Dedicated business number</b> — or forward the one you have</span></div>
-      <div><span class="tick">✓</span><span><b>Same-second missed-call auto-text</b> — business-hours and after-hours templates</span></div>
-      <div><span class="tick">✓</span><span><b>Voicemail written out</b> — read it, don't play it</span></div>
-      <div><span class="tick">✓</span><span><b>Front Desk</b> — Ledger answers texts and voicemails when you can't</span></div>
-      <div><span class="tick">✓</span><span><b>Leads pipeline</b> — every missed caller saved, with a callback list</span></div>
-      <div><span class="tick">✓</span><span><b>Google review replies</b> — drafted in your voice, you approve every word</span></div>
-      <div><span class="tick">✓</span><span><b>Ask for a review</b> — the right customers, one tap</span></div>
-      <div><span class="tick">✓</span><span><b>Push notifications</b> — a customer texted, a review landed, a job needs cover</span></div>
-      <div><span class="tick">✓</span><span><b>Business memory &amp; Advisor Mode</b> — it remembers how you run things</span></div>
-      <div><span class="tick">✓</span><span><b>iPhone · Android · web</b> — one account, same app everywhere</span></div>
-      <div><span class="tick">✓</span><span><b>No per-seat fees</b> — crew and customers are always free</span></div>
-    </div>
-  </div>
-</section>
-
 <section class="tight">
   <div class="wrap">
     <div class="showcase">
@@ -225,7 +184,35 @@
         </div>
         <div class="cta-row"><a class="btn ghost" href="/integrations/google-business/">How review replies work →</a></div>
       </div>
-      <div class="phoneframe"><div class="screen tint-customers"><div class="lbar" aria-hidden="true"><span class="lmark"><img src="/assets/logo-mark-96.png" alt=""></span><span class="lname">Ledger AI</span><span class="lbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></span></div><h3 class="ltitle">Reviews</h3><div class="lpill" aria-hidden="true"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3 2.7-5 6-5s6 2 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.5c2.8 0 5 1.6 5 4.2"/></svg>Directory</span><span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.8-4.5 4.3 1.2 6.1L12 16.9l-5.5 2.9 1.2-6.1L3.2 9.4l6.1-.8z"/></svg>Reviews<b class="n">1</b></span><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3M4 12h3M4 17h3M10 7h10M10 12h10M10 17h10"/></svg>To-do</span></div><div class="lbody"><div class="gcard go"><div class="eb"><b style="color:var(--gold)">⭐ Google reviews</b><span class="r">Live · Google</span></div><p class="big">4.9 <small style="font-size:14px;color:var(--gold)">★★★★★</small></p><p class="sub">214 reviews · <b>1 waiting for your reply</b></p></div><div class="gcard mg"><div class="eb"><b style="color:var(--magenta)">New · 2h ago</b><span class="r" style="color:var(--gold)">★★★★★</span></div><p class="lbl">"In and out in 40 minutes, price was exactly what they quoted. Great crew."</p><p class="sub">— Sarah M.</p><div class="amsg ai" style="margin-top:9px;max-width:100%;font-size:12px">Thanks Sarah — quoted is what you pay, always. See you at the next rotation!</div><div class="arow" style="margin-top:8px"><span class="ab confirm">Approve &amp; publish</span><span class="ab cancel">Edit</span></div></div><div class="gcard"><div class="eb"><b>Review intelligence</b></div><div class="barrow"><b>5★</b><div class="tr"><i style="width:90%"></i></div><em>9</em></div><div class="barrow"><b>4★</b><div class="tr"><i style="width:10%"></i></div><em>1</em></div><div class="barrow"><b>3★</b><div class="tr"><i style="width:0"></i></div><em>0</em></div><p class="sub" style="margin-top:8px">9 of your last 10 reviews are five-star. Every one has an owner reply.</p></div></div><div class="apptabs" aria-hidden="true"><span><svg viewBox="0 0 24 24"><path d="M12 2.6l1.9 4.4 4.4 1.9-4.4 1.9L12 15.2l-1.9-4.4L5.7 8.9l4.4-1.9L12 2.6zm6.4 11.1l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1zm-12 1.2l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7L4 18l1.7-.7.7-1.7z"/></svg>Ledger</span><span><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm.9 15.4v1.2h-1.6v-1.2c-1.6-.2-2.8-1.1-3-2.7h1.8c.1.8.8 1.3 2 1.3 1.1 0 1.8-.5 1.8-1.2 0-.7-.5-1-2-1.4-2.1-.5-3.3-1.2-3.3-2.9 0-1.5 1.1-2.5 2.7-2.7V6.6h1.6v1.2c1.6.3 2.6 1.3 2.7 2.7h-1.8c-.1-.8-.7-1.3-1.7-1.3-1 0-1.7.5-1.7 1.1 0 .7.6 1 2 1.3 2.2.5 3.3 1.3 3.3 3 0 1.5-1.1 2.6-2.8 2.8z"/></svg>Finance</span><span><svg viewBox="0 0 24 24"><path d="M7 2v2H5.5A2.5 2.5 0 003 6.5v13A2.5 2.5 0 005.5 22h13a2.5 2.5 0 002.5-2.5v-13A2.5 2.5 0 0018.5 4H17V2h-2v2H9V2H7zm12 8v9.2c0 .4-.3.8-.8.8H5.8a.8.8 0 01-.8-.8V10h14zM7.5 12a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zM7.5 16a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2z"/></svg>Calendar</span><span><b class="bd" data-n="2"></b><svg viewBox="0 0 24 24"><path d="M6.6 2.6l3.6.6.9 4.2-2.3 1.8c.9 2.3 2.7 4.1 5 5l1.8-2.3 4.2.9.6 3.6c0 1.4-1.1 2.6-2.6 2.6C9.8 19 5 14.2 5 5.2c0-1.4 1.2-2.6 1.6-2.6z"/></svg>Phone</span><span class="on"><svg viewBox="0 0 24 24"><path d="M9 4.5a3.4 3.4 0 110 6.8 3.4 3.4 0 010-6.8zm7.6 1a2.7 2.7 0 110 5.4 2.7 2.7 0 010-5.4zM9 13c3.1 0 6 1.5 6 3.4V19H3v-2.6C3 14.5 5.9 13 9 13zm7.6.6c2.6 0 4.4 1.2 4.4 2.7V19h-4.6v-2.6c0-1.1-.5-2-1.3-2.7h1.5z"/></svg>Customers</span></div></div></div>
+      <div class="phoneframe"><div class="screen">
+        <div class="apphead"><div class="aposhead"><span class="dash"></span><span class="code">LEDGER OS // CRM.05 · RELATIONSHIPS</span><span class="eq"><i></i><i></i><i></i></span></div>
+        <h3 class="apostitle">Customers</h3><div class="aposrule"></div></div>
+        <div class="seg" aria-hidden="true"><span>Directory</span><span class="on">Reviews</span><span>To-do</span></div>
+        <div class="appbody2">
+          <div class="revhero">
+            <div class="t"><span class="eyebrow">&#128737; Reputation command</span><span class="livechip">LIVE · GOOGLE</span></div>
+            <div class="score"><b>4.9</b><div class="m"><span class="starrow">★★★★★</span><small>214 Google reviews</small></div></div>
+            <div class="pulse">
+              <div class="pm gold"><small>RATING</small><b>4.90</b><i>public average</i></div>
+              <div class="pm cyan"><small>REVIEWS</small><b>214</b><i>all time</i></div>
+              <div class="pm em"><small>UNANSWERED</small><b>0</b><i>all replied — elite</i></div>
+            </div>
+            <div class="bizname">YOUR SHOP&nbsp;&nbsp;|&nbsp;&nbsp;YOUR CITY</div>
+          </div>
+          <div class="revintel">
+            <div class="cihead">&#129504; REVIEW INTELLIGENCE</div>
+            <div class="cibar"><b>5★</b><div class="track"><i style="width:90%"></i></div><em>9</em></div>
+            <div class="cibar"><b>4★</b><div class="track"><i style="width:10%"></i></div><em>1</em></div>
+            <div class="cibar"><b>3★</b><div class="track"><i style="width:0%"></i></div><em>0</em></div>
+            <div class="cibar"><b>2★</b><div class="track"><i style="width:0%"></i></div><em>0</em></div>
+            <div class="cibar"><b>1★</b><div class="track"><i style="width:0%"></i></div><em>0</em></div>
+            <p class="ciline"><span class="icx" style="color:var(--emerald)">&#10024;</span>9 of your last 10 reviews are five-star.</p>
+            <p class="ciline"><span class="icx" style="color:var(--emerald)">&#9989;</span>Every recent review has an owner reply. That consistency is rare and customers notice.</p>
+            <p class="ciline"><span class="icx" style="color:var(--magenta)">&#128337;</span>Newest review landed 2d ago.</p>
+          </div>
+        </div>
+        <div class="apptabs" aria-hidden="true"><span><svg viewBox="0 0 24 24"><path d="M12 2.6l1.9 4.4 4.4 1.9-4.4 1.9L12 15.2l-1.9-4.4L5.7 8.9l4.4-1.9L12 2.6zm6.4 11.1l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1zm-12 1.2l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7L4 18l1.7-.7.7-1.7z"/></svg>Ledger</span><span><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm.9 15.4v1.2h-1.6v-1.2c-1.6-.2-2.8-1.1-3-2.7h1.8c.1.8.8 1.3 2 1.3 1.1 0 1.8-.5 1.8-1.2 0-.7-.5-1-2-1.4-2.1-.5-3.3-1.2-3.3-2.9 0-1.5 1.1-2.5 2.7-2.7V6.6h1.6v1.2c1.6.3 2.6 1.3 2.7 2.7h-1.8c-.1-.8-.7-1.3-1.7-1.3-1 0-1.7.5-1.7 1.1 0 .7.6 1 2 1.3 2.2.5 3.3 1.3 3.3 3 0 1.5-1.1 2.6-2.8 2.8z"/></svg>Finance</span><span><svg viewBox="0 0 24 24"><path d="M7 2v2H5.5A2.5 2.5 0 003 6.5v13A2.5 2.5 0 005.5 22h13a2.5 2.5 0 002.5-2.5v-13A2.5 2.5 0 0018.5 4H17V2h-2v2H9V2H7zm12 8v9.2c0 .4-.3.8-.8.8H5.8a.8.8 0 01-.8-.8V10h14zM7.5 12a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zM7.5 16a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2zm4.5 0a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2z"/></svg>Calendar</span><span><svg viewBox="0 0 24 24"><path d="M6.6 2.6l3.6.6.9 4.2-2.3 1.8c.9 2.3 2.7 4.1 5 5l1.8-2.3 4.2.9.6 3.6c0 1.4-1.1 2.6-2.6 2.6C9.8 19 5 14.2 5 5.2c0-1.4 1.2-2.6 1.6-2.6z"/></svg>Phone</span><span class="on"><svg viewBox="0 0 24 24"><path d="M9 4.5a3.4 3.4 0 110 6.8 3.4 3.4 0 010-6.8zm7.6 1a2.7 2.7 0 110 5.4 2.7 2.7 0 010-5.4zM9 13c3.1 0 6 1.5 6 3.4V19H3v-2.6C3 14.5 5.9 13 9 13zm7.6.6c2.6 0 4.4 1.2 4.4 2.7V19h-4.6v-2.6c0-1.1-.5-2-1.3-2.7h1.5z"/></svg>Customers</span></div>
+      </div></div>
     </div>
   </div>
 </section>
@@ -437,7 +424,6 @@
         <a href="/integrations/google-business/">Google Business Profile</a>
       </div>
       <div class="fcol"><h5>Company</h5>
-        <a href="/#app">In the app</a>
         <a href="/#pricing">Pricing</a>
         <a href="/support/">Support</a>
         <a href="/privacy/">Privacy</a>

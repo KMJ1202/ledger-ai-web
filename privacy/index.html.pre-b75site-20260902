@@ -8,7 +8,7 @@
 <meta name="description" content="Ledger AI privacy policy — what we collect, where it lives, who processes it, and how to delete your data.">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <title>Privacy Policy — Ledger AI</title>
-<link rel="stylesheet" href="/assets/styles.css?v=39">
+<link rel="stylesheet" href="/assets/styles.css?v=38">
 <style>
 
 
@@ -62,7 +62,6 @@ footer a{color:var(--dim)}
             <a href="/integrations/google-business/"><img class="mico" src="/assets/icons/googlebusiness.svg" alt=""> Google Business Profile</a>
           </div>
         </div>
-        <a href="/#app">In the app</a>
         <a href="#pricing">Pricing</a>
         <a href="/support/">Support</a>
         <a href="/privacy/">Privacy</a>
@@ -177,7 +176,6 @@ footer a{color:var(--dim)}
         <a href="/integrations/google-business/">Google Business Profile</a>
       </div>
       <div class="fcol"><h5>Company</h5>
-        <a href="/#app">In the app</a>
         <a href="/#pricing">Pricing</a>
         <a href="/support/">Support</a>
         <a href="/privacy/">Privacy</a>
