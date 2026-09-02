@@ -56,6 +56,12 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
 .clockbtn:disabled{opacity:.5}
 .clockbtn.in{color:#03181d;background:linear-gradient(135deg,var(--emerald),#6ee7b7);box-shadow:0 10px 34px rgba(52,211,153,.35)}
 .clockbtn.out{color:#1a1002;background:linear-gradient(135deg,var(--amber),#fcd34d);box-shadow:0 10px 34px rgba(251,191,36,.3)}
+.clockcard.stale{background:linear-gradient(160deg,rgba(251,113,133,.55),rgba(251,191,36,.3) 55%,rgba(251,113,133,.12))}
+.stalecard{border-radius:16px;padding:13px 14px;margin:0 0 13px;background:rgba(251,113,133,.1);border:1px solid rgba(251,113,133,.35)}
+.staletitle{font-size:15px;font-weight:800;color:#fda4af}
+.stalesub{color:var(--dim);font-size:12px;line-height:1.45;margin:5px 0 11px}
+.stalebtn{width:100%;padding:14px 16px}
+.stalenote{border-radius:14px;padding:11px 13px;margin:0 0 13px;font-size:12.5px;line-height:1.4;color:#a7f3d0;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3)}
 /* Availability pill. Sits under the punch clock because it answers the same
    question the clock does — am I working — and because a man who is off is
    about to look for the clock and should find this instead. */
@@ -251,13 +257,26 @@ function fmtHMS(totalSeconds) {
   const s = Math.floor(totalSeconds % 60);
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
+// Build 73: a punch left open on an earlier day used to be a dead end — the
+// card said "off the clock" while CLOCK IN failed with "already on the clock".
+// Now the card names the day, offers a one-tap close, and CLOCK IN itself
+// closes the old shift on the way in. The shop gets that shift flagged to fix.
+let staleNotice = "";
 function renderClock(clock) {
   if (clockTicker) { clearInterval(clockTicker); clockTicker = null; }
   if (!clock) { $("clock").innerHTML = ""; return; }
   const baseSeconds = clock.todaySeconds || 0;
   const baseAt = Date.now();
-  const on = clock.clockedIn;
-  $("clock").innerHTML = `<div class="clockcard${on ? " on" : ""}"><div class="in">
+  const stale = clock.staleOpen || null;
+  const on = clock.clockedIn && !stale;
+  const staleBlock = stale ? `<div class="stalecard">
+      <div class="staletitle">You never clocked out ${escapeHtml(prettyDay(stale.day))}</div>
+      <div class="stalesub">That shift is still open from ${new Date(stale.clockInAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. Close it here — the shop will set the real end time. Clocking in also closes it.</div>
+      <button class="clockbtn out stalebtn" id="stalebtn">CLOSE THAT SHIFT</button>
+    </div>` : "";
+  const noticeBlock = staleNotice ? `<div class="stalenote">${escapeHtml(staleNotice)}</div>` : "";
+  $("clock").innerHTML = `<div class="clockcard${on ? " on" : ""}${stale ? " stale" : ""}"><div class="in">
+    ${staleBlock}${noticeBlock}
     <div class="clockrow">
       <div>
         <div class="clocklabel" style="color:${on ? "var(--amber)" : "var(--emerald)"}">
@@ -276,15 +295,14 @@ function renderClock(clock) {
       if (el) el.textContent = fmtHMS(baseSeconds + Math.round((Date.now() - baseAt) / 1000));
     }, 1000);
   }
-  $("clockbtn").onclick = async () => {
-    const btn = $("clockbtn");
+  const punch = async (direction, btn) => {
     if (busy) return;
     busy = true; btn.disabled = true; btn.textContent = "…";
     try {
       const r = await fetch(FN, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "crew-link/clock", token, direction: on ? "out" : "in" }),
+        body: JSON.stringify({ action: "crew-link/clock", token, direction }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -293,6 +311,7 @@ function renderClock(clock) {
         busy = false; renderClock(clock); return;
       }
       busy = false;
+      staleNotice = d.staleClosed ? `${prettyDay(d.staleClosed)}'s shift is closed. The shop will set the real end time.` : "";
       render(d);
       return;
     } catch (e) {
@@ -300,6 +319,9 @@ function renderClock(clock) {
       busy = false; renderClock(clock);
     }
   };
+  $("clockbtn").onclick = () => punch(on ? "out" : "in", $("clockbtn"));
+  const staleBtn = $("stalebtn");
+  if (staleBtn) staleBtn.onclick = () => punch("out", staleBtn);
 }
 
 // ---- Availability (Kyle 2026-08-31) ----
