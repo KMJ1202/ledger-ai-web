@@ -196,7 +196,7 @@ const segIc = (k) => SEG_ICONS[k] ? `<svg class="sic" viewBox="0 0 24 24">${SEG_
 function osHead(code, title) {
   return `<div>
     <div class="oshead"><span class="dash"></span>
-      <span class="code">LEDGER OS // ${esc(code)}</span>
+      <span class="code">${esc(code)}</span>
       <span class="eq"><i></i><i></i><i></i></span></div>
     <h2 class="ostitle">${esc(title)}</h2>
     <div class="osrule"></div>
@@ -241,7 +241,18 @@ function appView() {
   $("send").onclick = () => send();
   banner();
   if (!$("chat").childElementCount) {
-    sys("Connected to your live books and calendar. Ask me anything — sales, who owes you, your week ahead.");
+    sys("Hi — I'm Ledger. Ask me anything about your business: sales, who owes you, your week ahead.");
+    // Say what is actually connected instead of promising live books on an empty workspace.
+    connectionStates().then(async (map) => {
+      if (map.quickbooks || map.google_calendar) return;
+      if (S.booksProvider === undefined) {
+        try { S.booksProvider = (await booksApi({ action: "settings" })).provider; } catch { S.booksProvider = "quickbooks"; }
+      }
+      if ($("chat").childElementCount !== 1) return;
+      sys(S.booksProvider === "native"
+        ? "Your built-in books are on. Use QuickBooks? Tap Connect QuickBooks on the Home tab and I'll work from your real numbers."
+        : "Nothing's connected yet — tap Connect QuickBooks on the Home tab to bring your books in.");
+    });
   }
   renderTab();
   refreshUsage();
@@ -276,6 +287,24 @@ function renderTab() {
 
 function applyLaunchIntent() {
   const q = new URLSearchParams(location.search);
+  // Back from Stripe: say plainly whether the card went through and when the trial ends.
+  const state = q.get("state");
+  if (state === "success") {
+    history.replaceState({}, "", location.pathname);
+    api("/stripe-billing/status", {}).then((s) => {
+      const when = s.trial_ends_at ? dateShort(s.trial_ends_at) : null;
+      const msg = s.subscription_status === "trialing" && when
+        ? `✅ Card added. Your free trial runs until ${when} — nothing is charged before then.`
+        : "✅ You're subscribed — thank you. Manage it any time under Business profile & settings.";
+      openChat(); sys(msg); toast("Card saved");
+    }).catch(() => { openChat(); sys("✅ Payment received — thank you."); });
+    return;
+  }
+  if (state === "cancelled") {
+    history.replaceState({}, "", location.pathname);
+    toast("No charge made — you can add a card any time from the Home tab.");
+    return;
+  }
   if (q.get("go") === "chat") openChat();
   const ask = q.get("ask");
   if (ask) { openChat(); $("box").value = ask; send(); }
@@ -331,23 +360,25 @@ async function renderHome() {
   const logo = S.profile?.business?.logo_url;
   view().innerHTML = `
     <div class="sect">
-      ${osHead("CORE.01 · COMMAND", "Ledger")}
+      ${osHead("HOME", "Ledger")}
       <div class="brandcard">
         <div class="tile">${logo ? `<img src="${esc(logo)}" alt="">` : '<img src="assets/logo-mark-96.png" alt="">'}</div>
         <div class="who"><b class="chrome">Ledger AI</b><span>Your business, answered.</span></div>
         <span class="status"><i></i>READY</span>
       </div>
 
+      <div id="homesetup"></div>
+
       <button class="bizrow" id="bizsettings">
         <span class="ic">&#9881;</span>
-        <span class="m"><b>Business profile &amp; settings</b><small>CONNECTIONS · BRANDING · BOOKS</small></span>
+        <span class="m"><b>Business profile &amp; settings</b><small>CONNECTIONS · BOOKS · PHONE · TEAM · BILLING</small></span>
         <span class="go">&#8599;</span>
       </button>
 
       <div class="console">
         <div class="chead">
           <b>Ask Ledger</b>
-          <span class="core">AI CORE // ONLINE</span>
+          <span class="core">ONLINE</span>
           <button class="livepill" id="livebtn"><span class="wv"><i></i><i></i><i></i><i></i></span>LIVE</button>
         </div>
         <div class="askfield">
@@ -405,7 +436,7 @@ async function renderHome() {
   // Ledger Live (realtime voice) is an iPhone capability — say so rather than fake an orb.
   $("livebtn").onclick = () => toast("Ledger Live voice runs in the iPhone app");
   $("askcam").onclick = () => { S.financeLane = "receipts"; setTab("finance"); };
-  $("bizsettings").onclick = () => bizSettingsSheet();
+  $("bizsettings").onclick = () => businessSheet();
   on("[data-goto]", "click", (e) => {
     const k = e.currentTarget.dataset.goto;
     if (k === "receipts") { S.financeLane = "receipts"; setTab("finance"); }
@@ -415,49 +446,62 @@ async function renderHome() {
     else setTab(k);
   });
   on("[data-ask]", "click", (e) => { openChat(); $("box").value = e.currentTarget.dataset.ask; send(); });
+  loadHomeSetup();
   loadHomeKpis();
   loadHomeMail();
   loadHomeNext();
   loadHomeAttention();
 }
 
-// Business profile & settings hub — the web twin of the iOS settings row (build 41).
-// Each row deep-links to the surface that already owns that setting.
-async function bizSettingsSheet() {
-  if (S.booksProvider === undefined) {
-    try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
-    catch { S.booksProvider = "quickbooks"; }
-  }
-  const native = S.booksProvider === "native";
-  const row = (id, icon, title, detail) => `<button class="revbtn" id="${id}">
-      <span class="ic">${icon}</span><span class="m"><b>${esc(title)}</b><span>${esc(detail)}</span></span>
-      <span class="chev">&#8250;</span></button>`;
-  sheet(`<h2>Business profile &amp; settings</h2>
-    <p class="sh-sub">${esc(S.profile?.business?.name || "Your business")}</p>
-    <div class="cmpsect">
-      ${native ? row("bzbooks", "&#9881;", "Books settings", "Tax, numbering, branding, payment info")
-        : row("bzbooks", "&#9881;", "Books connection", "This workspace runs on QuickBooks Online")}
-      ${native ? row("bzcard", "&#128179;", "Card payments", "Stripe setup — get paid online") : ""}
-      ${row("bzphone", "&#128222;", "Phone & Front Desk", "Number, reminders, auto-replies")}
-      ${row("bzconn", "&#128279;", "Connected services", "QuickBooks, Calendar, Gmail, Reviews")}
-    </div>`, (sh) => {
-    sh.querySelector("#bzbooks").onclick = () => {
-      closeSheet();
-      if (native) booksSettingsSheet();
-      else { S.financeLane = "invoices"; setTab("finance"); }
-    };
-    const card = sh.querySelector("#bzcard");
-    if (card) card.onclick = async () => {
-      try { const r = await booksApi({ action: "connect-onboard" }); if (r.url) window.open(r.url, "_blank"); }
-      catch (e) { toast(e.message, "err"); }
-    };
-    sh.querySelector("#bzphone").onclick = () => { closeSheet(); setTab("phone"); };
-    sh.querySelector("#bzconn").onclick = () => { closeSheet(); S.lane = "reviews"; setTab("customers"); };
-  });
+// Three-step setup checklist at the top of Home for a workspace that is not
+// fully set up: books, calendar, card. Every step deep-links to the action.
+// Disappears on its own when all three are done, or when the owner hides it.
+const SETUP_HIDE_KEY = "ledger.setupHidden";
+async function loadHomeSetup() {
+  const slot = $("homesetup"); if (!slot) return;
+  if (localStorage.getItem(SETUP_HIDE_KEY) === "1") return;
+  let map = {}, bill = null;
+  try { [map, bill] = await Promise.all([connectionStates(), api("/stripe-billing/status", {}).catch(() => null)]); } catch {}
+  if (!$("homesetup")) return;
+  const books = !!map.quickbooks;
+  const cal = !!map.google_calendar;
+  const paid = bill && ["active", "past_due"].includes(bill.subscription_status);
+  if (books && cal && paid) return;
+  const step = (done, num, title, detail, action) => `<div class="setupstep${done ? " done" : ""}">
+      <span class="num">${done ? "&#10003;" : num}</span>
+      <span class="m"><b>${title}</b><small>${detail}</small></span>
+      ${done ? "" : action}</div>`;
+  const trialLine = bill?.subscription_status === "trialing" && bill.trial_ends_at
+    ? `Free until ${dateShort(bill.trial_ends_at)} — add a card so nothing stops on day 15.` : "Keep Ledger running after your trial.";
+  slot.innerHTML = `<div class="setupcard">
+    <div class="lanehead" style="margin-top:0"><span class="eyebrow">&#9889; Get set up</span><button class="pill" id="setuphide" title="Hide">Hide</button></div>
+    ${step(books, 1, "Connect QuickBooks", books ? "" : "Bring your invoices, customers and numbers in. Every post is confirmed by you first.",
+      `<button class="btn primary" data-connect="/quickbooks-oauth/start">Connect</button>`)}
+    ${step(cal, 2, "Connect Google Calendar", "See your week and let Ledger book jobs — every booking still needs your tap.",
+      `<button class="btn ghost" data-connect="/google-calendar/start">Connect</button>`)}
+    ${step(paid, 3, "Add a card", trialLine,
+      bill?.billing_ready ? `<button class="btn ghost" id="setupcard">Add card</button>` : "")}
+    ${books ? "" : `<p class="note" style="margin:8px 0 0">Don't use QuickBooks? Ledger's built-in books are already on — invoices, estimates and payment links work today.</p>`}
+  </div>`;
+  wireConnect(slot);
+  const hide = slot.querySelector("#setuphide");
+  if (hide) hide.onclick = () => { localStorage.setItem(SETUP_HIDE_KEY, "1"); slot.innerHTML = ""; };
+  const card = slot.querySelector("#setupcard");
+  if (card) card.onclick = async () => {
+    card.disabled = true;
+    try { const c = await api("/stripe-billing/checkout", {}); location.href = c.url; }
+    catch (e) { card.disabled = false; toast(e.message, "err"); }
+  };
 }
 
+// Business profile & settings hub — the web twin of the iOS settings row (build 41).
+// Each row deep-links to the surface that already owns that setting.
+// One settings surface (2026-09-02): the gear row and the avatar open the same
+// sheet. "Connected services" used to bounce to the Reviews page — dead end.
+async function bizSettingsSheet() { return businessSheet(); }
+
 function kpiBlock(k) {
-  return `<div class="eyebrow" style="margin-bottom:-3px">LIVE BOOKS</div><div class="kpis">
+  return `<div class="eyebrow" style="margin-bottom:-3px">FROM QUICKBOOKS</div><div class="kpis">
       <div class="kpi cyan"><small>Today's sales</small><b>${money0(k.today_sales)}</b></div>
       <div class="kpi em"><small>This month</small><b>${money0(k.month_sales)}</b></div>
       <div class="kpi gold"><small>Outstanding</small><b>${money0(k.outstanding)}</b><i>${k.open_count ?? 0} open invoice${(k.open_count ?? 0) === 1 ? "" : "s"}</i></div>
@@ -477,7 +521,10 @@ async function loadHomeKpis() {
       slot.innerHTML = kpiBlock(S.qbo?.qbo?.kpis || {}) +
         `<p class="note err" style="margin-top:8px">Couldn't refresh just now — showing the last numbers Ledger has. ${esc(e.message)}</p>`;
     } else {
-      slot.innerHTML = /not connected/i.test(e.message) ? connectPanel("qbo")
+      // Not connected: the setup checklist at the top of Home already carries
+      // the Connect button — don't show it twice on one screen.
+      slot.innerHTML = /not connected/i.test(e.message)
+        ? (localStorage.getItem(SETUP_HIDE_KEY) === "1" ? connectPanel("qbo") : "")
         : `<div class="panel"><p class="sub">Couldn't reach QuickBooks: ${esc(e.message)}</p></div>`;
       wireConnect(slot);
     }
@@ -685,7 +732,7 @@ async function emailSheet(m) {
 }
 
 /* ---------------- FINANCE ---------------- */
-const FINANCE_CODE = { invoices: "FIN.02 · REVENUE GRID", profit: "FIN.02 · PROFIT & LOSS", receipts: "EXP.04 · EXPENSE INTAKE" };
+const FINANCE_CODE = { invoices: "INVOICES", profit: "PROFIT & LOSS", receipts: "RECEIPTS" };
 /* ---------------- native books (built-in ledger, no QuickBooks) ---------------- */
 // Workspaces with books_provider="native" run on the books edge fn instead of
 // QBO. The Finance tab swaps its invoices lane for these screens; Profit (a QBO
@@ -698,6 +745,10 @@ async function booksApi(body) { return api("/books", body); }
 // excluded): month-to-date total, a 14-day daily spark, MOM/YOY growth against
 // the SAME elapsed span, the real average sale, and a straight run-rate
 // forecast. "—" when there is no prior period to compare against.
+// Built-in books store an issued invoice as "sent" (it is issued, not
+// necessarily emailed). Owners read SENT as "emailed" — show OPEN instead.
+function nativeStatusLabel(status) { return status === "sent" ? "open" : (status || ""); }
+
 function salesIntelNative(invoices) {
   const now = new Date();
   const sales = invoices.filter((i) => i.status !== "void");
@@ -714,6 +765,10 @@ function salesIntelNative(invoices) {
   const avg = month.length ? mtd / month.length : 0;
   const elapsed = now.getDate();
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  // A run rate off one or two invoices in the first days of a month reads as
+  // broken ("$24,727 from one sale"). Show it once there is a week of data or
+  // five invoices — whichever comes first.
+  const forecastReady = elapsed >= 7 || month.length >= 5;
   const forecast = elapsed ? mtd / elapsed * daysInMonth : 0;
   // Same elapsed span, one month back / one year back.
   const prevM = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -732,7 +787,7 @@ function salesIntelNative(invoices) {
   }
   const max = Math.max(1, ...days.map((d) => d.total));
   return `<div class="intel">
-    <div class="pihead"><b>&#9651; Sales Intelligence</b><span class="live"><i></i>LIVE BOOKS</span></div>
+    <div class="ihead"><b>&#9651; Sales</b><span class="live"><i></i>Built-in books</span></div>
     <p class="cap">This month</p>
     <div class="big">${money(mtd)}</div>
     <div class="sub">Live sales performance</div>
@@ -743,7 +798,7 @@ function salesIntelNative(invoices) {
       <div class="kpi cyan"><small>MOM &middot; MTD</small><b>${growth(mtd, momBase)}</b><i>vs same point last month</i></div>
       <div class="kpi purple"><small>YOY &middot; YTD</small><b>${growth(ytd, yoyBase)}</b><i>vs same point last year</i></div>
       <div class="kpi em"><small>Avg sale</small><b>${money(avg)}</b><i>${month.length} invoice${month.length === 1 ? "" : "s"} this month</i></div>
-      <div class="kpi orange"><small>Forecast</small><b>${money(forecast)}</b><i>month-end run rate</i></div>
+      <div class="kpi orange"><small>Forecast</small><b>${forecastReady ? money(forecast) : "—"}</b><i>${forecastReady ? "month-end run rate" : "after a week of sales"}</i></div>
     </div>
     <p class="infoline"><em>&#9432;</em>Growth compares matching elapsed periods &mdash; not partial months against full months.</p>
   </div>`;
@@ -751,13 +806,14 @@ function salesIntelNative(invoices) {
 
 async function loadNativeInvoices() {
   const slot = $("finbody"); if (!slot) return;
-  let data, summary, connect, estData;
+  let data, summary, connect, estData, settings;
   try {
-    [data, summary, connect, estData] = await Promise.all([
+    [data, summary, connect, estData, settings] = await Promise.all([
       booksApi({ action: "invoices" }),
       booksApi({ action: "summary" }),
       booksApi({ action: "connect-status" }),
       booksApi({ action: "estimates" }).catch(() => ({ estimates: [] })),
+      booksApi({ action: "settings" }).catch(() => null),
     ]);
   } catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   const invoices = data.invoices || [];
@@ -774,15 +830,17 @@ async function loadNativeInvoices() {
   const thisMonth = (summary.months || []).find((m) => m.month === nowKey)?.income || 0;
   const ytd = (summary.months || []).filter((m) => m.month.slice(0, 4) === nowKey.slice(0, 4))
     .reduce((s, m) => s + Number(m.income || 0), 0);
-  const nums = invoices.map((i) => parseInt(String(i.number).replace(/\D/g, ""), 10)).filter(Number.isFinite);
-  const nextNum = nums.length ? Math.max(...nums) + 1 : 1041;
+  // The next number is whatever the books will actually stamp — same source
+  // as Books settings, so the tile and the first invoice agree.
+  const seq = settings?.numbering;
+  const nextNum = seq ? `${seq.prefix ?? ""}${seq.next_number ?? ""}` : "—";
   slot.innerHTML = `
     ${salesIntelNative(invoices)}
     <div class="fintiles">
       <div class="fintile"><small>THIS MONTH</small><b>${money(thisMonth)}</b></div>
       <div class="fintile"><small>YEAR TO DATE</small><b>${money(ytd)}</b></div>
       <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#36;</span><small>OUTSTANDING</small><b>${money(summary.open_balance || 0)}</b></div>
-      <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#128196;</span><span class="nextchip">Next #${esc(String(nextNum))}</span><small>OPEN INVOICES</small><b>${summary.open_invoices ?? 0}</b></div>
+      <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#128196;</span><span class="nextchip">Next ${esc(String(nextNum))}</span><small>OPEN INVOICES</small><b>${summary.open_invoices ?? 0}</b></div>
     </div>
     <button class="cta" id="newinv">
       <span class="ic">&#43;</span>
@@ -821,7 +879,7 @@ async function loadNativeInvoices() {
         <div class="main"><div class="ttl">${esc(i.customer || "—")}</div>
           <div class="sub">${esc(i.number)} · ${esc(dateShort(i.issue_date))}</div></div>
         <div class="amt">${money(i.total)}
-          <small><span class="tag ${i.status === "paid" ? "paid" : i.status === "void" ? "" : "open"}">${esc(i.status)}</span></small></div>
+          <small><span class="tag ${i.status === "paid" ? "paid" : i.status === "void" ? "" : "open"}">${esc(nativeStatusLabel(i.status))}</span></small></div>
       </button>`).join("")}</div>`
       : `<div class="empty">${S.invoiceSearch ? "No matches." : "No invoices yet — create your first, or ask Ledger in chat."}</div>`}`;
   $("newinv").onclick = () => nativeComposerSheet();
@@ -1469,6 +1527,7 @@ function salesIntel(invoices, k) {
   const avg = month.length ? monthTotal / month.length : 0;
   const elapsed = now.getDate();
   const inMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const forecastReady = elapsed >= 7 || month.length >= 5;
   const forecast = elapsed ? monthTotal / elapsed * inMonth : 0;
 
   const days = [];
@@ -1481,7 +1540,7 @@ function salesIntel(invoices, k) {
   const max = Math.max(1, ...days.map((d) => d.total));
 
   return `<div class="intel">
-    <div class="pihead"><b>&#9651; Sales Intelligence</b><span class="live"><i></i>LIVE QBO</span></div>
+    <div class="ihead"><b>&#9651; Sales</b><span class="live"><i></i>Live from QuickBooks</span></div>
     <p class="cap">This month</p>
     <div class="big">${money(monthTotal)}</div>
     <div class="sub">Live sales performance</div>
@@ -1494,7 +1553,7 @@ function salesIntel(invoices, k) {
       <div class="kpi gold"><small>Outstanding</small><b>${money0(k.outstanding)}</b><i>${k.open_count ?? 0} open</i></div>
       <div class="kpi purple"><small>Open invoices</small><b>${k.open_count ?? 0}</b><i>Next #${esc(k.next_invoice ?? "—")}</i></div>
       <div class="kpi cyan"><small>Avg sale</small><b>${money(avg)}</b><i>${month.length} invoice${month.length === 1 ? "" : "s"} this month</i></div>
-      <div class="kpi orange"><small>Forecast</small><b>${money(forecast)}</b><i>month-end run rate</i></div>
+      <div class="kpi orange"><small>Forecast</small><b>${forecastReady ? money(forecast) : "—"}</b><i>${forecastReady ? "month-end run rate" : "after a week of sales"}</i></div>
     </div>
     <p class="infoline"><em>&#9432;</em>Run rate projects this month's pace across the full month — it is not a promise.</p>
   </div>`;
@@ -2420,7 +2479,7 @@ function drawCalendar() {
   }
 
   view().innerHTML = `<div class="sect">
-    ${osHead("CAL.03 · SCHEDULE", "Calendar")}
+    ${osHead("SCHEDULE", "Calendar")}
     <div class="searchwrap"><span class="mag">${MAG}</span>
       <input id="calsearch" placeholder="Search selected day" value="${esc(CAL.q)}"></div>
     ${next ? `<button class="nexthero" data-ev="${esc(next.id)}">
@@ -2932,7 +2991,7 @@ async function renderPhone() {
     const d = await api("/phone", { action: "board" });
     S.phone = d;
     view().innerHTML = `<div class="sect">
-      ${osHead("COM.06 · CALL LINE", "Phone")}
+      ${osHead("BUSINESS LINE", "Phone")}
       ${d.hasNumber ? "" : requestNumberCard(d.pendingRequest, d.numberLocked)}
       ${/* The number and its setup guide sit ABOVE the lane switcher, not in a
             lane. Call forwarding is the thing that has to be working before any
@@ -2975,7 +3034,7 @@ async function renderPhone() {
       if (phoneLane() === "activity") loadPhoneLeads();
     }
   } catch (e) {
-    view().innerHTML = `<div class="sect">${osHead("COM.06 · CALL LINE", "Phone")}<div class="empty">${esc(e.message)}</div></div>`;
+    view().innerHTML = `<div class="sect">${osHead("BUSINESS LINE", "Phone")}<div class="empty">${esc(e.message)}</div></div>`;
   }
 }
 
@@ -4467,7 +4526,7 @@ function requestNumberCard(pending, locked) {
     return `<div class="panel">
       <h3>&#128241; Your own business line &#128664;</h3>
       <p class="sub">A local number of your own, included with your subscription: missed calls text the caller back automatically, every lead lands in your Leads list, and you can reply right from this tab.</p>
-      <p class="note" style="margin-top:10px">Included with Ledger AI &mdash; your line is live seconds after you subscribe.</p>
+      <p class="note" style="margin-top:10px">Included with Ledger AI &mdash; after you subscribe, tell us your area code and we set your line up, usually the same business day.</p>
       <button class="btn em wide" style="margin-top:13px" id="rnsubscribe">Subscribe to get your number</button>
       <div class="note" id="rnnote" style="margin-top:8px"></div>
     </div>`;
@@ -4534,7 +4593,7 @@ const LEAD_SOURCES = [["call-in", "Call-in"], ["walk-in", "Walk-in"], ["referral
   ["website", "Website"], ["social", "Social"], ["repeat", "Repeat"], ["other", "Other"]];
 const TODO_PRIORITIES = [["low", "Low"], ["normal", "Normal"], ["high", "High"], ["urgent", "Urgent"]];
 
-const LANE_CODE = { directory: "CRM.05 · RELATIONSHIPS", reviews: "CRM.05 · REPUTATION", todos: "CRM.05 · MISSION CONTROL" };
+const LANE_CODE = { directory: "CUSTOMERS", reviews: "REVIEWS", todos: "TO-DO" };
 
 // Red badge count on the lane switcher, same rule as iOS CustomerLaneSwitcher:
 // open to-dos due by end of today. Leads moved to the Phone tab — see
@@ -4579,7 +4638,7 @@ async function loadReviewsLane() {
     slot.innerHTML = `<div class="revlane-err">
       <div class="eyebrow" style="color:${gold}">${connect ? "&#128279; CONNECT GOOGLE REVIEWS" : pending ? "&#8987; REVIEW ACCESS PENDING" : "REVIEWS UNAVAILABLE"}</div>
       <p class="note" style="margin-top:8px">${esc(e.message)}</p>
-      ${connect ? `<p class="note">Business profile &amp; settings → Google Business Profile → Connect. Your live reviews, rating and reply tools light up the moment it links.</p>` : ""}
+      ${connect ? `<p class="note">Business profile &amp; settings → Connected services → Business Profile → Connect. Your live reviews, rating and reply tools light up the moment it links.</p>` : ""}
       <button class="pillbtn" id="rvretry" style="margin-top:10px"><b>Try again</b></button>
     </div>`;
     $("rvretry").onclick = () => { slot.innerHTML = `<div class="skel"></div>`; loadReviewsLane(); };
@@ -5622,9 +5681,9 @@ async function billingCheck() {
     } else if (s.subscription_status === "trialing" && s.trial_days_left !== null) {
       a.style.background = "rgba(251,191,36,.12)"; a.style.color = "var(--gold)";
       a.textContent = s.trial_days_left > 0
-        ? `🎁 Free trial — ${s.trial_days_left} day${s.trial_days_left === 1 ? "" : "s"} left.`
+        ? `🎁 Free trial — ${s.trial_days_left} day${s.trial_days_left === 1 ? "" : "s"} left. Add a card so nothing stops on day 15.`
         : "⏰ Your free trial has ended.";
-      if (s.billing_ready) link(" Subscribe now");
+      if (s.billing_ready) link(s.trial_days_left > 0 ? " Add a card" : " Subscribe now");
       a.style.display = "block";
     }
   } catch {}
@@ -5696,7 +5755,9 @@ function draftCard(d, label, confirmPath, cancelPath) {
   // Estimates carry an expiry, not payment terms — the control is invoices only.
   const isInvoice = !/estimate/i.test(confirmPath);
   const card = bubble("card", `<h3>${label}</h3><div class="cust">${esc(d.customer)}</div>
-    <table>${lines}<tr><td class="total">Subtotal</td><td class="total">${money(d.subtotal)}</td></tr></table>
+    <table>${lines}<tr><td class="total">Subtotal</td><td class="total">${money(d.subtotal)}</td></tr>
+    ${d.tax_total != null ? `<tr><td>${esc(d.tax_name || "Tax")}${d.tax_rate ? ` (${Math.round(d.tax_rate * 10000) / 100}%)` : ""}</td><td>${money(d.tax_total)}</td></tr>
+    <tr><td class="total">Total</td><td class="total">${money(d.total)}</td></tr>` : `<tr><td colspan="2" class="note">Tax is added when you confirm.</td></tr>`}</table>
     ${isInvoice ? termsRow(d.terms) : ""}
     ${d.customer_email ? `<label class="emailrow"><input type="checkbox" class="em" checked> Email to ${esc(d.customer_email)}</label>` : ""}
     <label class="emailrow"><input type="checkbox" class="pr" ${localStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
@@ -5709,8 +5770,15 @@ function draftCard(d, label, confirmPath, cancelPath) {
       const sendEmail = card.querySelector(".em")?.checked ?? false;
       const wantPrint = card.querySelector(".pr")?.checked ?? false;
       const terms = card.querySelector(".tm")?.value;
-      const r = await api(confirmPath, { draft_id: d.draft_id, send_email: sendEmail, ...(terms ? { terms } : {}) });
-      cardDone(card, "✅ Posted" + (r.doc_number ? " — #" + r.doc_number : "") + (r.emailed ? " · emailed " + (r.emailed_to || "") : ""));
+      const raw = await api(confirmPath, { draft_id: d.draft_id, send_email: sendEmail, ...(terms ? { terms } : {}) });
+      const r = raw.posted || raw; // the server nests the result under `posted`
+      const what = label.startsWith("ESTIMATE") ? "Estimate" : "Invoice";
+      cardDone(card, `✅ ${what}${r.doc_number ? " " + r.doc_number : ""} posted` + (r.total != null ? ` — ${money(r.total)}` : "")
+        + (r.emailed ? " · emailed to " + (r.emailed_to || "") : sendEmail ? " · email did not go out" : ""));
+      if (r.link) {
+        const a = document.createElement("a"); a.href = r.link; a.target = "_blank"; a.rel = "noopener";
+        a.className = "emailrow"; a.textContent = `Open ${what.toLowerCase()} ${r.doc_number || ""} ↗`; card.appendChild(a);
+      }
       if (wantPrint && (r.qbo_invoice_id || r.id)) {
         printPdfById(r.qbo_invoice_id || r.id, r.doc_number, label.startsWith("ESTIMATE") ? "estimate" : "invoice");
       }
@@ -5996,9 +6064,25 @@ async function businessSheet() {
   const b = S.profile?.business || {};
   const u = S.usage;
   const pct = u && u.budget_usd > 0 ? Math.round(u.spent_usd / u.budget_usd * 100) : 0;
-  sheet(`<h2>Your business</h2><p class="sh-sub">${esc(b.name || "")}${S.profile?.role ? " · you're the " + esc(S.profile.role) : ""}</p>
+  if (S.booksProvider === undefined) {
+    try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
+    catch { S.booksProvider = "quickbooks"; }
+  }
+  const native = S.booksProvider === "native";
+  const row = (id, icon, title, detail) => `<button class="revbtn" id="${id}">
+      <span class="ic">${icon}</span><span class="m"><b>${esc(title)}</b><span>${esc(detail)}</span></span>
+      <span class="chev">&#8250;</span></button>`;
+  sheet(`<h2>Business profile &amp; settings</h2><p class="sh-sub">${esc(b.name || "")}${S.profile?.role ? " · you're the " + esc(S.profile.role) : ""}</p>
+    <div class="cmpsect">
+      ${native ? row("bzbooks", "&#9881;", "Books settings", "Tax, invoice numbering, branding, payment info")
+        : row("bzbooks", "&#9881;", "Books", "This workspace runs on QuickBooks Online")}
+      ${native ? row("bzcard", "&#128179;", "Card payments", "Stripe setup — get paid online") : ""}
+      ${row("bzphone", "&#128222;", "Phone & Front Desk", "Number, reminders, auto-replies")}
+    </div>
+    <div class="eyebrow" style="margin-top:20px">PROFILE</div>
     <label class="fld">BUSINESS NAME</label><input id="bn" value="${esc(b.name || "")}">
     <label class="fld">ADDRESS</label><input id="ba" value="${esc(b.address || "")}">
+    <label class="fld">WHAT LEDGER CALLS YOU</label><input id="bcall" value="${esc(b.call_me ?? "Boss")}" placeholder="Boss, your first name, or leave blank" maxlength="40">
     <label class="fld">LOGO</label>
     <div class="rowbtns" style="align-items:center">
       ${b.logo_url ? `<img src="${esc(b.logo_url)}" alt="Business logo" style="width:46px;height:46px;border-radius:11px;object-fit:cover">` : ""}
@@ -6015,7 +6099,7 @@ async function businessSheet() {
       <button class="btn ghost wide" style="margin-top:11px" id="bpu">⚡ Power-Ups</button>
     </div>
 
-    <div class="eyebrow" style="margin-top:20px">CONNECTIONS</div>
+    <div class="eyebrow" style="margin-top:20px" id="connhead">CONNECTED SERVICES</div>
     <p class="note" style="margin-top:5px">Authorization happens on each provider's official sign-in page. Ledger never receives your password.</p>
     <div id="connslot" class="note" style="margin-top:8px">Checking connections…</div>
 
@@ -6033,7 +6117,7 @@ async function businessSheet() {
     <div class="rowbtns" style="margin-top:8px;flex-direction:column">
       ${S.installPrompt ? `<button class="btn primary wide" id="install">📲 Install Ledger AI</button>` : ""}
       <button class="btn ghost wide" id="bnew">Start a fresh conversation</button>
-      <button class="btn ghost wide" id="bbill">Manage subscription</button>
+      <button class="btn ghost wide" id="bbill">Subscription &amp; billing</button>
       <button class="btn ghost wide" id="bsupport">Contact support</button>
       <button class="btn ghost wide" id="bsupportchat">Support &amp; account help</button>
       <button class="btn ghost wide" id="bout" style="color:var(--red)">Sign out</button>
@@ -6043,6 +6127,17 @@ async function businessSheet() {
       <a href="${FN}/legal/privacy" target="_blank" rel="noopener">Privacy Policy</a> ·
       <a href="${FN}/legal/terms" target="_blank" rel="noopener">Terms of Service</a></p>`, async (sh) => {
     wireConnect(sh);
+    sh.querySelector("#bzbooks").onclick = () => {
+      closeSheet();
+      if (native) booksSettingsSheet();
+      else { S.financeLane = "invoices"; setTab("finance"); }
+    };
+    const cardBtn = sh.querySelector("#bzcard");
+    if (cardBtn) cardBtn.onclick = async () => {
+      try { const r = await booksApi({ action: "connect-onboard" }); if (r.url) window.open(r.url, "_blank"); }
+      catch (e) { toast(e.message, "err"); }
+    };
+    sh.querySelector("#bzphone").onclick = () => { closeSheet(); setTab("phone"); };
     sh.querySelector("#bsupport").onclick = supportSheet;
     sh.querySelector("#bsupportchat").onclick = supportChatSheet;
     sh.querySelector("#blogo").onclick = () => sh.querySelector("#blogofile").click();
@@ -6177,7 +6272,7 @@ async function businessSheet() {
     sh.querySelector("#bsave").onclick = async (e) => {
       e.currentTarget.disabled = true;
       try {
-        const detail = await api("/workspace-profile", { action: "update", name: sh.querySelector("#bn").value.trim(), address: sh.querySelector("#ba").value.trim() });
+        const detail = await api("/workspace-profile", { action: "update", name: sh.querySelector("#bn").value.trim(), address: sh.querySelector("#ba").value.trim(), call_me: sh.querySelector("#bcall").value.trim() });
         S.profile.business = { ...S.profile.business, ...detail };
         const hdr = $("bizname");
         if (hdr) hdr.textContent = S.profile.business.name || "Ledger AI";
@@ -6339,14 +6434,23 @@ function supportChatSheet() {
 /* ---------------- AUTH / SETUP / JOIN ---------------- */
 function loginView(sent) {
   root.innerHTML = `<div class="login"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>Ledger AI</h2>
-    <p>${sent ? "Check your email — tap the sign-in link and you'll land right back here." : "Your business copilot. Sign in with your work email."}</p>
-    ${sent ? "" : '<input id="email" type="email" placeholder="you@business.com" autocomplete="email"><button class="btn" id="go">Send sign-in link</button>'}
+    <p>${sent ? `We emailed a sign-in link to <b>${esc(sent)}</b>. Tap it and you'll land right back here.` : "Your business copilot. Sign in with your work email — new here? The same link starts your free trial."}</p>
+    ${sent ? `<p class="note">Not there in a minute? Check Spam or Updates. <a href="#" id="resend" style="color:var(--cyan)">Send it again</a> · <a href="#" id="retype" style="color:var(--cyan)">Wrong address?</a></p>`
+      : '<input id="email" type="email" placeholder="you@business.com" autocomplete="email"><button class="btn" id="go">Send sign-in link</button><p class="note" style="margin-top:10px">14-day free trial · no card needed · no password to remember</p>'}
     <p style="margin-top:18px;font-size:12.5px"><a href="privacy.html" style="color:var(--dim)">Privacy</a> &middot; <a href="support.html" style="color:var(--dim)">Support</a></p></div>`;
-  if (sent) return;
+  if (sent) {
+    $("retype").onclick = (e) => { e.preventDefault(); loginView(); };
+    $("resend").onclick = async (e) => {
+      e.preventDefault();
+      const { error } = await supa.auth.signInWithOtp({ email: sent, options: { emailRedirectTo: location.href.split("#")[0].split("?")[0] } });
+      toast(error ? error.message : "Sent again — give it a minute.", error ? "err" : undefined);
+    };
+    return;
+  }
   const go = async () => {
     const email = $("email").value.trim(); if (!email) return;
     const { error } = await supa.auth.signInWithOtp({ email, options: { emailRedirectTo: location.href.split("#")[0].split("?")[0] } });
-    if (error) toast(error.message, "err"); else loginView(true);
+    if (error) toast(error.message, "err"); else loginView(email);
   };
   $("go").onclick = go;
   $("email").addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
@@ -6354,7 +6458,7 @@ function loginView(sent) {
 
 function setupView() {
   root.innerHTML = `<div class="login"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>Welcome to Ledger AI</h2>
-    <p>Let's set up your business. Your 14-day free trial starts now — no card needed.</p>
+    <p>Let's set up your business. Your 14-day free trial starts now — no card needed until you decide to keep Ledger.</p>
     <input id="bizname" placeholder="Business name" maxlength="160" autocomplete="organization">
     <select id="bizcur" style="margin-bottom:11px">
       <option value="CAD">🇨🇦 Canadian dollars (CAD)</option><option value="USD">🇺🇸 US dollars (USD)</option></select>
