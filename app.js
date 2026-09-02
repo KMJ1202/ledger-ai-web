@@ -287,6 +287,15 @@ function renderTab() {
 
 function applyLaunchIntent() {
   const q = new URLSearchParams(location.search);
+  // Back from a Google connect (Calendar / Gmail) started on the web: say what happened, then clean the URL.
+  const connected = q.get("connected");
+  if (connected) {
+    history.replaceState({}, "", location.pathname);
+    const name = connected === "gmail" ? "Gmail" : "Google Calendar";
+    if (q.get("status") === "success") { toast(`${name} connected`); openChat(); sys(`✅ ${name} is connected. ${connected === "gmail" ? "Receipt Radar will start reading supplier receipts out of your inbox." : "Your bookings now show on the Calendar tab, and every booking Ledger proposes still needs your tap."}`); }
+    else toast(`${name} didn't connect — please try again.`, "err");
+    return;
+  }
   // Back from Stripe: say plainly whether the card went through and when the trial ends.
   const state = q.get("state");
   if (state === "success") {
@@ -324,7 +333,7 @@ function connectPanel(kind) {
 function wireConnect(scope) {
   on("[data-connect]", "click", async (e) => {
     const b = e.currentTarget; b.disabled = true;
-    try { const d = await api(b.dataset.connect, {}); location.href = d.authorization_url; }
+    try { const d = await api(b.dataset.connect + (b.dataset.connect.startsWith("/g") ? "?web=1" : ""), {}); location.href = d.authorization_url; }
     catch (err) { b.disabled = false; toast(err.message, "err"); }
   }, scope);
 }
