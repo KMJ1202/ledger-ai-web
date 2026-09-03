@@ -79,7 +79,7 @@ footer a{color:var(--dim)}
 
   <main>
     <h1>Privacy Policy</h1>
-    <div class="meta">Effective August 22, 2026 &middot; Ledger AI, Calgary, Alberta, Canada</div>
+    <div class="meta">Effective September 3, 2026 &middot; Ledger AI, Calgary, Alberta, Canada</div>
 
     <div class="card">
       <p>Ledger AI is a business copilot: it connects to the tools you already run your business on and answers questions about your own data. This page explains, plainly, what we collect, why, where it lives, who else touches it, and how to get rid of it.</p>
@@ -103,6 +103,22 @@ footer a{color:var(--dim)}
     <div class="card">
       <h2>Where it lives</h2>
       <p>Your account data, receipts, and conversation history are stored with <b>Supabase</b> (database, authentication, and file storage), running in their cloud infrastructure. Receipt images are kept in private storage and served only through signed URLs that expire — they are not publicly accessible.</p>
+    </div>
+
+    <div class="card">
+      <h2>How we protect it</h2>
+      <p>Sensitive data — including everything we receive from Google APIs (Gmail message content, Calendar events, and Business Profile reviews) — is protected by the following controls:</p>
+      <ul>
+        <li><b>Encrypted in transit.</b> All traffic between your browser or app, Ledger AI, and every connected service runs over TLS (HTTPS). We do not accept unencrypted connections.</li>
+        <li><b>Encrypted at rest.</b> Your database records, receipt images, and stored files are encrypted at rest by our hosting provider, Supabase.</li>
+        <li><b>Google tokens are held in an encrypted vault, never in the app.</b> Your Google access and refresh tokens are written to Supabase Vault, which stores them encrypted. Our database keeps only a reference to the vault entry — never the token itself. The functions that read a token are server-side and privileged: they are explicitly revoked from every browser and app session, so a signed-in client cannot retrieve your Google credentials even if it asks for them.</li>
+        <li><b>Your workspace is isolated.</b> Row-level security is enabled on every tenant table and every policy is scoped to your workspace, so one customer's Gmail, Calendar, or business data can never be returned to another customer's account.</li>
+        <li><b>Least privilege.</b> We request the narrowest Google scopes each feature needs, and only after your explicit OAuth consent. Gmail access is read-only for Receipt Radar; Calendar access is limited to reading and creating events you ask for.</li>
+        <li><b>You can revoke us at any time.</b> Removing Ledger AI at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a> immediately ends our access to your Google data.</li>
+        <li><b>Limited human access.</b> No Ledger AI staff member reads your Gmail, Calendar, or business data as a matter of course. It happens only where needed to resolve a support request you have raised, with your knowledge.</li>
+        <li><b>No training, no ads, no resale.</b> Google user data is never used to train AI models, never used for advertising, and never sold or transferred to anyone beyond the named processors required to operate the features you switch on.</li>
+        <li><b>Deletion removes the credentials too.</b> Deleting your account deletes your stored Google tokens out of the vault along with your workspace data — see Deletion below.</li>
+      </ul>
     </div>
 
     <div class="card">
