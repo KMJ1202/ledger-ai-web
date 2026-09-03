@@ -1891,7 +1891,7 @@ async function composerSheet(kind) {
       <table>${(d.lines || []).map((l) => `<tr><td>${esc(l.description || l.item_name)} × ${l.quantity}</td><td>${money(l.amount)}</td></tr>`).join("")}
         <tr><td class="total">Subtotal</td><td class="total">${money(d.subtotal)}</td></tr></table>
       ${isEst ? "" : termsRow(d.terms)}
-      ${d.customer_email ? `<label class="emailrow"><input type="checkbox" id="cmpem" checked> Email to ${esc(d.customer_email)}</label>` : ""}
+      ${d.customer_email ? `<label class="emailrow"><input type="checkbox" id="cmpem" checked> Email to ${esc(d.customer_email)}${(d.customer_email_cc || []).length ? ` · cc ${esc(d.customer_email_cc.join(", "))}` : ""}${d.recipients_locked ? ` <span class="note">(your standing rule for this customer)</span>` : ""}</label>` : ""}
       <label class="emailrow"><input type="checkbox" id="cmppr" ${localStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
       <div class="row"><button class="btn cancel" id="cmpcancel">Cancel</button><button class="btn confirm" id="cmpconfirm">Confirm</button></div>
       <div class="note" id="cmpnote" style="margin-top:9px"></div></div>`;
@@ -6024,7 +6024,7 @@ function draftCard(d, label, confirmPath, cancelPath) {
     ${d.tax_total != null ? `<tr><td>${esc(d.tax_name || "Tax")}${d.tax_rate ? ` (${Math.round(d.tax_rate * 10000) / 100}%)` : ""}</td><td>${money(d.tax_total)}</td></tr>
     <tr><td class="total">Total</td><td class="total">${money(d.total)}</td></tr>` : `<tr><td colspan="2" class="note">Tax is added when you confirm.</td></tr>`}</table>
     ${isInvoice ? termsRow(d.terms) : ""}
-    ${d.customer_email ? `<label class="emailrow"><input type="checkbox" class="em" checked> Email to ${esc(d.customer_email)}</label>` : ""}
+    ${d.customer_email ? `<label class="emailrow"><input type="checkbox" class="em" checked> Email to ${esc(d.customer_email)}${(d.customer_email_cc || []).length ? ` · cc ${esc(d.customer_email_cc.join(", "))}` : ""}${d.recipients_locked ? ` <span class="note">(your standing rule for this customer)</span>` : ""}</label>` : ""}
     <label class="emailrow"><input type="checkbox" class="pr" ${localStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
     <div class="row"><button class="btn cancel">Cancel</button><button class="btn confirm">Confirm</button></div>`);
   const cardBtns = () => [card.querySelector(".confirm"), card.querySelector(".cancel")].filter(Boolean);
