@@ -190,6 +190,16 @@ const SEG_ICONS = {
   phonearrow: `<path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2zM14 4h6M20 4v6M20 4l-6 6"/>`,
   calclock: `<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4M12 13v3l2 1"/>`,
   camera: `<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>`,
+  pulse: `<path d="M3 12h3l2-5 3 10 2-5h8"/>`,
+  calendar: `<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>`,
+  phone: `<path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/>`,
+  dollar: `<circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.5 9.5c0-1.1-1.1-1.8-2.5-1.8s-2.5.7-2.5 1.8 1.1 1.6 2.5 1.9 2.5.8 2.5 1.9-1.1 1.8-2.5 1.8-2.5-.7-2.5-1.8"/>`,
+  people: `<circle cx="9" cy="8" r="3"/><path d="M3 19c0-3.3 2.7-6 6-6s6 2.7 6 6M16 5.5a3 3 0 010 5.8M18 13.5c2 .8 3 2.6 3 5.5"/>`,
+  grid: `<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>`,
+  spark: `<path d="M12 3l2 5.6 5.6 2-5.6 2L12 18l-2-5.4-5.6-2 5.6-2z"/>`,
+  bell: `<path d="M12 3a6 6 0 016 6v4l2 3H4l2-3V9a6 6 0 016-6zM9.5 19a2.5 2.5 0 005 0"/>`,
+  star: `<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.7l5.9-.8z"/>`,
+  gear: `<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1"/>`,
 };
 const segIc = (k) => SEG_ICONS[k] ? `<svg class="sic" viewBox="0 0 24 24">${SEG_ICONS[k]}</svg>` : "";
 
@@ -202,6 +212,21 @@ function osHead(code, title) {
     <div class="osrule"></div>
   </div>`;
 }
+
+// CommandPageHeader's "quiet" style (Kyle, 2026-09-01 design pass): sentence-case
+// title, no machine rail, no gradient, plus the same Ledger-chat shortcut every
+// iOS tab carries so the assistant stays one tap away everywhere.
+const QUIET_TITLES = new Set(["phone", "finance", "profit", "receipts", "calendar", "customers", "reviews", "to-do"]);
+function pageHead(title) {
+  return `<div class="qhead">
+    <button class="qsparkle" data-qledger title="Chat with Ledger">${segIc("spark")}</button>
+    <h2 class="qtitle">${esc(title)}</h2>
+  </div>`;
+}
+// Delegated once at load — the four quiet tabs re-render their whole view()
+// innerHTML on every load/refresh, so a per-render wire-up would need to run
+// after each one. A single document-level listener survives every re-render.
+document.addEventListener("click", (e) => { if (e.target.closest("[data-qledger]")) openChat(); });
 
 function appView() {
   const logo = S.profile?.business?.logo_url;
@@ -365,11 +390,62 @@ const ASK_PLACEHOLDERS = [
   "“Draft a reply to my latest Google review.”",
 ];
 
+
+/* ---------------- iOS-parity building blocks ----------------
+   The web twins of LedgerSectionRail, LedgerPulseTile and LedgerPreviewCard
+   (CameraAccess/Views/LedgerHomeView.swift). Same anatomy, same order, same
+   words — so a customer moving between the phone and the browser is looking
+   at one product, not two. */
+
+/** Gradient icon plate + rounded label + fading hairline. */
+function srail(icon, title, tone = "sil", trailing = "") {
+  return `<div class="srail ${tone}">
+    <div class="rw"><span class="ic">${segIc(icon)}</span><b>${esc(title)}</b>
+      ${trailing ? `<span class="tr">${trailing}</span>` : ""}</div>
+    <div class="hr"></div></div>`;
+}
+
+/** Instrument tile: plate, label, gradient numeral, caption, base rail. */
+function ptile({ label, value, detail, icon, tone, loading = false, unavailable = false }) {
+  const body = loading
+    ? `<div class="skel" style="width:62px;height:22px;margin:2px 0"></div>`
+    : `<b>${esc(value)}</b>`;
+  return `<div class="ptile ${tone}${unavailable ? " na" : ""}">
+    <div class="h"><i>${segIc(icon)}</i><small>${esc(label)}</small></div>
+    ${body}<em>${esc(detail)}</em><div class="rail"></div></div>`;
+}
+
+/** One row inside a preview card. */
+function pvline(primary, secondary, badge, icon) {
+  return `<div class="pvline">
+    ${icon ? `<span class="pic">${segIc(icon)}</span>` : ""}
+    <span class="m"><b>${esc(primary)}</b>${secondary ? `<small>${esc(secondary)}</small>` : ""}</span>
+    ${badge ? `<span class="bdg">${esc(badge)}</span>` : ""}</div>`;
+}
+
+/** Section rail + rows + full-width gradient CTA, exactly like LedgerPreviewCard. */
+function pvcard(id, icon, title, tone, cta, inner) {
+  return `<div class="panel pvcard ${tone}" id="${id}">
+    ${srail(icon, title, tone)}
+    <div class="pvbody">${inner}</div>
+    <button class="pvcta" data-pv="${id}">${esc(cta)} <span>&#8594;</span></button></div>`;
+}
+
+/** Three small stats in a row — the web twin of iOS phoneStat(). */
+function pvstats(items) {
+  return `<div class="pvstats">${items.map(([v, l, c]) =>
+    `<div class="pvstat"><b style="color:${c}">${esc(v)}</b><small>${esc(l)}</small></div>`).join("")}</div>`;
+}
+
 async function renderHome() {
   const logo = S.profile?.business?.logo_url;
+  // Section order is the iPhone app's, line for line (LedgerHomeView.body):
+  // hero → profile & settings → Ask Ledger → Go to → Today → reviews → needs
+  // your attention → Calendar → Phone → Finance → Customers → Inbox → safety.
+  // The big "— HOME / LEDGER" masthead is gone here for the same reason it left
+  // iOS in build 71: the brand bar above and the hero below already say it.
   view().innerHTML = `
     <div class="sect">
-      ${osHead("HOME", "Ledger")}
       <div class="brandcard">
         <div class="tile">${logo ? `<img src="${esc(logo)}" alt="">` : '<img src="assets/logo-mark-96.png" alt="">'}</div>
         <div class="who"><b class="chrome">Ledger AI</b><span>Your business, answered.</span></div>
@@ -400,28 +476,32 @@ async function renderHome() {
           `<button class="askchip c${i}" data-ask="${esc(c.prompt)}"><em>${segIc(c.ic)}</em>${esc(c.label)}</button>`).join("")}</div>
       </div>
 
-
-
-      <div class="lanehead" style="margin-top:4px"><span class="eyebrow"><span class="gticon">&#9638;</span> Go to</span></div>
+      ${srail("grid", "Go to", "sil")}
       <div class="gotogrid">
         ${[
-          ["finance", "em", "&#128200;", "Finance", "INVOICES · PROFIT"],
-          ["calendar", "purple", "&#128197;", "Calendar", "BOOKINGS"],
-          ["phone", "cyan", "&#128222;", "Phone", "CALLS · LEADS"],
-          ["customers", "red", "&#128101;", "Customers", "DIRECTORY"],
-          ["receipts", "orange", "&#128247;", "Receipts", "SNAP · FILE"],
-          ["reviews", "gold", "&#11088;", "Reviews", "WIN 5 STARS"],
+          ["finance", "em", "dollar", "Finance", "Invoices · profit"],
+          ["calendar", "purple", "calendar", "Calendar", "Bookings"],
+          ["phone", "cyan", "phone", "Phone", "Calls · leads"],
+          ["customers", "red", "people", "Customers", "Directory"],
+          ["receipts", "orange", "camera", "Receipts", "Snap · file"],
+          ["reviews", "gold", "star", "Reviews", "Win 5 stars"],
         ].map(([k, tint, icon, label, sub]) => `<button class="gotile ${tint}" data-goto="${k}">
-          <span class="ictile">${icon}</span><span class="arrow">&#8599;</span>
+          <span class="ictile">${segIc(icon)}</span><span class="arrow">&#8599;</span>
           <b>${label}</b><small>${sub}</small></button>`).join("")}
       </div>
 
-      <div class="lanehead"><span class="eyebrow">&#9889; Today</span>
-        <span class="note">SYNC ${new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</span></div>
-      <div id="homekpis"><div class="skel"></div></div>
+      ${srail("pulse", "Today", "cy", `Updated ${new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`)}
+      <div id="homekpis"><div class="ptiles">
+        <div class="skel" style="height:100px"></div><div class="skel" style="height:100px"></div>
+        <div class="skel" style="height:100px"></div><div class="skel" style="height:100px"></div></div></div>
+      <div id="homereviews"></div>
+      <div id="homeattn"></div>
+      <div id="homecal"></div>
+      <div id="homephone"></div>
+      <div id="homefin"></div>
+      <div id="homecust"></div>
       <div id="homemail"></div>
       <div id="homenext"></div>
-      <div id="homeattn"></div>
       <div class="safety"><span class="ic">&#128737;</span>Ledger is available from every tab and still follows all confirmation and safety rules.</div>
     </div>`;
   const box = $("askbox");
@@ -458,9 +538,159 @@ async function renderHome() {
   on("[data-ask]", "click", (e) => { openChat(); $("box").value = e.currentTarget.dataset.ask; send(); });
   loadHomeSetup();
   loadHomeKpis();
+  loadHomeReviewsPulse();
+  loadHomeAttention();
+  loadHomeCalendar();
+  loadHomePhone();
+  loadHomeFinance();
+  loadHomeCustomers();
   loadHomeMail();
   loadHomeNext();
-  loadHomeAttention();
+}
+
+/* ---------------- home preview cards ----------------
+   One per tab, in the iPhone app's order. Each is allowed to fail on its own:
+   a workspace with no calendar still gets a full Home. */
+
+function wirePv(id, go) {
+  const el = document.querySelector(`[data-pv="${id}"]`);
+  if (el) el.onclick = go;
+}
+
+// Google reviews pulse — hidden entirely until Business Profile is connected,
+// exactly like iOS. Home never nags about a connector nobody asked for.
+async function loadHomeReviewsPulse() {
+  const slot = $("homereviews"); if (!slot) return;
+  try {
+    const board = (await get("/google-business-profile/reviews?limit=10")).reviews;
+    const unanswered = Number(board.unanswered_count) || 0;
+    const rating = board.average_rating != null ? Number(board.average_rating).toFixed(1) : "—";
+    slot.innerHTML = `<button class="panel pvcard gd" id="rvpulse" style="width:100%;text-align:left">
+      ${srail("star", "Google reviews", "gd", `<span class="bdg" style="--gt:${unanswered ? "251,146,60" : "26,230,148"}">${unanswered ? `${unanswered} to answer` : "All replied"}</span>`)}
+      <div class="pvstats">
+        <div class="pvstat"><b style="color:var(--gold)">${esc(rating)}</b><small>average rating</small></div>
+        <div class="pvstat"><b>${Number(board.total_count) || 0}</b><small>reviews</small></div>
+        <div class="pvstat"><b style="color:${unanswered ? "var(--orange)" : "var(--emerald)"}">${unanswered}</b><small>awaiting reply</small></div>
+      </div></button>`;
+    $("rvpulse").onclick = () => { S.lane = "reviews"; setTab("customers"); };
+  } catch { slot.innerHTML = ""; }
+}
+
+async function loadHomeCalendar() {
+  const slot = $("homecal"); if (!slot) return;
+  let inner;
+  try {
+    if (!S.cal) S.cal = await get("/google-calendar/events");
+    const up = S.cal?.calendar?.upcoming || [];
+    inner = up.length
+      ? up.slice(0, 3).map((e) => pvline(e.title || "Untitled appointment",
+          `${dayLabel(e.start)} · ${new Date(e.start).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`,
+          null, "calendar")).join("") +
+        (up.length > 3 ? `<p class="pvempty">+ ${up.length - 3} more upcoming</p>` : "")
+      : `<p class="pvempty">Nothing booked yet.</p>`;
+  } catch (e) {
+    inner = /not connected/i.test(e.message)
+      ? `<p class="pvempty">Google Calendar isn't connected yet — connect it in Business profile &amp; settings and your week lands here.</p>`
+      : `<p class="pvempty">Couldn't load the calendar.</p>`;
+  }
+  slot.innerHTML = pvcard("pvcal", "calendar", "Calendar", "pu", "View Calendar", inner);
+  wirePv("pvcal", () => setTab("calendar"));
+}
+
+async function loadHomePhone() {
+  const slot = $("homephone"); if (!slot) return;
+  let inner;
+  try {
+    if (!S.phone) S.phone = await api("/phone", { action: "board" });
+    const d = S.phone;
+    if (!d.hasNumber) {
+      inner = `<p class="pvempty">No business number connected yet — set one up in Phone.</p>`;
+    } else {
+      const m = d.metrics || {};
+      inner = pvstats([
+        [String(m.missedToday ?? 0), "missed today", (m.missedToday ?? 0) > 0 ? "var(--orange)" : "var(--dim)"],
+        [String(m.voicemailsUnheard ?? 0), "voicemails", (m.voicemailsUnheard ?? 0) > 0 ? "var(--cyan)" : "var(--dim)"],
+        [String(m.leads7d ?? 0), "leads · 7 days", "var(--emerald)"],
+      ]) + ((m.awaitingReply ?? 0) > 0
+        ? `<p class="pvempty">${m.awaitingReply} conversation${m.awaitingReply === 1 ? " is" : "s are"} waiting on a reply.</p>` : "");
+    }
+  } catch { inner = `<p class="pvempty">Couldn't load phone activity.</p>`; }
+  slot.innerHTML = pvcard("pvphone", "phone", "Phone", "cy", "Open Phone", inner);
+  wirePv("pvphone", () => setTab("phone"));
+}
+
+async function loadHomeFinance() {
+  const slot = $("homefin"); if (!slot) return;
+  let inner;
+  try {
+    const k = await homeBooksKpis();
+    inner = pvstats([
+      [money0(k.today_sales), "sales today", "var(--emerald)"],
+      [money0(k.month_sales), "month to date", "var(--cyan)"],
+      [money0(k.outstanding), "outstanding", Number(k.outstanding) > 0 ? "var(--orange)" : "var(--dim)"],
+    ]) + (Number(k.outstanding) > 0
+      ? `<p class="pvempty">${k.open_count || 0} invoice${(k.open_count || 0) === 1 ? "" : "s"} still unpaid.</p>` : "");
+  } catch { inner = `<p class="pvempty">Couldn't reach your books — pull down to retry.</p>`; }
+  slot.innerHTML = pvcard("pvfin", "dollar", "Finance", "em", "Open Finance", inner);
+  wirePv("pvfin", () => { S.financeLane = "invoices"; setTab("finance"); });
+}
+
+async function loadHomeCustomers() {
+  const slot = $("homecust"); if (!slot) return;
+  let inner;
+  try {
+    const rows = await homeCustomers();
+    inner = rows.length
+      ? rows.slice(0, 3).map((c) => pvline(c.name || "(no name)",
+          c.created_at ? `Added ${dateShort(c.created_at)}` : (c.email || c.phone || ""), null, "people")).join("")
+      : `<p class="pvempty">No customers on file yet.</p>`;
+  } catch { inner = `<p class="pvempty">Couldn't load your customer list.</p>`; }
+  slot.innerHTML = pvcard("pvcust", "people", "Recent customers", "pk", "View All Customers", inner);
+  wirePv("pvcust", () => { S.lane = "directory"; setTab("customers"); });
+}
+
+/** Today's numbers from whichever book the workspace runs on. */
+async function homeBooksKpis() {
+  if (S.booksProvider === undefined) {
+    try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
+    catch { S.booksProvider = "quickbooks"; }
+  }
+  if (S.booksProvider === "native") {
+    if (!S.nativeSummary) S.nativeSummary = await booksApi({ action: "summary" });
+    const n = S.nativeSummary?.summary || S.nativeSummary || {};
+    return {
+      today_sales: n.today_sales ?? n.todaySales ?? 0,
+      month_sales: n.month_sales ?? n.monthSales ?? 0,
+      ytd_sales: n.ytd_sales ?? n.ytdSales ?? 0,
+      outstanding: n.outstanding ?? 0,
+      open_count: n.open_count ?? n.openCount ?? 0,
+      today_profit: n.today_profit ?? n.todayProfit ?? null,
+      profit_margin: n.profit_margin ?? n.profitMargin ?? null,
+      missing_cost_count: n.missing_cost_count ?? n.missingCostCount ?? 0,
+    };
+  }
+  if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
+  return S.qbo?.qbo?.kpis || {};
+}
+
+/** Newest customers first, from whichever book is live. */
+async function homeCustomers() {
+  if (S.booksProvider === "native") {
+    if (!S.nativeCustomers) S.nativeCustomers = (await booksApi({ action: "customers" })).customers || [];
+    return S.nativeCustomers;
+  }
+  if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
+  const all = [...(S.qbo?.qbo?.customers || [])];
+  // Decorate once, then sort — the same fix build 74 shipped on iOS after date
+  // parsing inside the comparator stalled the main thread on a 1,000-row book.
+  return all
+    .map((row) => ({ row, t: row.created_at ? Date.parse(row.created_at) : NaN, seq: Number(row.id) || -Infinity }))
+    .sort((a, b) => {
+      if (!Number.isNaN(a.t) && !Number.isNaN(b.t) && a.t !== b.t) return b.t - a.t;
+      if (Number.isNaN(a.t) !== Number.isNaN(b.t)) return Number.isNaN(a.t) ? 1 : -1;
+      return b.seq - a.seq;
+    })
+    .map((d) => d.row);
 }
 
 // Three-step setup checklist at the top of Home for a workspace that is not
@@ -511,34 +741,40 @@ async function loadHomeSetup() {
 async function bizSettingsSheet() { return businessSheet(); }
 
 function kpiBlock(k) {
-  return `<div class="eyebrow" style="margin-bottom:-3px">FROM QUICKBOOKS</div><div class="kpis">
-      <div class="kpi cyan"><small>Today's sales</small><b>${money0(k.today_sales)}</b></div>
-      <div class="kpi em"><small>This month</small><b>${money0(k.month_sales)}</b></div>
-      <div class="kpi gold"><small>Outstanding</small><b>${money0(k.outstanding)}</b><i>${k.open_count ?? 0} open invoice${(k.open_count ?? 0) === 1 ? "" : "s"}</i></div>
-      <div class="kpi purple"><small>Year to date</small><b>${money0(k.ytd_sales)}</b></div>
-    </div>`;
+  // The four instrument tiles from the iPhone app's businessPulse, same order,
+  // same labels, same captions.
+  const pct = (v) => v == null ? null : `${Number(v).toFixed(1)}% margin`;
+  const profit = k.today_profit;
+  return `<div class="ptiles">
+    ${ptile({ label: "Sales today", value: money0(k.today_sales), detail: `${money0(k.month_sales)} this month`, icon: "dollar", tone: "em" })}
+    ${ptile({ label: "Est. profit", value: profit == null ? "—" : money0(profit),
+              detail: profit == null ? "Capture costs in Finance → Profit" : (pct(k.profit_margin) || "sales minus captured costs"),
+              icon: "profit", tone: "cy", unavailable: profit == null })}
+    ${ptile({ label: "Appointments", value: k.appointments == null ? "—" : String(k.appointments),
+              detail: k.appointments == null ? "Calendar unreachable" : (k.appointments === 0 ? "Nothing booked" : "Upcoming"),
+              icon: "calendar", tone: "pu", unavailable: k.appointments == null })}
+    ${ptile({ label: "Missed calls", value: k.missed == null ? "—" : String(k.missed),
+              detail: k.missed == null ? "Phone unreachable" : `${k.leads7d || 0} leads in 7 days`,
+              icon: "phonearrow", tone: "or", unavailable: k.missed == null })}
+  </div>`;
 }
 
 async function loadHomeKpis() {
   const slot = $("homekpis"); if (!slot) return;
-  try {
-    if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
-    slot.innerHTML = kpiBlock(S.qbo?.qbo?.kpis || {});
-  } catch (e) {
-    if (S.qbo) {
-      // A refresh failed, but we still have the last numbers Ledger pulled — show
-      // those instead of blanking a screen the owner is glancing at mid-shift.
-      slot.innerHTML = kpiBlock(S.qbo?.qbo?.kpis || {}) +
-        `<p class="note err" style="margin-top:8px">Couldn't refresh just now — showing the last numbers Ledger has. ${esc(e.message)}</p>`;
-    } else {
-      // Not connected: the setup checklist at the top of Home already carries
-      // the Connect button — don't show it twice on one screen.
-      slot.innerHTML = /not connected/i.test(e.message)
-        ? (localStorage.getItem(SETUP_HIDE_KEY) === "1" ? connectPanel("qbo") : "")
-        : `<div class="panel"><p class="sub">Couldn't reach QuickBooks: ${esc(e.message)}</p></div>`;
-      wireConnect(slot);
-    }
-  }
+  // Books, calendar and phone each answer for their own tile. One dead
+  // connector greys one number — it never blanks the row.
+  const [books, cal, phone] = await Promise.all([
+    homeBooksKpis().catch(() => null),
+    (S.cal ? Promise.resolve(S.cal) : get("/google-calendar/events")).then((d) => { S.cal = d; return d; }).catch(() => null),
+    (S.phone ? Promise.resolve(S.phone) : api("/phone", { action: "board" })).then((d) => { S.phone = d; return d; }).catch(() => null),
+  ]);
+  const k = { ...(books || {}) };
+  if (!books) { k.today_sales = 0; k.month_sales = 0; k.today_profit = null; }
+  k.appointments = cal ? (cal.calendar?.upcoming || []).length : null;
+  k.missed = phone?.hasNumber ? (phone.metrics?.missedToday ?? 0) : (phone ? 0 : null);
+  k.leads7d = phone?.metrics?.leads7d ?? 0;
+  slot.innerHTML = kpiBlock(k) + (books ? "" :
+    `<p class="note err" style="margin-top:8px">Couldn't reach your books just now.</p>`);
 }
 
 // Mirrors the iOS "LEDGER'S NEXT MOVE" card: one prioritised suggestion driven by open AR.
@@ -1421,7 +1657,7 @@ async function renderFinance() {
   const native = S.booksProvider === "native";
   const lane = S.financeLane === "profit" || S.financeLane === "receipts" ? S.financeLane : "invoices";
   view().innerHTML = `<div class="sect">
-    ${osHead(FINANCE_CODE[lane], FINANCE_TITLE[lane])}
+    ${pageHead(FINANCE_TITLE[lane])}
     <div class="seg">
       <button class="${lane === "invoices" ? "on" : ""}" data-fl="invoices">${segIc("overview")}Overview</button>
       <button class="${lane === "profit" ? "on" : ""}" data-fl="profit">${segIc("profit")}Profit</button>
@@ -2489,7 +2725,7 @@ function drawCalendar() {
   }
 
   view().innerHTML = `<div class="sect">
-    ${osHead("SCHEDULE", "Calendar")}
+    ${pageHead("Calendar")}
     <div class="searchwrap"><span class="mag">${MAG}</span>
       <input id="calsearch" placeholder="Search selected day" value="${esc(CAL.q)}"></div>
     ${next ? `<button class="nexthero" data-ev="${esc(next.id)}">
@@ -3004,7 +3240,7 @@ async function renderPhone() {
     const d = await api("/phone", { action: "board" });
     S.phone = d;
     view().innerHTML = `<div class="sect">
-      ${osHead("BUSINESS LINE", "Phone")}
+      ${pageHead("Phone")}
       ${d.hasNumber ? "" : requestNumberCard(d.pendingRequest, d.numberLocked)}
       ${/* The number and its setup guide sit ABOVE the lane switcher, not in a
             lane. Call forwarding is the thing that has to be working before any
@@ -3047,7 +3283,7 @@ async function renderPhone() {
       if (phoneLane() === "activity") loadPhoneLeads();
     }
   } catch (e) {
-    view().innerHTML = `<div class="sect">${osHead("BUSINESS LINE", "Phone")}<div class="empty">${esc(e.message)}</div></div>`;
+    view().innerHTML = `<div class="sect">${pageHead("Phone")}<div class="empty">${esc(e.message)}</div></div>`;
   }
 }
 
@@ -4622,7 +4858,7 @@ function laneAlerts() {
 
 async function renderCustomers() {
   view().innerHTML = `<div class="sect">
-    ${osHead(LANE_CODE[S.lane] || LANE_CODE.directory, S.lane === "todos" ? "To-Do" : S.lane === "reviews" ? "Reviews" : "Customers")}
+    ${pageHead(S.lane === "todos" ? "To-Do" : S.lane === "reviews" ? "Reviews" : "Customers")}
     <div class="seg">
       ${[["directory", "Directory", 0], ["reviews", "Reviews", 0], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
         `<button class="${S.lane === k ? "on" : ""}" data-lane="${k}">${segIc(k)}${l}${n ? `<i class="badge">${n}</i>` : ""}</button>`).join("")}

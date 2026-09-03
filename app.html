@@ -1145,8 +1145,216 @@ a{color:var(--cyan)}
 .playstep span{display:block;font-size:13px;font-weight:800}
 .playstep small{display:block;font-size:11.5px;color:var(--dim);margin-top:3px}
 .revlane-err{border:1px solid rgba(251,191,36,.28);border-radius:18px;padding:17px;background:linear-gradient(165deg,rgba(251,191,36,.05),rgba(255,255,255,.01))}
+
+/* ==========================================================================
+   iOS PARITY DESIGN LAYER (Kyle 1202, 2026-09-02) — the web app wears the same
+   skin as the iPhone app. Mirrors CommandTheme + PhoneGlass + LedgerHomeToken
+   from CameraAccess/Views/{CommandDashboardView,LedgerHomeView}.swift.
+   Appended last so it wins over the older flat-card rules above.
+   ========================================================================== */
+:root{
+  /* CommandTheme, converted from the SwiftUI Color literals. */
+  --cyan:#0dabff;--emerald:#1ae694;--gold:#ffc238;--silver:#c2d1e6;
+  --purple:#a855f7;--magenta:#e05cf0;--blue:#3b82f6;--red:#ff6b6b;--orange:#fb923c;
+  --tone:13,171,255;              /* live atmosphere tone, JS swaps it */
+  --r-card:22px;--r-tile:15px;--r-chip:12px;--gutter:16px;--sect:18px;--hair:1px;
+}
+/* ---------- living atmosphere: calm cyan, warm amber when something waits ---------- */
+#root{background:#000;isolation:isolate}
+#root::before,#root::after{
+  content:"";position:fixed;pointer-events:none;z-index:0;
+  border-radius:50%;filter:blur(70px);
+}
+#root::before{
+  background:radial-gradient(closest-side,rgba(var(--tone),.62),rgba(var(--tone),.16) 55%,transparent 78%);
+  width:150vw;height:70vh;top:-16vh;left:-38vw;animation:atmoA 26s ease-in-out infinite alternate;
+}
+#root::after{
+  background:radial-gradient(closest-side,rgba(88,32,196,.55),rgba(88,32,196,.14) 55%,transparent 78%);
+  width:140vw;height:66vh;top:40vh;left:-6vw;animation:atmoB 31s ease-in-out infinite alternate;
+}
+@keyframes atmoA{from{transform:translate3d(-4%,-3%,0) scale(1)}to{transform:translate3d(9%,6%,0) scale(1.12)}}
+@keyframes atmoB{from{transform:translate3d(4%,3%,0) scale(1.05)}to{transform:translate3d(-8%,-5%,0) scale(.95)}}
+@media (prefers-reduced-motion:reduce){#root::before,#root::after{animation:none}}
+header,main,nav#tabs,#banner,#alertbar{position:relative;z-index:1}
+
+/* ---------- PhoneGlass: the one card surface, everywhere ---------- */
+.panel,.kpi,.gotile,.brandcard,.console,.phstrip,.glass{
+  position:relative;
+  background:
+    linear-gradient(150deg,rgba(var(--gt,var(--tone)),.16),transparent 42%,rgba(var(--gt,var(--tone)),.06)),
+    linear-gradient(160deg,rgba(20,26,36,.86),rgba(8,11,17,.92));
+  border:1px solid transparent;
+  border-radius:var(--r-card);
+  background-clip:padding-box;
+  box-shadow:0 10px 26px rgba(0,0,0,.34),0 4px 24px rgba(var(--gt,var(--tone)),.16);
+  backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);
+}
+.panel::before,.kpi::before,.gotile::before,.brandcard::before,.console::before,.phstrip::before,.glass::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
+  background:linear-gradient(150deg,rgba(255,255,255,.36),rgba(var(--gt,var(--tone)),.34) 45%,rgba(255,255,255,.03));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+}
+/* the specular edge — one crisp light along the top rim, same as iOS */
+.panel::after,.kpi::after,.gotile::after,.brandcard::after,.console::after,.glass::after{
+  content:"";position:absolute;inset:1px;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(180deg,rgba(255,255,255,.40),rgba(255,255,255,.02) 46%,transparent 52%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;padding:1px;
+}
+.panel.quiet,.kpi{box-shadow:0 6px 18px rgba(0,0,0,.24)}
+.panel.cy{--gt:13,171,255}.panel.em{--gt:26,230,148}.panel.pu{--gt:168,85,247}
+.panel.gd{--gt:255,194,56}.panel.rd{--gt:255,107,107}.panel.or{--gt:251,146,60}
+.panel.pk{--gt:244,114,182}
+
+/* ---------- LedgerSectionRail: gradient icon plate + label + hairline ---------- */
+.srail{display:flex;flex-direction:column;gap:9px}
+.srail .rw{display:flex;align-items:center;gap:9px}
+.srail .ic{
+  width:24px;height:24px;border-radius:7px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:900;color:#fff;
+  background:linear-gradient(140deg,rgba(var(--gt,var(--tone)),.95),rgba(var(--gt,var(--tone)),.55));
+  box-shadow:0 0 7px rgba(var(--gt,var(--tone)),.55);
+}
+.srail .ic svg{width:13px;height:13px;fill:#fff}
+.srail b{font-size:14px;font-weight:600;letter-spacing:-.1px;color:rgb(var(--gt,var(--tone)));font-family:inherit}
+.srail .tr{margin-left:auto;font-size:11px;font-weight:600;color:var(--dim2);font-family:inherit}
+.srail .hr{height:1px;border-radius:1px;background:linear-gradient(90deg,rgba(var(--gt,var(--tone)),.45),rgba(var(--gt,var(--tone)),.08) 45%,transparent)}
+.srail.sil{--gt:194,209,230}.srail.cy{--gt:13,171,255}.srail.em{--gt:26,230,148}
+.srail.pu{--gt:168,85,247}.srail.gd{--gt:255,194,56}.srail.rd{--gt:255,107,107}
+.srail.or{--gt:251,146,60}.srail.pk{--gt:244,114,182}
+
+/* ---------- LedgerPulseTile: instrument numerals on a gradient rail ---------- */
+.ptiles{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.ptile{
+  position:relative;min-height:100px;padding:12px;border-radius:var(--r-tile);
+  display:flex;flex-direction:column;gap:7px;text-align:left;
+  background:
+    linear-gradient(150deg,rgba(var(--gt),.10),transparent 45%),
+    linear-gradient(160deg,rgba(20,26,36,.8),rgba(8,11,17,.9));
+  box-shadow:0 6px 18px rgba(0,0,0,.24);
+  border:1px solid transparent;background-clip:padding-box;
+  font-family:inherit;color:var(--text);cursor:default;
+}
+.ptile::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
+  background:linear-gradient(150deg,rgba(255,255,255,.30),rgba(var(--gt),.20) 45%,rgba(255,255,255,.03));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+}
+.ptile .h{display:flex;align-items:center;gap:7px}
+.ptile .h i{
+  width:21px;height:21px;border-radius:6px;flex-shrink:0;font-style:normal;
+  display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;
+  background:linear-gradient(140deg,rgba(var(--gt),.9),rgba(var(--gt),.5));
+  box-shadow:0 0 6px rgba(var(--gt),.6);
+}
+.ptile .h i svg{width:11px;height:11px;fill:#fff}
+.ptile .h small{font-size:11px;font-weight:600;color:var(--dim);letter-spacing:.1px;text-transform:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ptile b{
+  font-size:23px;font-weight:900;letter-spacing:-.7px;line-height:1.05;
+  background:linear-gradient(180deg,#fff,rgba(var(--gt),.75));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 10px rgba(var(--gt),.4));
+}
+.ptile em{font-style:normal;font-size:11.5px;line-height:1.35;color:rgb(var(--gt));display:block}
+.ptile .rail{height:2.5px;border-radius:999px;margin-top:auto;
+  background:linear-gradient(90deg,rgba(var(--gt),.85),rgba(var(--gt),.15) 55%,transparent)}
+.ptile.na b{background:none;color:var(--dim);-webkit-text-fill-color:var(--dim);filter:none}
+.ptile.na em{color:var(--orange)}
+.ptile.cy{--gt:13,171,255}.ptile.em{--gt:26,230,148}.ptile.pu{--gt:168,85,247}
+.ptile.gd{--gt:255,194,56}.ptile.rd{--gt:255,107,107}.ptile.or{--gt:251,146,60}
+.ptile.pk{--gt:244,114,182}.ptile.bl{--gt:59,130,246}
+
+/* ---------- LedgerPreviewCard: rail + rows + full-width gradient CTA ---------- */
+.pvcard{display:flex;flex-direction:column;gap:12px;padding:16px}
+.pvline{display:flex;align-items:center;gap:10px}
+.pvline .pic{width:28px;height:28px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:13px;background:rgba(var(--gt,var(--tone)),.11);color:rgb(var(--gt,var(--tone)))}
+.pvline .m{flex:1;min-width:0}
+.pvline .m b{display:block;font-size:14.5px;font-weight:600;letter-spacing:-.1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pvline .m small{display:block;font-size:12.5px;color:var(--dim);line-height:1.4;margin-top:2px}
+.pvline .bdg{flex-shrink:0;font-size:11px;font-weight:600;padding:4px 8px;border-radius:999px;
+  color:rgb(var(--gt,var(--tone)));background:rgba(var(--gt,var(--tone)),.13);border:1px solid rgba(var(--gt,var(--tone)),.3)}
+.pvcta{
+  display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:44px;
+  border-radius:var(--r-chip);cursor:pointer;font-family:inherit;color:#fff;font-size:13px;font-weight:700;
+  background:linear-gradient(180deg,rgba(var(--gt,var(--tone)),.34),rgba(var(--gt,var(--tone)),.12));
+  border:1px solid rgba(var(--gt,var(--tone)),.55);
+  box-shadow:0 4px 10px rgba(var(--gt,var(--tone)),.25);
+}
+.pvcta:active{transform:scale(.975)}
+.pvempty{font-size:13px;color:var(--dim);line-height:1.5}
+.pvcard.cy{--gt:13,171,255}.pvcard.em{--gt:26,230,148}.pvcard.pu{--gt:168,85,247}
+.pvcard.gd{--gt:255,194,56}.pvcard.rd{--gt:255,107,107}.pvcard.pk{--gt:244,114,182}
+.pvcard.or{--gt:251,146,60}
+
+/* ---------- LedgerShortcutTile: glowing plate, corner arrow, badge ---------- */
+.gotogrid{grid-template-columns:1fr 1fr 1fr;gap:11px}
+.gotile{padding:13px 12px 12px;border-radius:var(--r-tile)}
+.gotile .ictile{
+  width:38px;height:38px;border-radius:11px;margin-bottom:11px;color:#fff;font-size:17px;
+  background:linear-gradient(140deg,rgba(var(--gt),.95),rgba(var(--gt),.5));
+  box-shadow:0 0 12px rgba(var(--gt),.5);
+}
+.gotile .arrow{opacity:.6;font-size:11px}
+.gotile b{font-size:14.5px;font-weight:700;letter-spacing:-.2px}
+.gotile small{font-family:inherit;font-size:11px;letter-spacing:0;font-weight:500;color:var(--dim);text-transform:none}
+.gotile .bdg{position:absolute;top:8px;left:40px;min-width:17px;height:17px;border-radius:999px;
+  background:var(--red);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.gotile.em{--gt:26,230,148}.gotile.purple{--gt:168,85,247}.gotile.cyan{--gt:13,171,255}
+.gotile.red{--gt:244,114,182}.gotile.orange{--gt:251,146,60}.gotile.gold{--gt:255,194,56}
+
+/* ---------- hero, ask console, chips ---------- */
+.brandcard{--gt:13,171,255;padding:16px;gap:14px}
+.brandcard .tile{width:64px;height:64px;border-radius:16px;box-shadow:0 6px 18px rgba(0,0,0,.5)}
+.brandcard .who b{font-size:22px;letter-spacing:1.6px}
+.console{--gt:168,85,247;padding:16px}
+.console .chead b{color:rgb(var(--tone));font-size:14px;font-weight:600;letter-spacing:-.1px;text-transform:none}
+.askfield{border-radius:14px}
+.askchip{border-radius:var(--r-chip);font-weight:600}
+.bizrow{border-radius:var(--r-tile)}
+
+/* ---------- tab bar: dark capsule, glowing selected pill ---------- */
+nav#tabs{
+  background:linear-gradient(180deg,rgba(16,21,30,.86),rgba(6,9,14,.94));
+  backdrop-filter:blur(22px) saturate(170%);-webkit-backdrop-filter:blur(22px) saturate(170%);
+  border-top:1px solid rgba(255,255,255,.08);
+}
+nav#tabs button{border-radius:14px;transition:color .18s ease,background .18s ease}
+nav#tabs button.on{
+  color:rgb(var(--tone));
+  background:linear-gradient(180deg,rgba(var(--tone),.22),rgba(var(--tone),.07));
+  box-shadow:0 0 16px rgba(var(--tone),.28),inset 0 1px 0 rgba(255,255,255,.14);
+}
+
+/* ---------- misc ---------- */
+.lanehead .eyebrow{font-family:inherit;font-size:14px;font-weight:600;letter-spacing:-.1px;text-transform:none;color:var(--silver)}
+.safety{border-radius:var(--r-tile)}
+.skel{border-radius:10px}
+.pvbody{display:flex;flex-direction:column;gap:9px}
+.pvstats{display:flex;gap:8px}
+.pvstat{flex:1;min-width:0}
+.pvstat b{display:block;font-size:17px;font-weight:800;letter-spacing:-.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pvstat small{display:block;font-size:11.5px;color:var(--dim);margin-top:2px}
+.gotile .ictile svg{width:19px;height:19px;fill:none;stroke:#fff;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.srail .ic svg{fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ptile .h i svg{fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pvline .pic svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.srail .tr .bdg{font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;
+  color:rgb(var(--gt));background:rgba(var(--gt),.12);border:1px solid rgba(var(--gt),.28)}
+.qhead{display:flex;align-items:center;justify-content:space-between;padding:4px 2px 0}
+.qtitle{margin:0;font-size:26px;font-weight:700;letter-spacing:-.3px;color:var(--text)}
+.qsparkle{
+  width:32px;height:32px;border-radius:50%;border:1px solid rgba(13,171,255,.35);
+  background:rgba(13,171,255,.14);color:var(--cyan);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;flex-shrink:0;
+}
+.qsparkle svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=62"></script>
+<script type="module" src="app.js?v=63"></script>
 </body></html>
