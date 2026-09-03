@@ -7031,7 +7031,7 @@ function vehicleSpecCard(d, r, opts = {}) {
   const f = d.fitment || null;
   const tileTire = f?.front_tire ? (f.rear_tire ? `${f.front_tire} / ${f.rear_tire}` : f.front_tire)
     : r?.placard_tire_size ? `${r.placard_tire_size}${r.placard_rear_tire_size && r.placard_rear_tire_size !== r.placard_tire_size ? " / " + r.placard_rear_tire_size : ""}` : null;
-  const tileTorque = f?.torque_lbft ? `${f.torque_lbft} lb-ft` : f?.torque || null;
+  const tileTorque = f?.torque_lbft ? `${f.torque_lbft} lb-ft` : f?.torque || (r?.wheel_torque_lbft ? `${r.wheel_torque_lbft} lb-ft` : null);
   const tilePsi = f?.front_psi ? (f.rear_psi && f.rear_psi !== f.front_psi ? `${f.front_psi} / ${f.rear_psi}` : String(f.front_psi))
     : r?.placard_front_psi ? `${r.placard_front_psi}${r.placard_rear_psi && r.placard_rear_psi !== r.placard_front_psi ? " / " + r.placard_rear_psi : ""}` : null;
   const awaiting = !f && (Array.isArray(d.specs) ? d.specs : []).some((g) => g.items.some((it) => /awaiting/i.test(it.value)));
@@ -7039,7 +7039,7 @@ function vehicleSpecCard(d, r, opts = {}) {
   const tile = (label, value, unit, src) => `<div class="sc-tile ${value ? "" : "off"}"><span>${esc(label)}</span><b>${value ? esc(value) : "—"}</b><small>${value ? esc(unit || "") : esc(src || "not on file")}</small></div>`;
   const shop = `<div class="sc-shop">
       ${tile("Tire size", tileTire, f?.front_tire ? (f.load_speed ? "factory · " + f.load_speed : "factory") : tileTire ? "door placard" : "", pending ? "awaiting source" : "read the placard")}
-      ${tile("Torque", tileTorque, f?.torque_nm ? f.torque_nm + " Nm" : "", pending ? "awaiting source" : "not on file")}
+      ${tile("Torque", tileTorque, f?.torque_nm ? f.torque_nm + " Nm" : tileTorque ? "shop entry" : "", pending ? "awaiting source" : "not on file")}
       ${tile("Pressure", tilePsi, "psi cold", pending ? "awaiting source" : "read the placard")}
     </div>${f && f.confidence !== "exact" ? `<div class="note sc-warn">&#9888; ${esc(f.confidence === "likely" ? "Best match" : "Model-level match")} of ${f.candidates} trims (${esc(f.matched)}) — confirm size on the door placard.</div>` : ""}`;
   const groups = Array.isArray(d.specs) ? d.specs : [];
@@ -7103,7 +7103,7 @@ function vinScannerSheet() {
 }
 
 function vehicleScanSheet(e, back) {
-  const V = { vin: "", decoded: null, remembered: null, frontSize: "", rearSize: "", frontPsi: "", rearPsi: "", odometer: "", busy: "", err: "" };
+  const V = { vin: "", decoded: null, remembered: null, frontSize: "", rearSize: "", frontPsi: "", rearPsi: "", torque: "", odometer: "", busy: "", err: "" };
   const inp = (id, label, value, extra = "") => `<label class="emailrow">${label}<input id="${id}" class="cmpinput" value="${esc(value)}" ${extra}></label>`;
   const draw = () => {
     const d = V.decoded; const label = d ? [d.year, d.make, d.model, d.trim].filter(Boolean).join(" ") : "";
@@ -7121,6 +7121,8 @@ function vehicleScanSheet(e, back) {
       <div class="rowbtns" style="margin-top:6px"><button class="btn ghost" id="vsplac">&#128247; Photo the placard</button></div>
       <div class="rowbtns">${inp("vsfs", "Front tire size", V.frontSize)}${inp("vsrs", "Rear tire size", V.rearSize)}</div>
       <div class="rowbtns">${inp("vsfp", "Front PSI", V.frontPsi, 'inputmode="numeric"')}${inp("vsrp", "Rear PSI", V.rearPsi, 'inputmode="numeric"')}</div>
+      ${inp("vstq", "Wheel torque (lb-ft)", V.torque, 'inputmode="numeric" placeholder="e.g. 100"')}
+      <div class="note" style="margin-top:4px">Torque is remembered for this vehicle. Factory value fills in automatically once the fitment source is live.</div>
       <div class="eyebrow" style="margin-top:16px">3 · KILOMETRES</div>
       <div class="rowbtns" style="margin-top:6px"><button class="btn ghost" id="vsodo">&#128247; Photo the dash</button></div>
       ${inp("vskm", "Odometer (km)", V.odometer, 'inputmode="numeric"')}
@@ -7133,6 +7135,7 @@ function vehicleScanSheet(e, back) {
         V.vin = (sh.querySelector("#vsvintxt").value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
         V.frontSize = sh.querySelector("#vsfs").value.trim(); V.rearSize = sh.querySelector("#vsrs").value.trim();
         V.frontPsi = sh.querySelector("#vsfp").value.replace(/[^0-9]/g, ""); V.rearPsi = sh.querySelector("#vsrp").value.replace(/[^0-9]/g, "");
+        V.torque = sh.querySelector("#vstq").value.replace(/[^0-9]/g, "");
         V.odometer = sh.querySelector("#vskm").value.replace(/[^0-9]/g, "");
       };
       const photo = (mode) => { grab(); const f = sh.querySelector("#vsfile"); f.value = ""; f.dataset.mode = mode; f.click(); };
@@ -7152,6 +7155,7 @@ function vehicleScanSheet(e, back) {
         V.decoding = true; V.busy = "Looking up the vehicle…"; draw();
         try { const r = await api("/vehicles", { action: "decode", vin: V.vin }); V.decoded = r.vehicle; V.remembered = r.remembered;
           if (r.remembered) { V.frontSize = V.frontSize || r.remembered.placard_tire_size || ""; V.rearSize = V.rearSize || r.remembered.placard_rear_tire_size || ""; V.frontPsi = V.frontPsi || r.remembered.placard_front_psi || ""; V.rearPsi = V.rearPsi || r.remembered.placard_rear_psi || ""; }
+          V.torque = V.torque || (r.remembered?.wheel_torque_lbft ? String(r.remembered.wheel_torque_lbft) : "") || (r.vehicle?.fitment?.torque_lbft ? String(r.vehicle.fitment.torque_lbft) : "");
         } catch (err) { V.decoded = null; V.err = err.message || "VIN lookup failed"; }
         V.decoding = false; V.busy = ""; draw();
       };
@@ -7168,7 +7172,8 @@ function vehicleScanSheet(e, back) {
           const r = await api("/vehicles", { action: "complete", vin: V.vin, event_id: e.id, event_title: e.title, event_start: e.start,
             event_time: timeLabel(e.start), customer_name: e.title, odometer_km: Number(V.odometer),
             placard_tire_size: V.frontSize || null, placard_rear_tire_size: V.rearSize || null,
-            placard_front_psi: V.frontPsi ? Number(V.frontPsi) : null, placard_rear_psi: V.rearPsi ? Number(V.rearPsi) : null });
+            placard_front_psi: V.frontPsi ? Number(V.frontPsi) : null, placard_rear_psi: V.rearPsi ? Number(V.rearPsi) : null,
+            wheel_torque_lbft: V.torque ? Number(V.torque) : null });
           try { await navigator.clipboard.writeText(r.message); } catch {}
           const u = r.handoff_telegram_username
             ? "tg://resolve?domain=" + encodeURIComponent(r.handoff_telegram_username) + "&text=" + encodeURIComponent(r.message)
