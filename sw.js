@@ -1,5 +1,5 @@
 // Ledger AI service worker — app-shell cache, network-first for documents and assets.
-const CACHE = "ledger-ai-v81";
+const CACHE = "ledger-ai-v82";
 const SHELL = ["./app.html", "./app.js?v=60", "./index.html", "./manifest.webmanifest", "./icon.svg",
                "./icon-192.png", "./icon-512.png", "./icon-maskable-192.png", "./icon-maskable-512.png",
                "./assets/styles.css?v=41", "./assets/herodemo.js?v=2", "./assets/support-widget.css?v=2", "./assets/support-widget.js?v=1", "./assets/logo-mark-96.png", "./assets/logo-full-640.png", "./assets/icons/quickbooks.svg", "./assets/icons/gmail.svg", "./assets/icons/googlecalendar.svg", "./assets/icons/googlebusiness.svg",
@@ -56,4 +56,24 @@ self.addEventListener("fetch", (event) => {
       })
       .catch(() => caches.match(request))
   );
+});
+
+// Web Push (2026-09-02, web parity with the iPhone app). The server encrypts
+// {title, body, tag, data} per subscription; a tap opens (or focuses) the app.
+self.addEventListener("push", (event) => {
+  let p = {};
+  try { p = event.data ? event.data.json() : {}; } catch { p = { body: event.data ? event.data.text() : "" }; }
+  const title = p.title || "Ledger";
+  const opts = { body: p.body || "", tag: p.tag || undefined, data: p.data || {}, icon: "icon-192.png", badge: "icon-192.png", renotify: !!p.tag };
+  event.waitUntil(self.registration.showNotification(title, opts));
+});
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const go = (event.notification.data && event.notification.data.go) || "";
+  const url = new URL("app.html" + (go ? "?go=" + encodeURIComponent(go) : ""), self.registration.scope).href;
+  event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    const open = list.find((c) => c.url.startsWith(self.registration.scope));
+    if (open) { open.focus(); if (go) open.navigate(url).catch(() => {}); return; }
+    return self.clients.openWindow(url);
+  }));
 });

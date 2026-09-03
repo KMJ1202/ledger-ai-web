@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://lbzkyyehmgudlxmfpzzh.supabase.co wss://lbzkyyehmgudlxmfpzzh.supabase.co https://esm.sh; frame-src 'self' blob:; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://lbzkyyehmgudlxmfpzzh.supabase.co wss://lbzkyyehmgudlxmfpzzh.supabase.co https://esm.sh https://api.openai.com; media-src 'self' blob:; frame-src 'self' blob:; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#05070b">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1148,5 +1148,5 @@ a{color:var(--cyan)}
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=61"></script>
+<script type="module" src="app.js?v=62"></script>
 </body></html>

@@ -442,8 +442,9 @@ async function renderHome() {
     askRot = (askRot + 1) % ASK_PLACEHOLDERS.length;
     el.placeholder = ASK_PLACEHOLDERS[askRot];
   }, 3500);
-  // Ledger Live (realtime voice) is an iPhone capability — say so rather than fake an orb.
-  $("livebtn").onclick = () => toast("Ledger Live voice runs in the iPhone app");
+  // Ledger Live (realtime voice) — same OpenAI Realtime session the iPhone app
+  // opens, over the browser's own WebRTC (Kyle 2026-09-02, web parity).
+  $("livebtn").onclick = () => liveSheet();
   $("askcam").onclick = () => { S.financeLane = "receipts"; setTab("finance"); };
   $("bizsettings").onclick = () => businessSheet();
   on("[data-goto]", "click", (e) => {
@@ -2569,14 +2570,17 @@ function eventSheet(e, back) {
     <div class="kv"><span>Status</span><span>${esc((e.status || "confirmed").replace(/^./, (c) => c.toUpperCase()))}</span></div>
     ${e.location ? `<div class="kv"><span>Location</span><span>${esc(e.location)}</span></div>` : ""}
     ${e.description ? `<p class="note" style="white-space:pre-wrap;margin-top:11px">${esc(e.description)}</p>` : ""}
-    <div class="rowbtns" style="margin-top:14px">
+    <button class="btn primary wide" style="margin-top:14px" id="evscan">&#128663; Scan VIN &amp; close job</button>
+    <p class="note" style="margin-top:6px">Scan the VIN and door placard, type the kilometres, and the completion message is ready to send. Nothing is invoiced.</p>
+    <div class="rowbtns" style="margin-top:12px">
       <button class="btn ghost" id="evdel">Delete</button>
-      <button class="btn primary" id="evedit" ${e.all_day ? "disabled" : ""}>Edit</button>
+      <button class="btn ghost" id="evedit" ${e.all_day ? "disabled" : ""}>Edit</button>
     </div>
     ${back ? `<button class="btn ghost wide" style="margin-top:9px" id="evback">&#8592; Back</button>` : ""}
     <div class="note" id="evnote" style="margin-top:9px"></div>`, (sh) => {
     const note = sh.querySelector("#evnote");
     if (back) sh.querySelector("#evback").onclick = () => back();
+    sh.querySelector("#evscan").onclick = () => vehicleScanSheet(e, () => eventSheet(e, back));
     sh.querySelector("#evedit").onclick = () => bookingSheet(evDayKey(e.start), e);
     sh.querySelector("#evdel").onclick = async (ev) => {
       if (!confirm(`Delete "${e.title}" from the calendar? This can't be undone.`)) return;
@@ -5266,6 +5270,8 @@ function customerSheet(c) {
     </div>` : ""}
     <button class="btn primary wide" style="margin-top:9px" id="cask">&#10022; Ask Ledger about ${esc((c.name || "").split(" ")[0] || c.name)}</button>
 
+    <div id="hubslot" style="margin-top:12px"></div>
+
     <div class="kpis" style="margin-top:14px">
       <div class="kpi cyan"><small>Lifetime sales</small><b>${money0(lifetime)}</b></div>
       <div class="kpi purple"><small>Invoices</small><b>${all.length}</b></div>
@@ -5333,6 +5339,7 @@ function customerSheet(c) {
     };
     sh.querySelector("#cinv").onclick = () => { closeSheet(); openChat(); $("box").value = `Create an invoice for ${c.name}`; send(); };
     sh.querySelector("#crev").onclick = () => reviewSheet(c, reviewAsked().has(c.id));
+    clientHubCard(sh.querySelector("#hubslot"), c);
     // sheet() replaces whatever is open, so hand the child sheets a way back to
     // this customer — otherwise Close drops the user out of the profile entirely.
     on("[data-cinv]", "click", (e) => {
@@ -6122,6 +6129,9 @@ async function businessSheet() {
     <div class="eyebrow" style="margin-top:20px">TEAM</div>
     <div id="teamslot" class="note" style="margin-top:8px">Loading…</div>
 
+    <div class="eyebrow" style="margin-top:20px">NOTIFICATIONS</div>
+    <div id="pushslot" class="note" style="margin-top:8px">Checking…</div>
+
     <div class="eyebrow" style="margin-top:20px">APP</div>
     <div class="rowbtns" style="margin-top:8px;flex-direction:column">
       ${S.installPrompt ? `<button class="btn primary wide" id="install">📲 Install Ledger AI</button>` : ""}
@@ -6136,6 +6146,7 @@ async function businessSheet() {
       <a href="${FN}/legal/privacy" target="_blank" rel="noopener">Privacy Policy</a> ·
       <a href="${FN}/legal/terms" target="_blank" rel="noopener">Terms of Service</a></p>`, async (sh) => {
     wireConnect(sh);
+    pushSettingsCard(sh.querySelector("#pushslot"));
     sh.querySelector("#bzbooks").onclick = () => {
       closeSheet();
       if (native) booksSettingsSheet();
@@ -6569,6 +6580,339 @@ async function boot() {
     appView();
   } catch { appView(); }
 }
+/* ---------------- Client Hub sharing (web parity 2026-09-02) ----------------
+   The iPhone hands a customer their portal link from the customer screen; the
+   web twin does the same. One link per QBO customer, get-or-create, with
+   copy / share / pause / new-link. Mirrors CustomerDetailView's hub card. */
+function clientHubCard(slot, c) {
+  if (!slot || !c?.id) return;
+  const paint = (link, err) => {
+    if (err) { slot.innerHTML = `<div class="note">Client Hub: ${esc(err)}</div>`; return; }
+    if (!link) { slot.innerHTML = `<div class="note">Client Hub link: loading…</div>`; return; }
+    slot.innerHTML = `<div style="padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--card)">
+      <div class="eyebrow">CLIENT HUB</div>
+      <div class="note" style="margin-top:4px">${link.active ? "Their private portal — invoices, estimates, approvals." : "Link paused — the customer sees nothing until you resume it."}</div>
+      <div class="rowbtns" style="margin-top:10px">
+        <button class="btn primary" id="hubcopy" ${link.active ? "" : "disabled"}>&#128279; Copy link</button>
+        ${navigator.share ? `<button class="btn ghost" id="hubshare" ${link.active ? "" : "disabled"}>&#8599; Share</button>` : ""}
+        <button class="btn ghost" id="hubpause">${link.active ? "Pause" : "Resume"}</button>
+        <button class="btn ghost" id="hubnew">New link</button>
+      </div></div>`;
+    const busy = async (fn) => { try { await fn(); } catch (e) { toast(e.message || "Client Hub failed", "err"); } };
+    slot.querySelector("#hubcopy").onclick = () => busy(async () => {
+      await navigator.clipboard.writeText(link.url); toast("Client Hub link copied");
+    });
+    const shareBtn = slot.querySelector("#hubshare");
+    if (shareBtn) shareBtn.onclick = () => busy(async () => {
+      try { await navigator.share({ title: (S.profile?.business?.name || "Ledger") + " — your account", url: link.url }); }
+      catch (e) { if (e?.name !== "AbortError") { await navigator.clipboard.writeText(link.url); toast("Client Hub link copied"); } }
+    });
+    slot.querySelector("#hubpause").onclick = () => busy(async () => {
+      const r = await api("/client-hub", { action: "set-active", id: link.id, active: !link.active });
+      paint(r.link); toast(r.link.active ? "Client Hub link resumed" : "Client Hub link paused");
+    });
+    slot.querySelector("#hubnew").onclick = () => busy(async () => {
+      if (!confirm("Make a new link? The old one stops working immediately.")) return;
+      const r = await api("/client-hub", { action: "regenerate", id: link.id });
+      paint(r.link); toast("New Client Hub link ready");
+    });
+  };
+  paint(null);
+  api("/client-hub", { action: "link", qbo_customer_id: String(c.id), customer_name: c.name || "" })
+    .then((r) => paint(r.link))
+    .catch((e) => paint(null, e.message || "unavailable"));
+}
+
+/* ---------------- VIN scan & close job (web parity 2026-09-02) ----------------
+   Web twin of the iPhone VehicleScanFlow. Photos come from the phone camera
+   (file input with capture); the VIN barcode is read by the browser's own
+   BarcodeDetector when it has one, otherwise — and for the door placard and
+   dash — by Tesseract running locally in the browser (assets/ocr, no upload).
+   Same parsers as iOS: VIN = 17 chars, no I/O/Q; placard = sizes + PSI pairs.
+   The server (/vehicles) decodes, remembers the vehicle and writes the
+   completion message. Nothing is invoiced. */
+let OCR_WORKER = null;
+async function ocrWorker() {
+  if (OCR_WORKER) return OCR_WORKER;
+  if (!window.Tesseract) {
+    await new Promise((res, rej) => { const t = document.createElement("script"); t.src = "assets/ocr/tesseract.min.js"; t.onload = res; t.onerror = () => rej(new Error("Text reader failed to load")); document.head.appendChild(t); });
+  }
+  const base = new URL("assets/ocr/", location.href).href;
+  OCR_WORKER = await window.Tesseract.createWorker("eng", 1, { workerPath: base + "worker.min.js", corePath: base, langPath: base, gzip: true });
+  return OCR_WORKER;
+}
+async function readPhoto(file) {
+  const out = { lines: [], barcodes: [] };
+  if ("BarcodeDetector" in window) {
+    try {
+      const bmp = await createImageBitmap(file);
+      const det = new BarcodeDetector({ formats: ["code_39", "code_128", "qr_code", "data_matrix"] });
+      out.barcodes = (await det.detect(bmp)).map((b) => b.rawValue || "").filter(Boolean);
+    } catch {}
+  }
+  try {
+    const w = await ocrWorker();
+    const { data } = await w.recognize(file);
+    out.lines = String(data?.text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  } catch (e) { if (!out.barcodes.length) throw e; }
+  return out;
+}
+function cleanedVIN(raw) {
+  let compact = String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (compact.startsWith("VIN")) compact = compact.slice(3);
+  if (compact.length < 17) return null;
+  for (let i = 0; i + 17 <= compact.length; i++) {
+    const c = compact.slice(i, i + 17);
+    if (!/[IOQ]/.test(c) && /[A-Z]/.test(c) && /[0-9]/.test(c)) return c;
+  }
+  return null;
+}
+function vinFromRead(read) {
+  for (const b of read.barcodes) { const v = cleanedVIN(b); if (v) return v; }
+  for (const l of read.lines) if (l.toUpperCase().includes("VIN")) { const v = cleanedVIN(l); if (v) return v; }
+  for (const l of read.lines) { const v = cleanedVIN(l); if (v) return v; }
+  return null;
+}
+function placardFromRead(read) {
+  const joined = read.lines.join(" \n ").toUpperCase();
+  const sizes = [];
+  for (const m of joined.matchAll(/\b(P|LT)?\s*(\d{3})\s*\/\s*(\d{2,3})\s*R\s*(\d{2}(?:\.\d)?)\b/g)) {
+    const size = `${m[1] || ""}${m[2]}/${m[3]}R${m[4]}`; if (!sizes.includes(size)) sizes.push(size);
+  }
+  if (!sizes.length) for (const m of joined.matchAll(/\b(\d{2}(?:\.\d)?)\s*R\s*(\d{2}(?:\.\d)?)\b/g)) {
+    const size = `${m[1]}R${m[2]}`; if (!sizes.includes(size)) sizes.push(size);
+  }
+  const psi = [...joined.matchAll(/\b(\d{2,3})\s*PSI\b/g)].map((m) => Number(m[1])).filter((n) => n >= 20 && n <= 150);
+  return { frontSize: sizes[0] || "", rearSize: sizes[1] || "", frontPsi: psi[0] || "", rearPsi: psi[1] || psi[0] || "" };
+}
+function odometerFromRead(read) {
+  const values = (lines) => lines.flatMap((line) => [...line.matchAll(/\b\d[\d\s,.]{2,9}\b/g)].map((m) => Number(m[0].replace(/[^0-9]/g, ""))).filter((v) => v >= 1000 && v <= 3000000));
+  const labelled = read.lines.filter((l) => { const u = l.toUpperCase(); return u.includes("ODO") || u.includes(" KM") || u.endsWith("KM"); });
+  const pick = values(labelled); const any = values(read.lines);
+  return pick.length ? Math.max(...pick) : any.length ? Math.max(...any) : null;
+}
+
+function vehicleScanSheet(e, back) {
+  const V = { vin: "", decoded: null, remembered: null, frontSize: "", rearSize: "", frontPsi: "", rearPsi: "", odometer: "", busy: "", err: "" };
+  const inp = (id, label, value, extra = "") => `<label class="emailrow">${label}<input id="${id}" class="cmpinput" value="${esc(value)}" ${extra}></label>`;
+  const draw = () => {
+    const d = V.decoded; const label = d ? [d.year, d.make, d.model, d.trim].filter(Boolean).join(" ") : "";
+    const r = V.remembered;
+    sheet(`<h2>Scan VIN &amp; close job</h2>
+      <p class="sh-sub">${esc(e.title || "")} · ${esc(timeLabel(e.start))}</p>
+      <div class="eyebrow" style="margin-top:8px">1 · VIN</div>
+      <div class="rowbtns" style="margin-top:6px">
+        <button class="btn primary" id="vsvin">&#128247; Photo the VIN</button>
+      </div>
+      ${inp("vsvintxt", "VIN (17 characters)", V.vin, 'maxlength="17" autocapitalize="characters" autocomplete="off" spellcheck="false"')}
+      ${label ? `<div class="note" style="margin-top:6px">&#10004; ${esc(label)}${r ? ` · seen before${r.last_odometer_km ? " at " + Number(r.last_odometer_km).toLocaleString("en-CA") + " km" : ""}` : ""}</div>` : ""}
+      <div class="eyebrow" style="margin-top:16px">2 · DOOR PLACARD</div>
+      <div class="rowbtns" style="margin-top:6px"><button class="btn ghost" id="vsplac">&#128247; Photo the placard</button></div>
+      <div class="rowbtns">${inp("vsfs", "Front tire size", V.frontSize)}${inp("vsrs", "Rear tire size", V.rearSize)}</div>
+      <div class="rowbtns">${inp("vsfp", "Front PSI", V.frontPsi, 'inputmode="numeric"')}${inp("vsrp", "Rear PSI", V.rearPsi, 'inputmode="numeric"')}</div>
+      <div class="eyebrow" style="margin-top:16px">3 · KILOMETRES</div>
+      <div class="rowbtns" style="margin-top:6px"><button class="btn ghost" id="vsodo">&#128247; Photo the dash</button></div>
+      ${inp("vskm", "Odometer (km)", V.odometer, 'inputmode="numeric"')}
+      ${V.err ? `<div class="note" style="color:#fca5a5;margin-top:8px">${esc(V.err)}</div>` : ""}
+      ${V.busy ? `<div class="note" style="margin-top:8px">${esc(V.busy)}</div>` : ""}
+      <button class="btn primary wide" style="margin-top:14px" id="vsdone" ${V.vin.length === 17 && V.odometer ? "" : "disabled"}>Finish &amp; send completion message</button>
+      <p class="note" style="margin-top:6px">Copies the message and opens Telegram to send it. Nothing is invoiced.</p>
+      <input type="file" id="vsfile" accept="image/*" capture="environment" hidden>`, (sh) => {
+      const grab = () => {
+        V.vin = (sh.querySelector("#vsvintxt").value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        V.frontSize = sh.querySelector("#vsfs").value.trim(); V.rearSize = sh.querySelector("#vsrs").value.trim();
+        V.frontPsi = sh.querySelector("#vsfp").value.replace(/[^0-9]/g, ""); V.rearPsi = sh.querySelector("#vsrp").value.replace(/[^0-9]/g, "");
+        V.odometer = sh.querySelector("#vskm").value.replace(/[^0-9]/g, "");
+      };
+      const photo = (mode) => { grab(); const f = sh.querySelector("#vsfile"); f.value = ""; f.dataset.mode = mode; f.click(); };
+      sh.querySelector("#vsfile").onchange = async (ev) => {
+        const file = ev.target.files?.[0]; if (!file) return;
+        const mode = ev.target.dataset.mode; V.err = ""; V.busy = "Reading the photo…"; draw();
+        try {
+          const read = await readPhoto(file);
+          if (mode === "vin") { const v = vinFromRead(read); if (v) { V.vin = v; await decode(); } else V.err = "Couldn't find a 17‑character VIN in that photo — try closer, or type it."; }
+          else if (mode === "placard") { const p = placardFromRead(read); Object.assign(V, { frontSize: p.frontSize || V.frontSize, rearSize: p.rearSize || V.rearSize, frontPsi: p.frontPsi || V.frontPsi, rearPsi: p.rearPsi || V.rearPsi }); if (!p.frontSize && !p.frontPsi) V.err = "No tire size or PSI read — type them from the sticker."; }
+          else { const km = odometerFromRead(read); if (km) V.odometer = String(km); else V.err = "Couldn't read the kilometres — type them."; }
+        } catch (err) { V.err = err.message || "Photo read failed"; }
+        V.busy = ""; draw();
+      };
+      const decode = async () => {
+        if (V.vin.length !== 17) return;
+        V.busy = "Looking up the vehicle…"; draw();
+        try { const r = await api("/vehicles", { action: "decode", vin: V.vin }); V.decoded = r.vehicle; V.remembered = r.remembered;
+          if (r.remembered) { V.frontSize = V.frontSize || r.remembered.placard_tire_size || ""; V.rearSize = V.rearSize || r.remembered.placard_rear_tire_size || ""; V.frontPsi = V.frontPsi || r.remembered.placard_front_psi || ""; V.rearPsi = V.rearPsi || r.remembered.placard_rear_psi || ""; }
+        } catch (err) { V.decoded = null; V.err = err.message || "VIN lookup failed"; }
+        V.busy = ""; draw();
+      };
+      sh.querySelector("#vsvin").onclick = () => photo("vin");
+      sh.querySelector("#vsplac").onclick = () => photo("placard");
+      sh.querySelector("#vsodo").onclick = () => photo("odo");
+      sh.querySelector("#vsvintxt").onchange = () => { grab(); if (V.vin.length === 17) decode(); else draw(); };
+      sh.querySelector("#vskm").oninput = () => { grab(); sh.querySelector("#vsdone").disabled = !(V.vin.length === 17 && V.odometer); };
+      sh.querySelector("#vsdone").onclick = async () => {
+        grab(); if (V.vin.length !== 17 || !V.odometer) return;
+        V.err = ""; V.busy = "Saving the visit…"; draw();
+        try {
+          const r = await api("/vehicles", { action: "complete", vin: V.vin, event_id: e.id, event_title: e.title, event_start: e.start,
+            event_time: timeLabel(e.start), customer_name: e.title, odometer_km: Number(V.odometer),
+            placard_tire_size: V.frontSize || null, placard_rear_tire_size: V.rearSize || null,
+            placard_front_psi: V.frontPsi ? Number(V.frontPsi) : null, placard_rear_psi: V.rearPsi ? Number(V.rearPsi) : null });
+          try { await navigator.clipboard.writeText(r.message); } catch {}
+          const u = r.handoff_telegram_username
+            ? "tg://resolve?domain=" + encodeURIComponent(r.handoff_telegram_username) + "&text=" + encodeURIComponent(r.message)
+            : "https://t.me/share/url?url=&text=" + encodeURIComponent(r.message);
+          toast("Saved · message copied" + (r.km_since_last != null ? " · " + Number(r.km_since_last).toLocaleString("en-CA") + " km since last visit" : ""));
+          window.open(u, "_blank"); closeSheet(); if (back) back();
+        } catch (err) { V.busy = ""; V.err = err.message || "Couldn't save the visit"; draw(); }
+      };
+    });
+  };
+  draw();
+}
+
+/* ---------------- Push notifications (web parity 2026-09-02) ----------------
+   Settings card. Subscribes this browser through the service worker and
+   registers it with /web-push; the server fans every alert out to iPhones
+   (APNs) and browsers (Web Push) together. iPhone Safari only allows this once
+   the app is added to the Home Screen — the card says so instead of failing. */
+function pushSettingsCard(slot) {
+  if (!slot) return;
+  const b64ToKey = (b64) => { const s = (b64 + "=".repeat((4 - b64.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/"); const raw = atob(s); return Uint8Array.from(raw, (c) => c.charCodeAt(0)); };
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const paint = (html, wire) => { slot.innerHTML = html; if (wire) wire(); };
+  const run = async () => {
+    if (!supported) return paint(isIOS && !standalone
+      ? "Add Ledger to your Home Screen (Share → Add to Home Screen) to turn on notifications."
+      : "This browser can't receive notifications.");
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    let st; try { st = await api("/web-push", { action: "status", endpoint: existing?.endpoint || "" }); } catch (e) { return paint("Notifications: " + esc(e.message)); }
+    if (!st.configured || !st.public_key) return paint("Notifications aren't switched on for the server yet.");
+    const on = !!(existing && st.subscribed);
+    paint(`<div>${on ? "&#10004; This device gets notifications — new texts, paid invoices, booking requests." : Notification.permission === "denied" ? "Notifications are blocked for this site in your browser settings." : "Get a buzz when a customer texts, pays, or books."}</div>
+      <div class="rowbtns" style="margin-top:8px">
+        <button class="btn ${on ? "ghost" : "primary"}" id="pushtoggle" ${Notification.permission === "denied" && !on ? "disabled" : ""}>${on ? "Turn off" : "Turn on"}</button>
+        ${on ? `<button class="btn ghost" id="pushtest">Send a test</button>` : ""}
+      </div>`, () => {
+      slot.querySelector("#pushtoggle").onclick = async () => {
+        try {
+          if (on) {
+            if (existing) { await api("/web-push", { action: "unregister", endpoint: existing.endpoint }); await existing.unsubscribe().catch(() => {}); }
+            toast("Notifications off on this device");
+          } else {
+            const perm = await Notification.requestPermission();
+            if (perm !== "granted") { toast("Notifications weren't allowed", "err"); return run(); }
+            const sub = existing || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToKey(st.public_key) });
+            await api("/web-push", { action: "register", subscription: sub.toJSON(), user_agent: navigator.userAgent });
+            toast("Notifications on");
+          }
+        } catch (e) { toast(e.message || "Couldn't change notifications", "err"); }
+        run();
+      };
+      const t = slot.querySelector("#pushtest");
+      if (t) t.onclick = async () => {
+        try { const r = await api("/web-push", { action: "test" }); toast(r.delivered > 0 ? `Test sent to ${r.delivered} device${r.delivered === 1 ? "" : "s"}` : "No device received it", r.delivered > 0 ? undefined : "err"); }
+        catch (e) { toast(e.message || "Test failed", "err"); }
+      };
+    });
+  };
+  run().catch((e) => paint("Notifications: " + esc(e.message || "unavailable")));
+}
+
+/* ---------------- Ledger Live voice (web parity 2026-09-02) ----------------
+   Same OpenAI Realtime session the iPhone opens (/realtime/session mints the
+   short-lived key, the tool catalog and safety gates are the server's), over
+   the browser's own WebRTC. Tool calls arrive on the "oai-events" data channel
+   and run through /ledger-ai tool-exec with the user's own sign-in, exactly as
+   iOS does. Usage is reported back per response so the AI allowance holds. */
+let LIVE = null;
+function liveSheet() {
+  if (LIVE) { LIVE.draw(); return; }
+  const L = { state: "connecting", err: "", lines: [], cost: 0, pc: null, dc: null, mic: null, audio: null, drafts: [] };
+  const stop = () => {
+    try { L.dc?.close(); } catch {}
+    try { L.mic?.getTracks().forEach((t) => t.stop()); } catch {}
+    try { L.pc?.close(); } catch {}
+    if (L.audio) { L.audio.pause(); L.audio.srcObject = null; }
+    LIVE = null;
+  };
+  const labels = { connecting: "Connecting…", listening: "Listening", thinking: "Thinking…", speaking: "Ledger is speaking", failed: "Couldn't connect", ended: "Ended" };
+  L.draw = () => {
+    const live = ["listening", "thinking", "speaking"].includes(L.state);
+    sheet(`<h2>&#127908; Ledger Live</h2>
+      <p class="sh-sub">${esc(labels[L.state] || L.state)}${L.cost ? ` · $${L.cost.toFixed(2)} this session` : ""}</p>
+      <div style="display:flex;justify-content:center;margin:14px 0">
+        <div style="width:96px;height:96px;border-radius:50%;background:${L.state === "speaking" ? "var(--cyan)" : L.state === "failed" ? "#7f1d1d" : "var(--card2)"};border:2px solid var(--line);box-shadow:0 0 ${live ? "34px" : "0"} rgba(34,211,238,.35);transition:all .3s"></div>
+      </div>
+      ${L.err ? `<div class="note" style="color:#fca5a5">${esc(L.err)}</div>` : ""}
+      <div class="note" style="max-height:34vh;overflow:auto">${L.lines.map((l) => `<div style="margin:4px 0"><b>${l.who === "you" ? "You" : "Ledger"}:</b> ${esc(l.text)}</div>`).join("") || "Talk naturally — ask for today's numbers, who owes you, or to draft an invoice. Say \"stop\" or tap End."}</div>
+      <div class="rowbtns" style="margin-top:14px">
+        ${live ? `<button class="btn ghost" id="livemute">${L.muted ? "Unmute" : "Mute"}</button>` : ""}
+        <button class="btn primary" id="liveend">${L.state === "failed" || L.state === "ended" ? "Close" : "End"}</button>
+      </div>`, (sh) => {
+      sh.querySelector("#liveend").onclick = () => { stop(); closeSheet(); L.drafts.forEach(emailDraftCard); };
+      const m = sh.querySelector("#livemute");
+      if (m) m.onclick = () => { L.muted = !L.muted; L.mic?.getAudioTracks().forEach((t) => { t.enabled = !L.muted; }); L.draw(); };
+    });
+    const wrap = $("sheetwrap"); if (wrap) wrap.querySelector(".sheet-back").onclick = () => { closeSheet(); if (!live) stop(); };
+  };
+  const set = (state) => { L.state = state; L.draw(); };
+  const send = (ev) => { try { L.dc?.send(JSON.stringify(ev)); } catch {} };
+  const onEvent = async (ev) => {
+    switch (ev.type) {
+      case "session.created": case "input_audio_buffer.speech_started": if (L.state !== "speaking") set("listening"); break;
+      case "input_audio_buffer.speech_stopped": set("thinking"); break;
+      case "response.created": set("speaking"); break;
+      case "conversation.item.input_audio_transcription.completed": if (ev.transcript) { L.lines.push({ who: "you", text: ev.transcript }); L.draw(); } break;
+      case "response.output_audio_transcript.done": case "response.audio_transcript.done": if (ev.transcript) { L.lines.push({ who: "ledger", text: ev.transcript }); L.draw(); } break;
+      case "response.done": {
+        if (L.state === "speaking") set("listening");
+        const outputs = ev.response?.output || [];
+        const calls = outputs.filter((o) => o.type === "function_call");
+        if (ev.response?.usage) api("/realtime/usage", { usage: ev.response.usage, tool_calls: calls.length }).then((r) => { L.cost += Number(r?.cost_usd || 0); L.draw(); }).catch(() => {});
+        if (!calls.length) break;
+        set("thinking");
+        for (const c of calls) {
+          let output = '{"error":"tool failed"}';
+          try {
+            const r = await api("/ledger-ai", { action: "tool-exec", name: c.name, input: JSON.parse(c.arguments || "{}") });
+            output = r.output || "{}"; if (r.email_drafts) L.drafts.push(...r.email_drafts);
+          } catch (e) { output = JSON.stringify({ error: e.message || "tool failed" }); }
+          send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: c.call_id, output } });
+        }
+        send({ type: "response.create" });
+        break;
+      }
+      case "error": L.err = ev.error?.message || "Voice error"; set("failed"); break;
+    }
+  };
+  LIVE = L; L.draw();
+  (async () => {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error("This browser can't do live voice.");
+      const info = await api("/realtime/session", {});
+      L.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      L.pc = pc;
+      L.audio = new Audio(); L.audio.autoplay = true;
+      pc.ontrack = (e) => { L.audio.srcObject = e.streams[0]; L.audio.play().catch(() => {}); };
+      L.mic.getTracks().forEach((t) => pc.addTrack(t, L.mic));
+      const dc = pc.createDataChannel("oai-events"); L.dc = dc;
+      dc.onmessage = (m) => { try { onEvent(JSON.parse(m.data)); } catch {} };
+      dc.onopen = () => { if (L.state === "connecting") set("listening"); };
+      dc.onclose = () => { if (LIVE === L && L.state !== "failed") set("ended"); };
+      const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+      await new Promise((res) => { if (pc.iceGatheringState === "complete") return res(); const t = setTimeout(res, 2000); pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === "complete") { clearTimeout(t); res(); } }; });
+      const r = await fetch("https://api.openai.com/v1/realtime/calls?model=" + encodeURIComponent(info.model || "gpt-realtime"), {
+        method: "POST", headers: { Authorization: "Bearer " + info.client_secret, "Content-Type": "application/sdp" }, body: pc.localDescription.sdp });
+      if (!r.ok) throw new Error("The voice service refused the connection (" + r.status + ").");
+      await pc.setRemoteDescription({ type: "answer", sdp: await r.text() });
+    } catch (e) { L.err = e.message || "Couldn't start Ledger Live"; L.state = "failed"; stop(); LIVE = null; L.draw(); }
+  })();
+}
+
 boot();
 supa.auth.onAuthStateChange((event, s) => {
   if (event === "SIGNED_IN" && s && !$("view") && !$("bizname") && !$("joincode")) boot();
