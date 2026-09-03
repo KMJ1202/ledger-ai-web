@@ -7122,7 +7122,7 @@ function vehicleScanSheet(e, back) {
       <div class="rowbtns">${inp("vsfs", "Front tire size", V.frontSize)}${inp("vsrs", "Rear tire size", V.rearSize)}</div>
       <div class="rowbtns">${inp("vsfp", "Front PSI", V.frontPsi, 'inputmode="numeric"')}${inp("vsrp", "Rear PSI", V.rearPsi, 'inputmode="numeric"')}</div>
       ${inp("vstq", "Wheel torque (lb-ft)", V.torque, 'inputmode="numeric" placeholder="e.g. 100"')}
-      <div class="note" style="margin-top:4px">Torque is remembered for this vehicle. Factory value fills in automatically once the fitment source is live.</div>
+      <div class="note" style="margin-top:4px">Torque is remembered for this vehicle. Factory torque fills in from the VIN.</div>
       <div class="eyebrow" style="margin-top:16px">3 · KILOMETRES</div>
       <div class="rowbtns" style="margin-top:6px"><button class="btn ghost" id="vsodo">&#128247; Photo the dash</button></div>
       ${inp("vskm", "Odometer (km)", V.odometer, 'inputmode="numeric"')}
@@ -7155,6 +7155,11 @@ function vehicleScanSheet(e, back) {
         V.decoding = true; V.busy = "Looking up the vehicle…"; draw();
         try { const r = await api("/vehicles", { action: "decode", vin: V.vin }); V.decoded = r.vehicle; V.remembered = r.remembered;
           if (r.remembered) { V.frontSize = V.frontSize || r.remembered.placard_tire_size || ""; V.rearSize = V.rearSize || r.remembered.placard_rear_tire_size || ""; V.frontPsi = V.frontPsi || r.remembered.placard_front_psi || ""; V.rearPsi = V.rearPsi || r.remembered.placard_rear_psi || ""; }
+          // Exact factory match pre-fills the placard fields so one VIN scan is enough; an ambiguous match stays blank.
+          const fit = r.vehicle?.fitment; if (fit && fit.confidence === "exact") {
+            V.frontSize = V.frontSize || fit.front_tire || ""; V.rearSize = V.rearSize || (fit.rear_tire && fit.rear_tire !== fit.front_tire ? fit.rear_tire : "");
+            V.frontPsi = V.frontPsi || (fit.front_psi != null ? String(fit.front_psi) : ""); V.rearPsi = V.rearPsi || (fit.rear_psi != null ? String(fit.rear_psi) : "");
+          }
           V.torque = V.torque || (r.remembered?.wheel_torque_lbft ? String(r.remembered.wheel_torque_lbft) : "") || (r.vehicle?.fitment?.torque_lbft ? String(r.vehicle.fitment.torque_lbft) : "");
         } catch (err) { V.decoded = null; V.err = err.message || "VIN lookup failed"; }
         V.decoding = false; V.busy = ""; draw();
