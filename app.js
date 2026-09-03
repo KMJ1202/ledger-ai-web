@@ -7025,6 +7025,23 @@ function vehicleSpecCard(d, r, opts = {}) {
     if (r.placard_tire_size) chips.push(`<span class="sc-chip cy">${esc(r.placard_tire_size)}${r.placard_rear_tire_size && r.placard_rear_tire_size !== r.placard_tire_size ? " / " + esc(r.placard_rear_tire_size) : ""}</span>`);
     if (r.placard_front_psi) chips.push(`<span class="sc-chip cy">${esc(String(r.placard_front_psi))}${r.placard_rear_psi ? "/" + esc(String(r.placard_rear_psi)) : ""} PSI</span>`);
   } else chips.push(`<span class="sc-chip">First time here</span>`);
+  // The three numbers the bay actually needs sit on top, always visible:
+  // factory tire size, wheel torque, cold pressure. Factory data first,
+  // this shop's own placard reading as the fallback.
+  const f = d.fitment || null;
+  const tileTire = f?.front_tire ? (f.rear_tire ? `${f.front_tire} / ${f.rear_tire}` : f.front_tire)
+    : r?.placard_tire_size ? `${r.placard_tire_size}${r.placard_rear_tire_size && r.placard_rear_tire_size !== r.placard_tire_size ? " / " + r.placard_rear_tire_size : ""}` : null;
+  const tileTorque = f?.torque_lbft ? `${f.torque_lbft} lb-ft` : f?.torque || null;
+  const tilePsi = f?.front_psi ? (f.rear_psi && f.rear_psi !== f.front_psi ? `${f.front_psi} / ${f.rear_psi}` : String(f.front_psi))
+    : r?.placard_front_psi ? `${r.placard_front_psi}${r.placard_rear_psi && r.placard_rear_psi !== r.placard_front_psi ? " / " + r.placard_rear_psi : ""}` : null;
+  const awaiting = !f && (Array.isArray(d.specs) ? d.specs : []).some((g) => g.items.some((it) => /awaiting/i.test(it.value)));
+  const pending = !f && (awaiting || (!tileTire && !tilePsi));
+  const tile = (label, value, unit, src) => `<div class="sc-tile ${value ? "" : "off"}"><span>${esc(label)}</span><b>${value ? esc(value) : "—"}</b><small>${value ? esc(unit || "") : esc(src || "not on file")}</small></div>`;
+  const shop = `<div class="sc-shop">
+      ${tile("Tire size", tileTire, f?.front_tire ? (f.load_speed ? "factory · " + f.load_speed : "factory") : tileTire ? "door placard" : "", pending ? "awaiting source" : "read the placard")}
+      ${tile("Torque", tileTorque, f?.torque_nm ? f.torque_nm + " Nm" : "", pending ? "awaiting source" : "not on file")}
+      ${tile("Pressure", tilePsi, "psi cold", pending ? "awaiting source" : "read the placard")}
+    </div>${f && f.confidence !== "exact" ? `<div class="note sc-warn">&#9888; ${esc(f.confidence === "likely" ? "Best match" : "Model-level match")} of ${f.candidates} trims (${esc(f.matched)}) — confirm size on the door placard.</div>` : ""}`;
   const groups = Array.isArray(d.specs) ? d.specs : [];
   const count = groups.reduce((n, g) => n + g.items.length, 0);
   const body = groups.map((g) => `<div class="sc-group"><div class="eyebrow">${esc(g.group)}</div>
@@ -7036,6 +7053,7 @@ function vehicleSpecCard(d, r, opts = {}) {
     </div>
     <div class="sc-vin">${esc(d.vin || "")}</div>
     <div class="sc-chips">${chips.join("")}</div>
+    ${shop}
     ${d.warning ? `<div class="note sc-warn">&#9888; ${esc(d.warning)}</div>` : ""}
     ${count ? `<details class="sc-all" ${opts.open ? "open" : ""}><summary>All specs <em>${count}</em></summary>${body}</details>` : `<div class="note">No further specs on file for this VIN.</div>`}
   </div>`;
