@@ -997,6 +997,46 @@ footer textarea{flex:1;border-radius:17px;padding:12px 14px;resize:none;max-heig
 .kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;font-size:14.5px;border-bottom:1px solid rgba(255,255,255,.045)}
 .kv span:first-child{color:var(--dim)}
 .kv.tot{font-weight:900;font-size:16.5px;border-bottom:0;padding-top:11px}
+/* VIN scanner — live camera overlay + one-skin spec card (2026-09-02) */
+.vinrow{margin-top:10px;border-color:rgba(58,200,245,.3)}
+.vinrow .ic svg{width:22px;height:22px;stroke:var(--cyan);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.vinrow small{color:var(--cyan)}
+.vscan{position:fixed;inset:0;z-index:90;background:#000;display:flex;flex-direction:column;animation:fade .16s}
+.vscan-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.vscan-mask{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.vscan-frame{width:min(86vw,520px);height:150px;border-radius:18px;position:relative;box-shadow:0 0 0 100vmax rgba(0,0,0,.55);border:1.5px solid rgba(58,200,245,.7)}
+.vscan-frame i{position:absolute;left:14px;right:14px;top:50%;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);box-shadow:0 0 14px var(--cyan);animation:vsweep 1.6s ease-in-out infinite}
+.vscan-frame.hit{border-color:var(--emerald);box-shadow:0 0 0 100vmax rgba(0,0,0,.55),0 0 28px rgba(47,224,160,.6)}
+.vscan-frame.hit i{background:var(--emerald);animation:none;box-shadow:0 0 14px var(--emerald)}
+@keyframes vsweep{0%,100%{transform:translateY(-58px)}50%{transform:translateY(58px)}}
+.vscan-top{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:center;padding:calc(var(--top) + 14px) 18px 12px}
+.vscan-x{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;width:38px;height:38px;border-radius:50%;font-size:16px;cursor:pointer}
+.vscan-hint{position:absolute;left:18px;right:18px;top:calc(50% + 96px);z-index:2;text-align:center;color:#fff;font-size:14.5px;font-weight:700;text-shadow:0 1px 8px #000}
+.vscan-bot{position:absolute;left:18px;right:18px;bottom:calc(var(--bot) + 22px);z-index:2;display:flex;gap:10px;justify-content:center}
+.vscan-bot .btn{background:rgba(0,0,0,.45);backdrop-filter:blur(8px)}
+.vscan-torch.on{border-color:var(--gold);color:var(--gold)}
+.speccard{margin-top:12px;border:1px solid rgba(58,200,245,.28);border-radius:20px;padding:14px;background:linear-gradient(160deg,rgba(58,200,245,.08),rgba(255,255,255,.02) 60%);box-shadow:0 10px 30px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.06)}
+.sc-head{display:flex;gap:12px;align-items:center}
+.sc-ic{width:46px;height:46px;border-radius:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(140deg,#0284c7,#38bdf8);box-shadow:0 6px 18px rgba(58,200,245,.35)}
+.sc-ic svg{width:24px;height:24px;stroke:#fff;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.sc-title b{display:block;font-size:18px;font-weight:900;letter-spacing:-.3px}
+.sc-title small{display:block;color:var(--dim);font-size:13px;margin-top:2px}
+.sc-vin{font-family:var(--mono);font-size:12.5px;letter-spacing:2px;color:var(--cyan);margin-top:10px;word-break:break-all}
+.sc-chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+.sc-chip{border:1px solid var(--line);background:var(--glass);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:800;color:var(--dim)}
+.sc-chip.em{border-color:rgba(47,224,160,.35);color:var(--emerald)}
+.sc-chip.cy{border-color:rgba(58,200,245,.35);color:var(--cyan)}
+.sc-warn{color:var(--gold);margin-top:8px}
+.sc-all{margin-top:10px}
+.sc-all summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;font-weight:800;font-size:13.5px;padding:9px 0;border-top:1px solid rgba(255,255,255,.06)}
+.sc-all summary::-webkit-details-marker{display:none}
+.sc-all summary em{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--cyan);border:1px solid rgba(58,200,245,.35);border-radius:999px;padding:2px 8px}
+.sc-all summary::after{content:"\25BE";margin-left:auto;color:var(--dim);transition:transform .15s}
+.sc-all[open] summary::after{transform:rotate(180deg)}
+.sc-group{margin-top:8px}
+.sc-group .eyebrow{margin:8px 0 2px}
+.sc-group .kv{font-size:13.5px;padding:7px 0}
+.sc-group .kv b{text-align:right;font-weight:700}
 .pu-card{display:flex;align-items:center;gap:13px;width:100%;background:var(--glass);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px;color:var(--text);font-size:15px;cursor:pointer;font-family:inherit}
 .pu-card.hot{border-color:rgba(58,200,245,.55);background:rgba(58,200,245,.09)}
 .pu-emoji{font-size:23px}.pu-info{flex:1;text-align:left;display:flex;flex-direction:column}.pu-info small{color:var(--dim);font-size:12.5px}
@@ -1356,5 +1396,5 @@ nav#tabs button.on{
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=63"></script>
+<script type="module" src="app.js?v=64"></script>
 </body></html>

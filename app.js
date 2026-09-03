@@ -125,7 +125,13 @@ document.addEventListener("pointerdown", (e) => {
   if (e.target.closest && e.target.closest("input,textarea,select,label")) return;
   blurInput();
 }, true);
-function closeSheet() { const w = $("sheetwrap"); if (w) w.remove(); }
+function closeSheet() {
+  const w = $("sheetwrap"); if (!w) return;
+  // Removing a sheet that still holds the focused field fires blur mid-removal
+  // and Chrome throws NotFoundError; blur first, and never let a stale node throw.
+  if (w.contains(document.activeElement)) { try { document.activeElement.blur(); } catch {} }
+  try { w.remove(); } catch { if (w.parentNode) try { w.parentNode.removeChild(w); } catch {} }
+}
 
 /* ---------------- app shell ---------------- */
 // Tab glyphs are inline SVG so the web bar reads like the iOS SF Symbols bar
@@ -199,6 +205,7 @@ const SEG_ICONS = {
   spark: `<path d="M12 3l2 5.6 5.6 2-5.6 2L12 18l-2-5.4-5.6-2 5.6-2z"/>`,
   bell: `<path d="M12 3a6 6 0 016 6v4l2 3H4l2-3V9a6 6 0 016-6zM9.5 19a2.5 2.5 0 005 0"/>`,
   star: `<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.7l5.9-.8z"/>`,
+  car: `<path d="M5 13l1.5-5h11L19 13M4 13h16v5H4zM7 18v2M17 18v2"/><circle cx="7.5" cy="15.5" r="1"/><circle cx="16.5" cy="15.5" r="1"/>`,
   gear: `<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1"/>`,
 };
 const segIc = (k) => SEG_ICONS[k] ? `<svg class="sic" viewBox="0 0 24 24">${SEG_ICONS[k]}</svg>` : "";
@@ -489,6 +496,11 @@ async function renderHome() {
           <span class="ictile">${segIc(icon)}</span><span class="arrow">&#8599;</span>
           <b>${label}</b><small>${sub}</small></button>`).join("")}
       </div>
+      <button class="bizrow vinrow" data-goto="vin">
+        <span class="ic">${segIc("car")}</span>
+        <span class="m"><b>Scan a VIN</b><small>LIVE CAMERA · EVERY SPEC · ONE CARD</small></span>
+        <span class="go">&#8599;</span>
+      </button>
 
       ${srail("pulse", "Today", "cy", `Updated ${new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`)}
       <div id="homekpis"><div class="ptiles">
@@ -529,6 +541,7 @@ async function renderHome() {
   $("bizsettings").onclick = () => businessSheet();
   on("[data-goto]", "click", (e) => {
     const k = e.currentTarget.dataset.goto;
+    if (k === "vin") { vinScannerSheet(); return; }
     if (k === "receipts") { S.financeLane = "receipts"; setTab("finance"); }
     else if (k === "reviews") { S.lane = "reviews"; setTab("customers"); }
     else if (k === "finance") { S.financeLane = "invoices"; setTab("finance"); }
@@ -6815,6 +6828,8 @@ async function boot() {
     await loadProfile(b);
     appView();
   } catch { appView(); }
+  // app.html#vin opens the scanner straight away (Home Screen shortcut / QR on the shop wall).
+  if (location.hash === "#vin") { history.replaceState(null, "", location.pathname); vinScannerSheet(); }
 }
 /* ---------------- Client Hub sharing (web parity 2026-09-02) ----------------
    The iPhone hands a customer their portal link from the customer screen; the
@@ -6928,6 +6943,147 @@ function odometerFromRead(read) {
   return pick.length ? Math.max(...pick) : any.length ? Math.max(...any) : null;
 }
 
+/* ---------------- Live VIN scanner + one-skin spec card (2026-09-02) ----------------
+   Alternative to photo-and-OCR: the camera stays open and ZXing (assets/scan,
+   local, nothing uploaded) reads the door-jamb barcode the moment it is in
+   frame — Code 39 / Code 128 / QR / Data Matrix / PDF417, which covers every
+   North American VIN label. Works in iPhone Safari and Android Chrome, which
+   have no BarcodeDetector. Photo + typing stay as fallbacks.
+   Every decoded spec renders through ONE component, vehicleSpecCard(), so the
+   standalone scanner and the close-job flow look identical. */
+let ZX_READY = null;
+function zxing() {
+  if (window.ZXing) return Promise.resolve(window.ZXing);
+  if (ZX_READY) return ZX_READY;
+  ZX_READY = new Promise((res, rej) => {
+    const t = document.createElement("script"); t.src = "assets/scan/zxing.min.js";
+    t.onload = () => res(window.ZXing); t.onerror = () => rej(new Error("Barcode reader failed to load"));
+    document.head.appendChild(t);
+  });
+  return ZX_READY;
+}
+function liveVinScan() {
+  return new Promise(async (resolve) => {
+    const wrap = document.createElement("div"); wrap.className = "vscan";
+    wrap.innerHTML = `<video class="vscan-video" playsinline muted autoplay></video>
+      <div class="vscan-mask"><div class="vscan-frame"><i></i></div></div>
+      <div class="vscan-top"><span class="eyebrow">Live VIN scan</span><button class="vscan-x" type="button">&#10005;</button></div>
+      <div class="vscan-hint">Line up the barcode on the door jamb or dash label</div>
+      <div class="vscan-bot"><button class="btn ghost vscan-torch" type="button" hidden>&#128294; Light</button><button class="btn ghost vscan-type" type="button">Type it instead</button></div>`;
+    document.body.appendChild(wrap);
+    const video = wrap.querySelector("video"); const hint = wrap.querySelector(".vscan-hint");
+    let reader = null; let done = false;
+    const finish = (vin) => {
+      if (done) return; done = true;
+      try { reader && reader.reset(); } catch {}
+      try { (video.srcObject?.getTracks() || []).forEach((t) => t.stop()); } catch {}
+      wrap.remove(); resolve(vin || null);
+    };
+    wrap.querySelector(".vscan-x").onclick = () => finish(null);
+    wrap.querySelector(".vscan-type").onclick = () => finish(null);
+    if (!navigator.mediaDevices?.getUserMedia) { hint.textContent = "This browser has no camera access — type the VIN instead."; return; }
+    try {
+      const ZX = await zxing();
+      const hints = new Map();
+      hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.CODE_39, ZX.BarcodeFormat.CODE_128, ZX.BarcodeFormat.QR_CODE, ZX.BarcodeFormat.DATA_MATRIX, ZX.BarcodeFormat.PDF_417]);
+      hints.set(ZX.DecodeHintType.TRY_HARDER, true);
+      reader = new ZX.BrowserMultiFormatReader(hints, 250);
+      const onRead = (result) => {
+        if (!result || done) return;
+        const v = cleanedVIN(result.getText ? result.getText() : result.text);
+        if (v) { wrap.querySelector(".vscan-frame").classList.add("hit"); hint.textContent = "Got it · " + v; setTimeout(() => finish(v), 220); }
+        else hint.textContent = "Barcode read, but it isn't a VIN — keep looking";
+      };
+      const constraints = { video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } };
+      if (reader.decodeFromConstraints) await reader.decodeFromConstraints(constraints, video, onRead);
+      else await reader.decodeFromVideoDevice(undefined, video, onRead);
+      // Torch when the phone offers one (Android Chrome); iPhone Safari does not.
+      try {
+        const track = video.srcObject?.getVideoTracks?.()[0];
+        const caps = track?.getCapabilities?.() || {};
+        if (caps.torch) {
+          const tb = wrap.querySelector(".vscan-torch"); tb.hidden = false; let on = false;
+          tb.onclick = () => { on = !on; track.applyConstraints({ advanced: [{ torch: on }] }).catch(() => {}); tb.classList.toggle("on", on); };
+        }
+      } catch {}
+    } catch (err) {
+      const why = String(err?.name || "") + " " + String(err?.message || "");
+      hint.textContent = /denied|permission|NotAllowed/i.test(why)
+        ? "Camera permission was refused — allow the camera in your browser, or type the VIN."
+        : /failed to load/i.test(why) ? why.trim() : "No camera available here — use Photo, or type the VIN.";
+    }
+  });
+}
+function vehicleSpecCard(d, r, opts = {}) {
+  if (!d) return "";
+  const title = [d.year, d.make, d.model].filter(Boolean).join(" ");
+  const sub = [d.trim, d.drivetrain, d.engine, d.fuel].filter(Boolean).join(" · ");
+  const chips = [];
+  if (r) {
+    chips.push(`<span class="sc-chip em">Seen before${r.visit_count ? " · " + r.visit_count + " visit" + (r.visit_count === 1 ? "" : "s") : ""}</span>`);
+    if (r.last_odometer_km) chips.push(`<span class="sc-chip">${Number(r.last_odometer_km).toLocaleString("en-CA")} km last visit</span>`);
+    if (r.placard_tire_size) chips.push(`<span class="sc-chip cy">${esc(r.placard_tire_size)}${r.placard_rear_tire_size && r.placard_rear_tire_size !== r.placard_tire_size ? " / " + esc(r.placard_rear_tire_size) : ""}</span>`);
+    if (r.placard_front_psi) chips.push(`<span class="sc-chip cy">${esc(String(r.placard_front_psi))}${r.placard_rear_psi ? "/" + esc(String(r.placard_rear_psi)) : ""} PSI</span>`);
+  } else chips.push(`<span class="sc-chip">First time here</span>`);
+  const groups = Array.isArray(d.specs) ? d.specs : [];
+  const count = groups.reduce((n, g) => n + g.items.length, 0);
+  const body = groups.map((g) => `<div class="sc-group"><div class="eyebrow">${esc(g.group)}</div>
+      ${g.items.map((it) => `<div class="kv"><span>${esc(it.label)}</span><b>${esc(it.value)}</b></div>`).join("")}</div>`).join("");
+  return `<div class="speccard">
+    <div class="sc-head">
+      <span class="sc-ic">${segIc("car")}</span>
+      <div class="sc-title"><b>${esc(title || "Vehicle")}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</div>
+    </div>
+    <div class="sc-vin">${esc(d.vin || "")}</div>
+    <div class="sc-chips">${chips.join("")}</div>
+    ${d.warning ? `<div class="note sc-warn">&#9888; ${esc(d.warning)}</div>` : ""}
+    ${count ? `<details class="sc-all" ${opts.open ? "open" : ""}><summary>All specs <em>${count}</em></summary>${body}</details>` : `<div class="note">No further specs on file for this VIN.</div>`}
+  </div>`;
+}
+function specsAsText(d) {
+  const lines = [[d.year, d.make, d.model, d.trim].filter(Boolean).join(" "), "VIN " + d.vin, ""];
+  for (const g of d.specs || []) { lines.push(g.group.toUpperCase()); for (const it of g.items) lines.push(`${it.label}: ${it.value}`); lines.push(""); }
+  return lines.join("\n").trim();
+}
+function vinScannerSheet() {
+  const V = { vin: "", decoded: null, remembered: null, busy: "", err: "" };
+  const draw = () => {
+    sheet(`<h2>VIN scanner</h2>
+      <p class="sh-sub">Scan the barcode, or type the 17 characters. Every spec shows on one card.</p>
+      <div class="rowbtns">
+        <button class="btn primary" id="vnlive">&#9673; Scan with camera</button>
+        <button class="btn ghost" id="vnphoto">&#128247; Photo</button>
+      </div>
+      <label class="emailrow" style="margin-top:8px">VIN (17 characters)<input id="vntxt" class="cmpinput" value="${esc(V.vin)}" maxlength="17" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="1FT…"></label>
+      ${V.busy ? `<div class="note" style="margin-top:8px">${esc(V.busy)}</div>` : ""}
+      ${V.err ? `<div class="note" style="color:#fca5a5;margin-top:8px">${esc(V.err)}</div>` : ""}
+      ${vehicleSpecCard(V.decoded, V.remembered, { open: true })}
+      ${V.decoded ? `<div class="rowbtns" style="margin-top:10px"><button class="btn ghost" id="vncopy">Copy specs</button><button class="btn ghost" id="vnask">Ask Ledger about it</button></div>` : ""}
+      <input type="file" id="vnfile" accept="image/*" capture="environment" hidden>`, (sh) => {
+      const decode = async () => {
+        if (V.vin.length !== 17 || V.decoding) return;
+        V.decoding = true; V.err = ""; V.busy = "Looking up the vehicle…"; V.decoded = null; draw();
+        try { const r = await api("/vehicles", { action: "decode", vin: V.vin }); V.decoded = r.vehicle; V.remembered = r.remembered; }
+        catch (err) { V.err = err.message || "VIN lookup failed"; }
+        V.decoding = false; V.busy = ""; draw();
+      };
+      sh.querySelector("#vnlive").onclick = async () => { const v = await liveVinScan(); if (v) { V.vin = v; decode(); } };
+      sh.querySelector("#vnphoto").onclick = () => { const f = sh.querySelector("#vnfile"); f.value = ""; f.click(); };
+      sh.querySelector("#vnfile").onchange = async (ev) => {
+        const file = ev.target.files?.[0]; if (!file) return;
+        V.err = ""; V.busy = "Reading the photo…"; draw();
+        try { const v = vinFromRead(await readPhoto(file)); if (v) { V.vin = v; V.busy = ""; await decode(); return; } V.err = "Couldn't find a 17‑character VIN in that photo — try the live scan, or type it."; }
+        catch (err) { V.err = err.message || "Photo read failed"; }
+        V.busy = ""; draw();
+      };
+      sh.querySelector("#vntxt").onchange = (ev) => { V.vin = (ev.target.value || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); if (V.vin.length === 17) decode(); else if (V.vin) { V.err = "A VIN is 17 characters — no I, O or Q."; draw(); } };
+      const copy = sh.querySelector("#vncopy"); if (copy) copy.onclick = async () => { try { await navigator.clipboard.writeText(specsAsText(V.decoded)); toast("Specs copied"); } catch { toast("Couldn't copy", "err"); } };
+      const ask = sh.querySelector("#vnask"); if (ask) ask.onclick = () => { const d = V.decoded; closeSheet(); openChat(); $("box").value = `What do you know about the ${[d.year, d.make, d.model].filter(Boolean).join(" ")} with VIN ${d.vin}? Last visit, kilometres and tire sizes on file.`; send(); };
+    });
+  };
+  draw();
+}
+
 function vehicleScanSheet(e, back) {
   const V = { vin: "", decoded: null, remembered: null, frontSize: "", rearSize: "", frontPsi: "", rearPsi: "", odometer: "", busy: "", err: "" };
   const inp = (id, label, value, extra = "") => `<label class="emailrow">${label}<input id="${id}" class="cmpinput" value="${esc(value)}" ${extra}></label>`;
@@ -6938,10 +7094,11 @@ function vehicleScanSheet(e, back) {
       <p class="sh-sub">${esc(e.title || "")} · ${esc(timeLabel(e.start))}</p>
       <div class="eyebrow" style="margin-top:8px">1 · VIN</div>
       <div class="rowbtns" style="margin-top:6px">
-        <button class="btn primary" id="vsvin">&#128247; Photo the VIN</button>
+        <button class="btn primary" id="vsvin">&#9673; Scan with camera</button>
+        <button class="btn ghost" id="vsvinphoto">&#128247; Photo</button>
       </div>
       ${inp("vsvintxt", "VIN (17 characters)", V.vin, 'maxlength="17" autocapitalize="characters" autocomplete="off" spellcheck="false"')}
-      ${label ? `<div class="note" style="margin-top:6px">&#10004; ${esc(label)}${r ? ` · seen before${r.last_odometer_km ? " at " + Number(r.last_odometer_km).toLocaleString("en-CA") + " km" : ""}` : ""}</div>` : ""}
+      ${vehicleSpecCard(d, r)}
       <div class="eyebrow" style="margin-top:16px">2 · DOOR PLACARD</div>
       <div class="rowbtns" style="margin-top:6px"><button class="btn ghost" id="vsplac">&#128247; Photo the placard</button></div>
       <div class="rowbtns">${inp("vsfs", "Front tire size", V.frontSize)}${inp("vsrs", "Rear tire size", V.rearSize)}</div>
@@ -6973,14 +7130,15 @@ function vehicleScanSheet(e, back) {
         V.busy = ""; draw();
       };
       const decode = async () => {
-        if (V.vin.length !== 17) return;
-        V.busy = "Looking up the vehicle…"; draw();
+        if (V.vin.length !== 17 || V.decoding) return;
+        V.decoding = true; V.busy = "Looking up the vehicle…"; draw();
         try { const r = await api("/vehicles", { action: "decode", vin: V.vin }); V.decoded = r.vehicle; V.remembered = r.remembered;
           if (r.remembered) { V.frontSize = V.frontSize || r.remembered.placard_tire_size || ""; V.rearSize = V.rearSize || r.remembered.placard_rear_tire_size || ""; V.frontPsi = V.frontPsi || r.remembered.placard_front_psi || ""; V.rearPsi = V.rearPsi || r.remembered.placard_rear_psi || ""; }
         } catch (err) { V.decoded = null; V.err = err.message || "VIN lookup failed"; }
-        V.busy = ""; draw();
+        V.decoding = false; V.busy = ""; draw();
       };
-      sh.querySelector("#vsvin").onclick = () => photo("vin");
+      sh.querySelector("#vsvin").onclick = async () => { grab(); const v = await liveVinScan(); if (v) { V.vin = v; await decode(); } };
+      sh.querySelector("#vsvinphoto").onclick = () => photo("vin");
       sh.querySelector("#vsplac").onclick = () => photo("placard");
       sh.querySelector("#vsodo").onclick = () => photo("odo");
       sh.querySelector("#vsvintxt").onchange = () => { grab(); if (V.vin.length === 17) decode(); else draw(); };
