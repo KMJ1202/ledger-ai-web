@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "ai.heyledger.app",
+      "sha256_cert_fingerprints": [
+        "72:3A:44:3F:2F:33:65:EF:46:B0:55:51:79:19:10:DD:D3:8E:74:DE:00:63:30:AF:28:A0:BD:65:E0:DB:43:DB"
+      ]
+    }
+  }
+]
