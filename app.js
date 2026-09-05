@@ -2232,6 +2232,28 @@ function msLines(lines) {
   return (lines || []).slice(0, 3).map((l) =>
     `<div class="ms-line">${l.qty != null ? `<em>${esc(String(l.qty))}×</em>` : ""}${esc(l.text)}</div>`).join("");
 }
+// The sale's own lines, so the owner judges the pairing on what was sold, not
+// just the customer's name and a number.
+function msSaleLines(sale) {
+  const lines = (sale && sale.lines) || [];
+  if (!lines.length) return "";
+  return `<div class="ms-sold">` + lines.slice(0, 4).map((l) =>
+    `<div class="ms-line sale">${l.qty != null ? `<em>${esc(String(l.qty))}×</em>` : ""}${esc(l.text)}${l.amount != null ? `<span>${money(l.amount)}</span>` : ""}</div>`).join("")
+    + (lines.length > 4 ? `<div class="ms-line sale more">+${lines.length - 4} more</div>` : "") + `</div>`;
+}
+// One order fed two jobs: show which tires go to which invoice, one tap to split.
+function msSplitBlock(c) {
+  const sp = c.split;
+  if (!sp || !sp.parts || sp.parts.length < 2) return "";
+  return `<div class="ms-split">
+    <div class="ms-split-title">Looks like this order fed two jobs:</div>
+    ${sp.parts.map((p) => `<div class="ms-split-part">
+      ${(p.lines || []).map((l) => `<div class="ms-line">${l.qty != null ? `<em>${esc(String(l.qty))}×</em>` : ""}${esc(l.text)}</div>`).join("")}
+      <div class="to">→ ${msSaleLine(p.sale, null)} · cost ${money(p.amount)}</div>
+    </div>`).join("")}
+    <button class="btn em wide" data-mssplit="${c.id}">&#10003;&nbsp; Split it between these two</button>
+  </div>`;
+}
 
 /* A supplier the app hasn't seen before: one tap names what kind of cost it is,
    and that answer pre-classifies every receipt it ever sends. Asked once per
@@ -2294,6 +2316,7 @@ function psMatchScreen(review, tally, after) {
           <div class="top"><span>${esc(a.vendor)}${a.doc_number ? " · " + esc(a.doc_number) : ""}</span><span>${money(a.amount)}</span></div>
           ${msLines(a.lines)}
           <div class="to">→ ${msSaleLine(a.sale, a.job_profit)}</div>
+          ${msSaleLines(a.sale)}
           <button class="linkbtn" data-msunlink="${a.id}">Not this one</button>
         </div>`).join("")}
       </details>
@@ -2305,7 +2328,7 @@ function psMatchScreen(review, tally, after) {
       <div class="head"><b>${esc(c.vendor)}</b><span>${money(c.amount)}</span></div>
       <div class="meta">${c.doc_number ? esc(c.doc_number) + " · " : ""}arrived ${msDate(c.cost_date)}${c.waiting ? " · was waiting for a sale" : ""}</div>
       ${msLines(c.lines)}
-      ${s ? `<div class="ms-guess">Looks like ${msSaleLine(s, c.job_profit, "if")}${msSpareLine(c.detail)}</div>`
+      ${s ? `<div class="ms-guess">Looks like ${msSaleLine(s, c.job_profit, "if")}${msSaleLines(s)}${msSpareLine(c.detail)}</div>${msSplitBlock(c)}`
           : `<div class="ms-guess none">No matching sale on file yet${c.lines_read ? "" : " — still reading this invoice"}.</div>`}
       ${s ? `<button class="btn em wide" data-msconfirm="${c.id}" data-sale="${s.id}">&#10003;&nbsp; That's the one</button>` : ""}
       <button class="btn ghost wide" data-mspick="${c.id}" data-rej="${s ? s.id : ""}">${s ? "Different invoice" : "Pick the invoice"}</button>
@@ -2368,6 +2391,15 @@ function psMatchScreen(review, tally, after) {
       try {
         const d = await api("/profit/match-confirm", { id, sale_id: e.currentTarget.dataset.sale });
         applyBoard(d); tally.matched += 1; rerender(d);
+      } catch (er) { fail(er); busyCard(id, false); }
+    }, sh);
+    on("[data-mssplit]", "click", async (e) => {
+      const id = e.currentTarget.dataset.mssplit; busyCard(id, true); err.textContent = "";
+      const card = (r.proposed || []).find((c) => c.id === id);
+      const parts = card && card.split ? card.split.parts.map((p) => ({ sale_id: p.sale.id, line_indexes: p.line_indexes })) : [];
+      try {
+        const d = await api("/profit/match-split", { id, parts });
+        applyBoard(d); tally.matched += parts.length; rerender(d);
       } catch (er) { fail(er); busyCard(id, false); }
     }, sh);
     on("[data-mswait]", "click", async (e) => {
