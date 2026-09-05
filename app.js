@@ -2157,23 +2157,256 @@ async function runProfitSweep() {
     <p class="sh-sub" id="psStage">Pulling today's receipts from your email…</p>
     <div class="note" id="psNote" style="margin-top:8px"></div>`);
   const stage = (t) => { const el = document.querySelector("#psStage"); if (el) el.textContent = t; };
-  let scanNote = "";
+  let scanNote = "", gmailNeeds = "";
   try { await api("/gmail/scan", {}); }
-  catch (e) { scanNote = "Email scan skipped — " + e.message; } // Gmail down or not connected: sweep what we have
-  stage("Sweeping the books…");
+  catch (e) { scanNote = "Email scan skipped — " + e.message; if (/reconnect|not connected/i.test(e.message)) gmailNeeds = e.message; } // Gmail down or not connected: sweep what we have
+  // "Match, don't move" (Kyle 2026-09-05): read each supplier invoice line by
+  // line so the matcher can find the sale it fed. This tap is explicit intent,
+  // so it reads a bigger batch than the nightly scan does.
+  stage("Reading supplier invoices line by line…");
+  try { const r = await api("/gmail/read-lines", { limit: 15 }); if (r.skipped && !gmailNeeds) gmailNeeds = r.skipped; }
+  catch { /* lines are a bonus; the sweep still runs on what is on file */ }
+  stage("Sweeping the books and matching costs to jobs…");
   let sweepResult;
   try { sweepResult = await api("/profit/sweep", {}); applyBoard(sweepResult); }
   catch (e) { toast(e.message, "err"); closeSheet(); return; }
-  stage("Lining up today's receipts…");
+  const tally = { confirmed: 0, excluded: 0, parked: 0, classified: 0, added: 0, matched: 0, waiting: 0, stock: 0, scanNote, gmailNeeds };
+  const review = sweepResult.match || { auto: [], proposed: [], waiting: [], new_vendors: [], unread_count: 0 };
+  // Costs the matcher doesn't handle (fuel, supplies, meals) still get the old
+  // "is this today's cost?" pass — those are day-of costs, no sale to find.
   let cards = [];
-  try { cards = (await get("/profit/day-review")).cards || []; }
+  try { cards = ((await get("/profit/day-review")).cards || []).filter((c) => !MATCHABLE_CLASSES.has(c.cost_class) && !c.vendor_pending); }
   catch { /* the board already updated; a review hiccup shouldn't eat the sweep */ }
-  const tally = { confirmed: 0, excluded: 0, parked: 0, classified: 0, added: 0, scanNote };
+  const after = () => psCard(cards, 0, tally);
+  const nothingToMatch = !review.auto.length && !review.proposed.length && !review.waiting.length
+    && !review.new_vendors.length && !review.unread_count && !gmailNeeds;
   // Nothing arrived by email and nothing is on file for today at all — the one
   // moment the sweep volunteers a question, because it is the owner's explicit
   // tap that got us here, not a background nag.
-  if (!cards.length && sweepResult?.sweep_empty_today) { psEmptyDay(tally); return; }
-  psCard(cards, 0, tally);
+  if (nothingToMatch && !cards.length && sweepResult?.sweep_empty_today) { psEmptyDay(tally); return; }
+  if (nothingToMatch) { after(); return; }
+  if (review.new_vendors.length) { psNewVendors(review.new_vendors, tally, after); return; }
+  psMatchScreen(review, tally, after);
+}
+
+/* ---------------- match, don't move ----------------
+   Kyle's 2026-09-05 redesign. The sweep used to ask, per receipt, "which day is
+   the job?" — a calendar question nobody wants to answer, and the reason owners
+   fall behind. The right question is "which SALE was this for?": once the sale
+   is known the day is known. The matcher answers most of these on its own from
+   the invoice lines; the owner sees one screen — what matched, the few that
+   need a look, what's waiting for a sale — and every answer is one tap. */
+const MATCHABLE_CLASSES = new Set(["tires_parts"]);
+
+function msDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T12:00:00");
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+function msProfit(v) {
+  if (v == null) return "";
+  return `<span class="profit${v < 0 ? " neg" : ""}">${v < 0 ? "−" : ""}${money(Math.abs(v))}</span>`;
+}
+function msSaleLine(sale, profit) {
+  if (!sale) return "";
+  return `<b>Invoice ${sale.number ? "#" + esc(sale.number) : ""}</b>${sale.customer ? " · " + esc(sale.customer) : ""} · ${msDate(sale.date)} · sold ${money(sale.subtotal)}${profit != null ? " · profit " + msProfit(profit) : ""}`;
+}
+function msLines(lines) {
+  return (lines || []).slice(0, 3).map((l) =>
+    `<div class="ms-line">${l.qty != null ? `<em>${esc(String(l.qty))}×</em>` : ""}${esc(l.text)}</div>`).join("");
+}
+
+/* A supplier the app hasn't seen before: one tap names what kind of cost it is,
+   and that answer pre-classifies every receipt it ever sends. Asked once per
+   vendor, not once per receipt. */
+function psNewVendors(cards, tally, after) {
+  const vendors = [];
+  for (const c of cards) if (!vendors.some((v) => v.vendor_key === c.vendor_key)) vendors.push(c);
+  const step = (i) => {
+    if (i >= vendors.length) {
+      // Classes changed, so the matcher's view changed — reload it.
+      get("/profit/match-review").then((d) => psMatchScreen(d.match, tally, after))
+        .catch(() => after());
+      return;
+    }
+    const x = vendors[i];
+    const chips = COST_CLASS_OPTIONS.map(([k, l]) =>
+      `<button class="btn ghost" data-psclass="${k}" style="margin:3px 4px 0 0">${l}</button>`).join("");
+    sheet(`<h2>${esc(x.vendor)}</h2>
+      <p class="sh-sub">${money(x.amount)}${x.doc_number ? " · " + esc(x.doc_number) : ""} · new supplier ${i + 1} of ${vendors.length}</p>
+      ${x.subject ? `<p class="note" style="margin:0 0 4px">${esc(x.subject)}</p>` : ""}
+      <p style="font-weight:600;margin:8px 0 4px">What kind of cost is ${esc(x.vendor)}?</p>
+      <p class="note" style="margin:0 0 8px">One answer covers everything this supplier sends from now on.</p>
+      ${chips}
+      <button class="btn ghost wide" style="margin-top:12px" id="psVendorSkip">Not sure — skip for now</button>
+      <div class="note err" id="psErr" style="margin-top:8px"></div>`, (sh) => {
+      const err = sh.querySelector("#psErr");
+      sh.querySelector("#psVendorSkip").onclick = () => step(i + 1);
+      on("[data-psclass]", "click", async (e) => {
+        e.currentTarget.disabled = true; err.textContent = "";
+        try {
+          await api("/profit/classify-vendor", { vendor_key: x.vendor_key, cost_class: e.currentTarget.dataset.psclass });
+          tally.classified += 1; S.review = null; step(i + 1);
+        } catch (er) { err.textContent = er.message; e.currentTarget.disabled = false; }
+      }, sh);
+    });
+  };
+  step(0);
+}
+
+function psMatchScreen(review, tally, after) {
+  const r = review || {};
+  const auto = r.auto || [], proposed = r.proposed || [], waiting = r.waiting || [];
+  const unread = Number(r.unread_count || 0);
+  const need = proposed.length;
+  const headline = auto.length && need
+    ? `${auto.length} matched to jobs on their own · ${need} need${need === 1 ? "s" : ""} a look`
+    : auto.length ? `${auto.length} matched to jobs on their own — nothing needs you`
+    : need ? `${need} receipt${need === 1 ? "" : "s"} need${need === 1 ? "s" : ""} a look`
+    : waiting.length ? "Nothing new to match — the rest is waiting for a sale"
+    : unread ? "Reading your supplier invoices — matches land on the next pass"
+    : "Nothing needs matching right now";
+
+  const autoBlock = auto.length ? `
+    <div class="ms-auto">
+      <div class="headline"><span class="eyebrow">Matched to jobs</span><span class="when">${auto.length} RECEIPT${auto.length === 1 ? "" : "S"}</span></div>
+      <p class="sum">Each one landed on the day of the job it was bought for. Looks right?</p>
+      <button class="btn em wide" style="margin-top:12px" id="msLooksRight">&#10003;&nbsp; Looks right</button>
+      <details class="sc-all"><summary>See them <em>${auto.length}</em></summary>
+        ${auto.map((a) => `<div class="ms-row">
+          <div class="top"><span>${esc(a.vendor)}${a.doc_number ? " · " + esc(a.doc_number) : ""}</span><span>${money(a.amount)}</span></div>
+          ${msLines(a.lines)}
+          <div class="to">→ ${msSaleLine(a.sale, a.job_profit)}</div>
+          <button class="linkbtn" data-msunlink="${a.id}">Not this one</button>
+        </div>`).join("")}
+      </details>
+    </div>` : "";
+
+  const card = (c) => {
+    const s = c.sale;
+    return `<div class="ms-card" data-mscard="${c.id}">
+      <div class="head"><b>${esc(c.vendor)}</b><span>${money(c.amount)}</span></div>
+      <div class="meta">${c.doc_number ? esc(c.doc_number) + " · " : ""}arrived ${msDate(c.cost_date)}${c.waiting ? " · was waiting for a sale" : ""}</div>
+      ${msLines(c.lines)}
+      ${s ? `<div class="ms-guess">Looks like ${msSaleLine(s, c.job_profit)}</div>`
+          : `<div class="ms-guess none">No matching sale on file yet${c.lines_read ? "" : " — still reading this invoice"}.</div>`}
+      ${s ? `<button class="btn em wide" data-msconfirm="${c.id}" data-sale="${s.id}">&#10003;&nbsp; That's the one</button>` : ""}
+      <button class="btn ghost wide" data-mspick="${c.id}" data-rej="${s ? s.id : ""}">${s ? "Different invoice" : "Pick the invoice"}</button>
+      <button class="btn ghost wide" data-mswait="${c.id}" data-rej="${s ? s.id : ""}">Not sold yet</button>
+      <button class="btn ghost wide" data-msdrop="${c.id}">&#10005;&nbsp; Not a business cost</button>
+      <button class="linkbtn" data-msnone="${c.id}">Stock order — not for one job</button>
+      <div class="ms-pick" data-mspickbox="${c.id}" hidden></div>
+    </div>`;
+  };
+
+  const waitBlock = waiting.length ? `
+    <details class="sc-all ms-wait"><summary>Waiting for a sale <em>${waiting.length}</em></summary>
+      <p class="note" style="margin:4px 0 2px">Bought, not invoiced yet. Each one links itself the moment its sale shows up — or pick it now.</p>
+      ${waiting.map((w) => `<div class="ms-row" data-mscard="${w.id}">
+        <div class="top"><span>${esc(w.vendor)}${w.doc_number ? " · " + esc(w.doc_number) : ""}</span><span>${money(w.amount)}</span></div>
+        <div class="to">since ${msDate(w.since || w.cost_date)}</div>
+        <button class="linkbtn" data-mspick="${w.id}" data-rej="">Pick the invoice</button>
+        <div class="ms-pick" data-mspickbox="${w.id}" hidden></div>
+      </div>`).join("")}
+    </details>` : "";
+
+  const gmailStrip = tally.gmailNeeds ? `
+    <div class="warnstrip" style="margin-top:10px"><em>&#9888;</em><span>${esc(tally.gmailNeeds)} — until it's back, new supplier invoices can't be read or matched.
+      <button class="btn primary" data-connect="/gmail/start" style="display:block;margin-top:8px;padding:9px 13px;font-size:13px">Reconnect Gmail</button></span></div>` : "";
+  const unreadNote = unread && !tally.gmailNeeds
+    ? `<p class="note" style="margin-top:10px">${unread} supplier invoice${unread === 1 ? "" : "s"} still being read line by line — they match on the next pass.</p>` : "";
+
+  sheet(`<h2>Profit sweep</h2>
+    <p class="sh-sub">${headline}</p>
+    ${gmailStrip}
+    ${autoBlock}
+    ${need ? `<p class="eyebrow" style="margin:16px 0 0;color:var(--gold)">Needs a look</p>` : ""}
+    ${proposed.map(card).join("")}
+    ${waitBlock}
+    ${unreadNote}
+    <div class="note err" id="msErr" style="margin-top:8px"></div>
+    <button class="btn em wide" style="margin-top:14px" id="msDone">Done</button>`, (sh) => {
+    const err = sh.querySelector("#msErr");
+    const fail = (e) => { err.textContent = e.message; };
+    const rerender = (d) => psMatchScreen(d.match, tally, after);
+    const reload = async () => rerender(await get("/profit/match-review"));
+    const busyCard = (id, onoff) => sh.querySelectorAll(`[data-mscard="${id}"] button`).forEach((b) => { b.disabled = onoff; });
+
+    sh.querySelector("#msDone").onclick = () => after();
+    const looks = sh.querySelector("#msLooksRight");
+    if (looks) looks.onclick = async () => {
+      looks.disabled = true; err.textContent = "";
+      try {
+        const d = await api("/profit/match-confirm-all", { ids: auto.map((a) => a.id) });
+        tally.matched += Number(d.settled || 0); rerender(d);
+      } catch (e) { fail(e); looks.disabled = false; }
+    };
+    on("[data-msunlink]", "click", async (e) => {
+      const id = e.currentTarget.dataset.msunlink; e.currentTarget.disabled = true; err.textContent = "";
+      try { applyBoard(await api("/profit/match-unlink", { id })); await reload(); }
+      catch (er) { fail(er); e.currentTarget.disabled = false; }
+    }, sh);
+    on("[data-msconfirm]", "click", async (e) => {
+      const id = e.currentTarget.dataset.msconfirm; busyCard(id, true); err.textContent = "";
+      try {
+        const d = await api("/profit/match-confirm", { id, sale_id: e.currentTarget.dataset.sale });
+        applyBoard(d); tally.matched += 1; rerender(d);
+      } catch (er) { fail(er); busyCard(id, false); }
+    }, sh);
+    on("[data-mswait]", "click", async (e) => {
+      const id = e.currentTarget.dataset.mswait; busyCard(id, true); err.textContent = "";
+      try { const d = await api("/profit/match-wait", { id, rejected_sale_id: e.currentTarget.dataset.rej || undefined }); tally.waiting += 1; rerender(d); }
+      catch (er) { fail(er); busyCard(id, false); }
+    }, sh);
+    on("[data-msnone]", "click", async (e) => {
+      const id = e.currentTarget.dataset.msnone; busyCard(id, true); err.textContent = "";
+      try { const d = await api("/profit/match-none", { id }); tally.stock += 1; rerender(d); }
+      catch (er) { fail(er); busyCard(id, false); }
+    }, sh);
+    on("[data-msdrop]", "click", async (e) => {
+      const id = e.currentTarget.dataset.msdrop; const box = sh.querySelector(`[data-mspickbox="${id}"]`);
+      box.hidden = false;
+      box.innerHTML = `<p class="note" style="margin:8px 0 6px">This removes it from your profit numbers and dismisses the receipt for good — it won't come back on the next scan.</p>
+        <button class="btn em wide" data-msdropgo="${id}">Remove it</button>`;
+      box.querySelector("[data-msdropgo]").onclick = async () => {
+        busyCard(id, true); err.textContent = "";
+        try { applyBoard(await api("/profit/exclude-cost", { id })); tally.excluded += 1; await reload(); }
+        catch (er) { fail(er); busyCard(id, false); }
+      };
+    }, sh);
+    // "Different invoice": the next-best guesses first, then the recent sales
+    // ranked for this receipt. One tap on a row is the answer.
+    on("[data-mspick]", "click", async (e) => {
+      const id = e.currentTarget.dataset.mspick, rej = e.currentTarget.dataset.rej || "";
+      const box = sh.querySelector(`[data-mspickbox="${id}"]`);
+      if (!box.hidden && box.dataset.mode === "pick") { box.hidden = true; return; }
+      box.hidden = false; box.dataset.mode = "pick";
+      box.innerHTML = `<p class="note" style="margin:8px 0 4px">Which invoice was this for?</p><div class="note">Loading recent invoices…</div>`;
+      const item = proposed.find((c) => c.id === id);
+      const seen = new Set();
+      const rows = [];
+      for (const s of (item?.alternatives || [])) if (!seen.has(s.id)) { seen.add(s.id); rows.push(s); }
+      try {
+        const d = await get(`/profit/match-choices?id=${encodeURIComponent(id)}`);
+        for (const s of d.choices || []) if (!seen.has(s.id) && s.id !== rej) { seen.add(s.id); rows.push(s); }
+      } catch (er) { if (!rows.length) { box.innerHTML = `<div class="note err">${esc(er.message)}</div>`; return; } }
+      if (!rows.length) { box.innerHTML = `<p class="note" style="margin:8px 0">No recent invoices to choose from yet.</p>`; return; }
+      box.innerHTML = `<p class="note" style="margin:8px 0 4px">Which invoice was this for?</p>` + rows.map((s) =>
+        `<button class="opt" data-msopt="${s.id}"><b>${s.number ? "#" + esc(s.number) : "—"}</b><span>${esc(s.customer || "")}${s.lines?.length ? " · " + esc(s.lines[0].text) : ""}</span><i>${msDate(s.date)} · ${money(s.subtotal)}</i></button>`).join("");
+      on("[data-msopt]", "click", async (ev) => {
+        busyCard(id, true); err.textContent = "";
+        try {
+          const d = await api("/profit/match-confirm", { id, sale_id: ev.currentTarget.dataset.msopt, rejected_sale_id: rej || undefined });
+          applyBoard(d); tally.matched += 1; rerender(d);
+        } catch (er) { fail(er); busyCard(id, false); }
+      }, box);
+    }, sh);
+    on("[data-connect]", "click", async (e) => {
+      const b = e.currentTarget; b.disabled = true;
+      try { const d = await api(b.dataset.connect + "?web=1", {}); location.href = d.authorization_url; }
+      catch (er) { b.disabled = false; fail(er); }
+    }, sh);
+  });
 }
 
 /* Empty Day: no supplier invoice/receipt arrived today and nothing is on file

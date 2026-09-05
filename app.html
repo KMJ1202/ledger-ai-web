@@ -1047,6 +1047,42 @@ footer textarea{flex:1;border-radius:17px;padding:12px 14px;resize:none;max-heig
 .sc-group .eyebrow{margin:8px 0 2px}
 .sc-group .kv{font-size:13.5px;padding:7px 0}
 .sc-group .kv b{text-align:right;font-weight:700}
+/* Profit sweep — "Match, don't move" (2026-09-05). One screen: what matched on
+   its own, the few that need a look, what's waiting for a sale. */
+.ms-auto{background:linear-gradient(150deg,rgba(12,44,36,.72),rgba(9,12,18,.95));border:1px solid rgba(47,224,160,.36);border-radius:22px;padding:17px;box-shadow:0 0 30px rgba(47,224,160,.08);margin-top:8px}
+.ms-auto .headline{display:flex;align-items:baseline;gap:10px}
+.ms-auto .headline .eyebrow{color:var(--emerald)}
+.ms-auto .headline .when{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--dim2)}
+.ms-auto .sum{font-size:15px;font-weight:700;margin:8px 0 0;line-height:1.45}
+.ms-row{padding:10px 0;border-top:1px solid rgba(255,255,255,.06);font-size:13.5px;line-height:1.45}
+.ms-row .top{display:flex;justify-content:space-between;gap:10px;font-weight:800}
+.ms-row .to{color:var(--dim);margin-top:2px}
+.ms-row .to b{color:var(--text)}
+.ms-row .profit{color:var(--emerald);font-weight:800}
+.ms-row .profit.neg{color:var(--red)}
+.ms-row .linkbtn{margin:4px 0 0;padding:0}
+.ms-card{background:var(--glass);border:1px solid rgba(251,191,36,.3);border-radius:20px;padding:15px;margin-top:10px}
+.ms-card .head{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.ms-card .head b{font-size:16px}
+.ms-card .head span{font-weight:900;font-size:16px;letter-spacing:-.3px}
+.ms-card .meta{color:var(--dim);font-size:12.5px;margin-top:2px}
+.ms-line{font-size:13px;color:var(--text);margin-top:5px;padding-left:10px;border-left:2px solid rgba(255,255,255,.12);line-height:1.4}
+.ms-line em{font-style:normal;color:var(--dim);font-family:var(--mono);font-size:11.5px;margin-right:6px}
+.ms-guess{margin-top:11px;padding:11px 12px;border-radius:14px;background:rgba(58,200,245,.08);border:1px solid rgba(58,200,245,.28);font-size:14px;line-height:1.45}
+.ms-guess.none{background:rgba(255,255,255,.03);border-color:var(--line);color:var(--dim)}
+.ms-guess .profit{color:var(--emerald);font-weight:800}
+.ms-guess .profit.neg{color:var(--red)}
+.ms-card .btn.wide{margin-top:8px}
+.ms-card .btn.em.wide{margin-top:12px}
+.ms-card .linkbtn{display:block;margin:10px auto 0;color:var(--dim)}
+.ms-pick{margin-top:10px;border-top:1px solid rgba(255,255,255,.06)}
+.ms-pick button.opt{display:flex;width:100%;gap:10px;align-items:baseline;background:none;border:0;border-bottom:1px solid rgba(255,255,255,.05);padding:10px 2px;color:var(--text);font:inherit;font-size:13.5px;text-align:left;cursor:pointer}
+.ms-pick button.opt b{font-family:var(--mono);font-size:12.5px;color:var(--cyan);flex-shrink:0}
+.ms-pick button.opt span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ms-pick button.opt i{font-style:normal;color:var(--dim);font-size:12px;flex-shrink:0}
+.ms-pick button.opt:disabled{opacity:.5;cursor:default}
+.ms-wait{margin-top:12px}
+.ms-wait .ms-row .top{font-weight:700}
 .pu-card{display:flex;align-items:center;gap:13px;width:100%;background:var(--glass);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px;color:var(--text);font-size:15px;cursor:pointer;font-family:inherit}
 .pu-card.hot{border-color:rgba(58,200,245,.55);background:rgba(58,200,245,.09)}
 .pu-emoji{font-size:23px}.pu-info{flex:1;text-align:left;display:flex;flex-direction:column}.pu-info small{color:var(--dim);font-size:12.5px}
@@ -1406,5 +1442,5 @@ nav#tabs button.on{
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=69"></script>
+<script type="module" src="app.js?v=70"></script>
 </body></html>
