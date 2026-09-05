@@ -883,3 +883,20 @@ nav.sitenav .brand b{background:linear-gradient(90deg,#fff 0%,#fff 40%,var(--cya
   .herologo .scan,.herologo .flash,.herologo .spark{display:none}
   .herologo .tag .tt{max-width:none}
 }
+
+/* ---------- founder access (home) ---------- */
+.fgrid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:900px;margin:34px auto 0}
+.fcard{position:relative;display:block;text-decoration:none;color:var(--text);padding:28px;border-radius:22px;border:1px solid rgba(58,200,245,.26);
+  background:linear-gradient(160deg,rgba(58,200,245,.09),var(--card2) 70%);box-shadow:0 14px 34px rgba(0,0,0,.34);overflow:hidden;transition:transform .22s,box-shadow .22s,border-color .22s}
+.fcard.alt{border-color:rgba(168,85,247,.3);background:linear-gradient(160deg,rgba(168,85,247,.11),var(--card2) 70%)}
+.fcard::after{content:"";position:absolute;inset:-40% -40% auto auto;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(58,200,245,.22),transparent 65%);pointer-events:none;transition:opacity .3s;opacity:.7}
+.fcard.alt::after{background:radial-gradient(circle,rgba(168,85,247,.24),transparent 65%)}
+.fcard:hover{transform:translateY(-4px);box-shadow:0 22px 48px rgba(99,102,241,.22);border-color:rgba(58,200,245,.5)}
+.fcard.alt:hover{border-color:rgba(168,85,247,.6)}
+.fcard .ftag{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--emerald)}
+.fcard .ftag::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--emerald);box-shadow:0 0 10px var(--emerald)}
+.fcard h3{font-size:21px;font-weight:800;letter-spacing:-.4px;margin:12px 0 8px}
+.fcard p{color:var(--dim);font-size:14.5px;line-height:1.6}
+.fcard .fgo{display:inline-block;margin-top:18px;font-weight:800;font-size:14.5px;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent}
+.fnote{text-align:center;color:var(--dim2);font-size:13px;margin-top:18px}
+@media(max-width:700px){.fgrid2{grid-template-columns:1fr}}

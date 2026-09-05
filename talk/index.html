@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://lbzkyyehmgudlxmfpzzh.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#05070b">
+<meta name="description" content="Book a free 30-minute onboarding session or a free 20-minute consultation with the founder of Ledger AI. Pick a time, get a calendar invite with a Google Meet link — no account, no card.">
+<meta property="og:title" content="Book a call with the founder — Ledger AI">
+<meta property="og:description" content="A free 30-minute onboarding session or a free 20-minute consultation, straight onto the founder's calendar. Pick a time — the invite arrives in seconds.">
+<meta property="og:url" content="https://heyledger.ai/talk/">
+<meta property="og:image" content="https://heyledger.ai/assets/logo-full-640.png">
+<meta property="og:type" content="website">
+<title>Book a call with the founder — Ledger AI</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/styles.css?v=41">
+<link rel="canonical" href="https://heyledger.ai/talk/">
+<style>
+/* ---- Founder scheduler ---- */
+.talkhero{padding:74px 0 26px;text-align:center;position:relative}
+.talkhero .eyebrow{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:2.6px;text-transform:uppercase;color:var(--cyan);padding:8px 14px;border:1px solid rgba(58,200,245,.28);border-radius:999px;background:rgba(58,200,245,.07)}
+.talkhero .eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--emerald);box-shadow:0 0 0 0 rgba(47,224,160,.6);animation:pulse 2.2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(47,224,160,.55)}70%{box-shadow:0 0 0 9px rgba(47,224,160,0)}100%{box-shadow:0 0 0 0 rgba(47,224,160,0)}}
+.talkhero h1{font-family:var(--display);font-size:clamp(34px,6vw,62px);font-weight:900;letter-spacing:-1.8px;line-height:1.02;margin:22px auto 0;max-width:760px}
+.talkhero h1 .grad{background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent}
+.talkhero .lead{color:var(--dim);font-size:17px;line-height:1.6;max-width:600px;margin:18px auto 0}
+.founder{display:inline-flex;align-items:center;gap:12px;margin-top:26px;padding:8px 16px 8px 8px;border:1px solid var(--line);border-radius:999px;background:var(--glass);text-align:left}
+.founder .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#a855f7);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;color:#fff;box-shadow:0 0 18px rgba(99,102,241,.45)}
+.founder b{display:block;font-size:14px;letter-spacing:-.1px}
+.founder span{display:block;font-size:12px;color:var(--dim)}
+
+.flow{padding:26px 0 96px}
+.bk{max-width:860px;margin:0 auto 22px;scroll-margin-top:96px;background:linear-gradient(160deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:24px;padding:28px;box-shadow:0 14px 34px rgba(0,0,0,.34);position:relative;overflow:hidden;transition:opacity .35s,transform .35s,border-color .3s}
+.bk::before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(60% 40% at 0% 0%,rgba(58,200,245,.08),transparent 60%)}
+.bk.locked{opacity:.38;transform:translateY(6px);pointer-events:none}
+.bk.done{border-color:rgba(47,224,160,.3)}
+.shead{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+.shead .n{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;font-weight:800;color:#fff;background:linear-gradient(135deg,#3b82f6,#a855f7);box-shadow:0 6px 16px rgba(99,102,241,.35);flex-shrink:0}
+.bk.done .shead .n{background:linear-gradient(135deg,#2fe0a0,#38bdf8);color:#04241a}
+.shead h2{font-size:20px;font-weight:800;letter-spacing:-.4px;line-height:1.2}
+.shead .sub{font-size:13.5px;color:var(--dim);margin-top:2px}
+.shead .chg{margin-left:auto;font-size:13px;color:var(--cyan);background:none;border:0;cursor:pointer;font-weight:700;font-family:inherit;display:none}
+.bk.done .shead .chg{display:inline}
+
+/* step 1 — session type */
+.types{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.type{position:relative;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;text-align:left;border:1px solid var(--line);border-radius:18px;padding:22px;background:rgba(255,255,255,.025);cursor:pointer;font-family:inherit;color:var(--text);transition:transform .2s,border-color .2s,box-shadow .2s}
+.type:hover{transform:translateY(-2px);border-color:rgba(58,200,245,.35)}
+.type.on{border-color:transparent;background:linear-gradient(var(--card),var(--card)) padding-box,linear-gradient(135deg,var(--cyan),var(--purple)) border-box;box-shadow:0 0 0 1px rgba(58,200,245,.2),0 16px 40px rgba(99,102,241,.22)}
+.type .tag{display:inline-flex;gap:8px;align-items:center;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--emerald)}
+.type .tag i{width:6px;height:6px;border-radius:50%;background:var(--emerald)}
+.type h3{font-size:19px;font-weight:800;letter-spacing:-.3px;margin:10px 0 4px}
+.type .dur{font-size:13.5px;color:var(--dim);font-weight:600}
+.type p{color:var(--dim);font-size:14px;line-height:1.55;margin:12px 0 0}
+.type ul{list-style:none;padding:0;margin:14px 0 0;display:grid;gap:7px;width:100%}
+.type li{font-size:13.5px;color:var(--text);display:flex;gap:9px;align-items:flex-start}
+.type li em{font-style:normal;color:var(--emerald);font-weight:900;flex-shrink:0}
+.type .pick{position:absolute;top:18px;right:18px;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:transparent;transition:.2s}
+.type.on .pick{background:linear-gradient(135deg,var(--cyan),var(--purple));border-color:transparent;color:#fff}
+
+/* step 2 — time */
+.tzrow{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;color:var(--dim)}
+.tzrow b{color:var(--text);font-weight:700}
+.days{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.days::-webkit-scrollbar{display:none}
+.day{flex:0 0 auto;min-width:74px;padding:12px 10px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.025);text-align:center;cursor:pointer;color:var(--text);font-family:inherit;transition:.2s}
+.day small{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim)}
+.day b{display:block;font-size:19px;font-weight:800;margin-top:3px;letter-spacing:-.4px}
+.day span{display:block;font-size:11px;color:var(--dim2);margin-top:3px}
+.day:hover{border-color:rgba(58,200,245,.35)}
+.day.on{border-color:transparent;background:linear-gradient(135deg,#3b82f6,#a855f7);box-shadow:0 10px 24px rgba(99,102,241,.35)}
+.day.on small,.day.on span{color:rgba(255,255,255,.8)}
+.day:disabled{opacity:.3;cursor:not-allowed}
+.times{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:9px;margin-top:14px}
+.time{padding:12px 8px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.025);color:var(--text);font-family:var(--mono);font-size:13.5px;font-weight:700;cursor:pointer;transition:.18s;letter-spacing:.2px}
+.time:hover{border-color:rgba(58,200,245,.45);background:rgba(58,200,245,.08)}
+.time.on{background:linear-gradient(135deg,var(--cyan),var(--purple));border-color:transparent;color:#fff;box-shadow:0 8px 20px rgba(99,102,241,.35)}
+.empty{padding:26px;text-align:center;color:var(--dim);font-size:14px;border:1px dashed var(--line);border-radius:14px;margin-top:14px}
+.loading{display:flex;align-items:center;gap:12px;color:var(--dim);font-size:14px;padding:12px 0}
+.loading i{width:16px;height:16px;border-radius:50%;border:2px solid rgba(58,200,245,.25);border-top-color:var(--cyan);animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* step 3 — details */
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fields .full{grid-column:1/-1}
+.bkf label{display:block;font-size:12.5px;font-weight:700;color:var(--dim);margin-bottom:7px;letter-spacing:.2px}
+.bkf label span{color:var(--dim2);font-weight:500}
+.bkf input,.bkf textarea{width:100%;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:13px;padding:13px 14px;color:var(--text);font-size:15px;font-family:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
+.bkf input:focus,.bkf textarea:focus{border-color:rgba(58,200,245,.55);box-shadow:0 0 0 3px rgba(58,200,245,.12)}
+.bkf textarea{min-height:92px;resize:vertical}
+.hp{position:absolute;left:-9999px;opacity:0;height:0;width:0}
+.summary:empty{display:none}
+.summary{display:flex;gap:14px;align-items:center;padding:14px 16px;border-radius:14px;border:1px solid rgba(58,200,245,.22);background:rgba(58,200,245,.06);margin-bottom:18px;font-size:14px}
+.summary .ic{width:38px;height:38px;border-radius:11px;background:rgba(58,200,245,.14);color:var(--cyan);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.summary b{display:block;font-size:14.5px}
+.summary span{color:var(--dim);font-size:13px}
+.actions{display:flex;align-items:center;gap:16px;margin-top:20px;flex-wrap:wrap}
+.actions .btn.primary{padding:15px 26px;font-size:15.5px}
+.actions .btn[disabled]{opacity:.55;cursor:not-allowed;box-shadow:none}
+.assure{font-size:12.5px;color:var(--dim2);line-height:1.5}
+.err{margin-top:12px;color:var(--red);font-size:13.5px;font-weight:600;display:none}
+.err.show{display:block}
+
+/* confirmation */
+.done{max-width:860px;margin:0 auto;display:none;scroll-margin-top:96px;text-align:center;padding:44px 28px;border-radius:24px;border:1px solid rgba(47,224,160,.35);background:linear-gradient(160deg,rgba(47,224,160,.08),var(--card2));box-shadow:0 18px 50px rgba(47,224,160,.12)}
+.done.show{display:block;animation:rise .5s ease-out}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.done .ok{width:64px;height:64px;border-radius:50%;margin:0 auto 18px;background:linear-gradient(135deg,#2fe0a0,#38bdf8);display:flex;align-items:center;justify-content:center;color:#04241a;font-size:28px;font-weight:900;box-shadow:0 12px 32px rgba(47,224,160,.35)}
+.done h2{font-family:var(--display);font-size:clamp(26px,4vw,38px);font-weight:900;letter-spacing:-1px}
+.done .when{font-size:17px;margin-top:10px}
+.done .when b{color:var(--emerald)}
+.done p{color:var(--dim);font-size:14.5px;max-width:520px;margin:12px auto 0;line-height:1.6}
+.done .acts{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:24px}
+
+.trust{max-width:860px;margin:26px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.trust div{padding:16px 18px;border-radius:16px;border:1px solid var(--line2);background:var(--glass);font-size:13.5px;color:var(--dim);line-height:1.5}
+.trust div b{display:block;color:var(--text);font-size:14px;margin-bottom:2px}
+@media(max-width:700px){.types,.fields,.trust{grid-template-columns:1fr}.bk{padding:22px 18px;border-radius:20px}.talkhero{padding-top:44px}.shead .sub{display:none}}
+</style>
+</head>
+<body>
+
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <nav class="sitenav">
+      <a class="brand" href="/"><span class="mark"><img src="/assets/logo-mark-96.png" alt="Ledger AI"><span class="sheen"></span></span><b>Ledger AI</b><span class="bcaret">▾</span></a>
+      <div class="links">
+        <a href="/">Home</a>
+        <div class="drop">
+          <span>Platform ▾</span>
+          <div class="menu">
+            <a href="/features/ai/"><svg class="mico" style="color:var(--gold)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 13.9 8.6 19 10.5l-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z"/><path d="m18.5 15.5.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg> The AI Copilot</a>
+            <a href="/features/crew/"><svg class="mico" style="color:var(--cyan)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Crew Command</a>
+            <a href="/features/client-hub/"><svg class="mico" style="color:var(--magenta)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h12L22 9 12 20.5 2 9z"/><path d="M2 9h20M9.5 3.5 12 9l2.5-5.5M12 20.5 9.5 9M12 20.5 14.5 9"/></svg> Client Hub</a>
+            <a href="/features/invoicing/"><svg class="mico" style="color:var(--emerald)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 16.5h6"/></svg> Invoicing &amp; Getting Paid</a>
+            <a href="/features/booking/"><svg class="mico" style="color:var(--orange)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg> Booking &amp; Front Desk</a>
+            <a href="/features/phone/"><svg class="mico" style="color:var(--blue)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg> Business Phone</a>
+            <a href="/#inventory"><svg class="mico" style="color:var(--teal)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>Inventory &amp; pricing</a>
+          </div>
+        </div>
+        <div class="drop">
+          <span>Integrations ▾</span>
+          <div class="menu">
+            <a href="/integrations/quickbooks/"><img class="mico" src="/assets/icons/quickbooks.svg" alt=""> QuickBooks Online</a>
+            <a href="/integrations/gmail/"><img class="mico" src="/assets/icons/gmail.svg" alt=""> Gmail — Receipt Radar</a>
+            <a href="/integrations/google-calendar/"><img class="mico" src="/assets/icons/googlecalendar.svg" alt=""> Google Calendar</a>
+            <a href="/integrations/google-business/"><img class="mico" src="/assets/icons/googlebusiness.svg" alt=""> Google Business Profile</a>
+          </div>
+        </div>
+        <a href="/#app">In the app</a>
+        <a href="/#pricing">Pricing</a>
+        <a class="active" href="/talk/">Book a call</a>
+        <a href="/support/">Support</a>
+      </div>
+      <div class="navcta">
+        <a class="btn ghost sm" href="/app.html">Sign in</a>
+        <a class="btn primary sm" href="/app.html">Open the app →</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<section class="talkhero">
+  <div class="wrap narrow">
+    <span class="eyebrow"><i></i> Founder access · Free</span>
+    <h1>Book time with <span class="grad">the founder.</span></h1>
+    <p class="lead">Thirty minutes to get your shop set up, or twenty to find out if Ledger AI is the right fit. Pick a time — the calendar invite and Google Meet link arrive in seconds.</p>
+    <div class="founder"><div class="av">K</div><div><b>Kyle · Founder, Ledger AI</b><span>Owner of a real Calgary tire shop. He built this for his own front desk.</span></div></div>
+  </div>
+</section>
+
+<section class="flow" id="flow">
+  <div class="wrap">
+
+    <div class="bk" id="s1">
+      <div class="shead"><div class="n">1</div><div><h2>What would you like to do?</h2><div class="sub">Both are free and both are with Kyle directly.</div></div><button class="chg" type="button" data-reset="1">Change</button></div>
+      <div class="types">
+        <button class="type" type="button" data-type="onboarding">
+          <span class="pick">✓</span>
+          <span class="tag"><i></i> Free</span>
+          <h3>Onboarding session</h3>
+          <div class="dur">30 minutes · Google Meet</div>
+          <p>Already in, or about to be. We set up your workspace together so day one is a working day.</p>
+          <ul>
+            <li><em>✓</em> Connect your books, calendar and phone</li>
+            <li><em>✓</em> Your first invoice, booking and crew dispatch, live</li>
+            <li><em>✓</em> Leave with a shop that runs itself tomorrow morning</li>
+          </ul>
+        </button>
+        <button class="type" type="button" data-type="consult">
+          <span class="pick">✓</span>
+          <span class="tag"><i></i> Free</span>
+          <h3>Consultation</h3>
+          <div class="dur">20 minutes · Google Meet</div>
+          <p>Still deciding. A straight conversation about your business and whether Ledger AI fits it — no pitch, no pressure.</p>
+          <ul>
+            <li><em>✓</em> Walk through how your shop runs today</li>
+            <li><em>✓</em> See exactly what Ledger AI would take off your plate</li>
+            <li><em>✓</em> An honest answer, either way</li>
+          </ul>
+        </button>
+      </div>
+    </div>
+
+    <div class="bk locked" id="s2">
+      <div class="shead"><div class="n">2</div><div><h2>Pick a time</h2><div class="sub">Only times Kyle is actually free are shown.</div></div><button class="chg" type="button" data-reset="2">Change</button></div>
+      <div class="tzrow"><span>Times shown in <b id="tzname">your time zone</b></span><span id="dur"></span></div>
+      <div id="slotsbox"><div class="loading"><i></i> Checking the calendar…</div></div>
+    </div>
+
+    <div class="bk locked" id="s3">
+      <div class="shead"><div class="n">3</div><div><h2>Your details</h2><div class="sub">Just enough to send the invite.</div></div></div>
+      <div class="summary" id="summary"></div>
+      <form id="form" novalidate>
+        <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <div class="fields">
+          <div class="bkf"><label for="fname">Your name</label><input id="fname" name="name" autocomplete="name" maxlength="120" required></div>
+          <div class="bkf"><label for="femail">Email <span>— where the invite goes</span></label><input id="femail" name="email" type="email" autocomplete="email" maxlength="160" required></div>
+          <div class="bkf"><label for="fbiz">Business <span>— optional</span></label><input id="fbiz" name="business" autocomplete="organization" maxlength="160"></div>
+          <div class="bkf"><label for="fphone">Phone <span>— optional</span></label><input id="fphone" name="phone" type="tel" autocomplete="tel" maxlength="40"></div>
+          <div class="bkf full"><label for="fnotes">Anything you want to cover? <span>— optional</span></label><textarea id="fnotes" name="notes" maxlength="1500" placeholder="What your shop does, what's eating your time, what you'd want Ledger AI to handle first…"></textarea></div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" type="submit" id="submit">Confirm booking →</button>
+          <span class="assure">No account. No card. Move or cancel any time by replying to the confirmation email.</span>
+        </div>
+        <div class="err" id="err"></div>
+      </form>
+    </div>
+
+    <div class="done" id="done">
+      <div class="ok">✓</div>
+      <h2>You're booked.</h2>
+      <div class="when" id="donewhen"></div>
+      <p id="donetext"></p>
+      <div class="acts"><a class="btn primary" id="meetlink" href="#" target="_blank" rel="noopener">Google Meet link</a><a class="btn ghost" href="/">Back to Ledger AI</a></div>
+    </div>
+
+    <div class="trust">
+      <div><b>Straight to his calendar</b>Live availability from Kyle's real calendar — no back-and-forth, no double-books.</div>
+      <div><b>Invite in seconds</b>A calendar invitation with the Google Meet link lands in your inbox the moment you confirm.</div>
+      <div><b>Nothing to install</b>Google Meet in any browser. Prefer a phone call? Leave your number and say so.</div>
+    </div>
+
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="fgrid">
+      <div class="fcol fb">
+        <div class="fbrand"><img src="/assets/logo-mark-96.png" alt=""><b>Ledger AI</b></div>
+        <p>The AI that runs your shop — built by business owners, inside a real Calgary tire shop.</p>
+        <a class="btn primary sm" href="/app.html">Open the app →</a>
+      </div>
+      <div class="fcol"><h5>Platform</h5>
+        <a href="/features/ai/">The AI Copilot</a>
+        <a href="/features/crew/">Crew Command</a>
+        <a href="/features/client-hub/">Client Hub</a>
+        <a href="/features/invoicing/">Invoicing &amp; Getting Paid</a>
+        <a href="/features/booking/">Booking &amp; Front Desk</a>
+        <a href="/features/phone/">Business Phone</a>
+        <a href="/integrations/google-business/">Reviews &amp; Reputation</a>
+      </div>
+      <div class="fcol"><h5>Integrations</h5>
+        <a href="/integrations/quickbooks/">QuickBooks Online</a>
+        <a href="/integrations/gmail/">Gmail — Receipt Radar</a>
+        <a href="/integrations/google-calendar/">Google Calendar</a>
+        <a href="/integrations/google-business/">Google Business Profile</a>
+      </div>
+      <div class="fcol"><h5>Company</h5>
+        <a href="/#pricing">Pricing</a>
+        <a href="/talk/">Book a call</a>
+        <a href="/support/">Support</a>
+        <a href="/privacy/">Privacy</a>
+        <a href="/terms/">Terms</a>
+        <a href="mailto:supportteam@heyledger.ai">supportteam@heyledger.ai</a>
+      </div>
+    </div>
+    <div class="fbase"><span>© 2026 Ledger AI — made in Calgary, Alberta, Canada.</span><span class="noseat">No per-seat fees. Ever.</span></div>
+  </div>
+</footer>
+
+<script src="/assets/nav.js?v=29"></script>
+<script src="/assets/talk.js?v=1"></script>
+</body>
+</html>
