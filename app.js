@@ -3514,7 +3514,7 @@ async function phoneThreadSheet(t) {
       field.value = "";
       await load(false);
       renderPhone();
-    } catch (ex) { showErr(ex.message); }
+    } catch (ex) { showErr(ex.message); smsSendFailed(ex); }
     e.currentTarget.disabled = false;
   };
 
@@ -5931,6 +5931,44 @@ async function powerUpSheet() {
   });
 }
 
+/* Texting credit — the $25/month included with the business number, metered at
+   the carrier's real per-text cost and topped up $25 at a time. Rides on the
+   same usage call as the AI meter (S.usage.sms); hidden on a bring-your-own
+   line, where the other provider bills the texts. (Kyle 2026-09-05) */
+function smsMeterHtml(s) {
+  const pct = s && s.allowance_usd > 0 ? Math.round(Number(s.used_usd) / s.allowance_usd * 100) : 0;
+  const texts = s ? `${s.outbound_count} sent · ${s.inbound_count} received` : "";
+  return `<div class="kv"><span>Used this month</span><span>${s ? money(s.used_usd) + " of " + money(s.allowance_usd) : "—"}</span></div>
+    ${texts ? `<div class="kv" style="margin-top:4px"><span>Texts</span><span>${esc(texts)}</span></div>` : ""}
+    <div style="height:7px;background:rgba(255,255,255,.07);border-radius:99px;margin-top:9px;overflow:hidden">
+      <div style="height:100%;width:${Math.min(pct, 100)}%;background:${pct >= 80 ? "var(--orange)" : "linear-gradient(90deg,var(--cyan),var(--purple))"}"></div></div>
+    ${s?.topup_usd > 0 ? `<p class="note" style="margin-top:6px">Includes ${money(s.topup_usd)} added this month. Resets on the 1st.</p>` : `<p class="note" style="margin-top:6px">${s ? money(s.credit_usd) : "$25"} included every month with your business number. Resets on the 1st.</p>`}`;
+}
+async function textingSheet() {
+  let s = S.usage?.sms || null;
+  try { const r = await api("/phone", { action: "sms-usage" }); if (r?.sms) { s = r.sms; if (S.usage) S.usage.sms = s; } } catch {}
+  let pkg = { key: "sms25", emoji: "💬", label: "Texting credit", price: 25, credit: 25 };
+  try { const b = await api("/stripe-billing/status", {}); if (b.sms_topup) pkg = b.sms_topup; } catch {}
+  sheet(`<h2>💬 Texting credit</h2><p class="sh-sub">Texts your business number sends and receives — reminders, replies, Front Desk, your own messages.</p>
+    <div class="panel">${smsMeterHtml(s)}</div>
+    ${s?.exhausted ? `<p class="note" style="margin-top:10px;color:var(--orange)">This month's credit is used up. Reminders and replies are paused until you add credit.</p>` : ""}
+    <button class="pu-card hot" data-k="${esc(pkg.key)}" style="margin-top:12px">
+      <span class="pu-emoji">${pkg.emoji}</span>
+      <span class="pu-info"><b>Add $${pkg.credit} texting credit</b><small>About ${Math.round(pkg.credit / 0.0113 / 100) * 100} more texts · credited the second the payment clears</small></span>
+      <span class="pu-price">$${pkg.price}</span></button>`, (sh) => {
+    on(".pu-card", "click", async (e) => {
+      const b = e.currentTarget; b.disabled = true;
+      try { const c = await api("/stripe-billing/sms-topup", {}); location.href = c.url; }
+      catch (err) { toast(err.message, "err"); b.disabled = false; }
+    }, sh);
+  });
+}
+// A send that hit the monthly credit ceiling opens the top-up instead of a dead error.
+function smsSendFailed(ex) {
+  if (ex?.status === 402 && ex?.data?.error === "sms_credit_exhausted") { textingSheet(); return true; }
+  return false;
+}
+
 async function billingCheck() {
   try {
     const s = await api("/stripe-billing/status", {});
@@ -6363,6 +6401,12 @@ async function businessSheet() {
         <div style="height:100%;width:${Math.min(pct, 100)}%;background:${pct >= 80 ? "var(--orange)" : "linear-gradient(90deg,var(--cyan),var(--purple))"}"></div></div>
       <button class="btn ghost wide" style="margin-top:11px" id="bpu">⚡ Power-Ups</button>
     </div>
+    ${u?.sms ? `<div class="eyebrow" style="margin-top:20px">TEXTING CREDIT</div>
+    <div class="panel" style="margin-top:8px">
+      ${u.sms.metered ? `${smsMeterHtml(u.sms)}
+      <button class="btn ghost wide" style="margin-top:11px" id="bsms">💬 Add $25 texting credit</button>`
+      : `<p class="note" style="margin-top:0">Your texts run on your own line, so that provider bills them. A Ledger business number includes $25 of texting every month.</p>`}
+    </div>` : ""}
 
     <div class="eyebrow" style="margin-top:20px" id="connhead">CONNECTED SERVICES</div>
     <p class="note" style="margin-top:5px">Authorization happens on each provider's official sign-in page. Ledger never receives your password.</p>
@@ -6515,6 +6559,7 @@ async function businessSheet() {
     };
     renderBooking();
     sh.querySelector("#bpu").onclick = powerUpSheet;
+    const bsms = sh.querySelector("#bsms"); if (bsms) bsms.onclick = textingSheet;
     sh.querySelector("#bnew").onclick = () => { newConversation(); closeSheet(); openChat(); };
     sh.querySelector("#bbill").onclick = async () => {
       try { const d = await api("/stripe-billing/portal", {}); location.href = d.url; }
