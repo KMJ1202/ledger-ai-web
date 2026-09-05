@@ -902,3 +902,15 @@ nav.sitenav .brand b{background:linear-gradient(90deg,#fff 0%,#fff 40%,var(--cya
 .fcard .fgo{display:inline-block;margin-top:18px;font-weight:800;font-size:14.5px;background:linear-gradient(135deg,var(--cyan),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent}
 .fnote{text-align:center;color:var(--dim2);font-size:13px;margin-top:18px}
 @media(max-width:700px){.fgrid2{grid-template-columns:1fr}}
+
+/* ── Hero phone: real iPhone proportions (Kyle 2026-09-05, "10-foot-long phone") ──
+   The screen used to grow with its content (~3:1). Lock it to a 19.5:9 handset, hide the
+   duplicate ID card, settings row and chip grid in the hero only, and let the Ask Ledger card
+   fill the body with the composer pinned above the tab bar. */
+.hero .phoneframe .screen{aspect-ratio:9/19.5;display:flex;flex-direction:column}
+.hero .phoneframe .lbody{flex:1;min-height:0;display:flex;flex-direction:column}
+.hero .phoneframe .idcard,.hero .phoneframe .setrow,.hero .phoneframe .chips{display:none}
+.hero .phoneframe .gcard.pu{flex:1;min-height:0;display:flex;flex-direction:column}
+.hero .phoneframe .herodemo{flex:1;min-height:0;overflow:hidden}
+.hero .phoneframe .apptabs{flex-shrink:0}
+.hero .phoneframe .lbar{padding-top:52px}
