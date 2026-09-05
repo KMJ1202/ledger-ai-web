@@ -914,3 +914,23 @@ nav.sitenav .brand b{background:linear-gradient(90deg,#fff 0%,#fff 40%,var(--cya
 .hero .phoneframe .herodemo{flex:1;min-height:0;overflow:hidden}
 .hero .phoneframe .apptabs{flex-shrink:0}
 .hero .phoneframe .lbar{padding-top:52px}
+
+/* ── Icon ↔ title alignment (Kyle 2026-09-05) ──────────────────────────────────
+   Icon and title sat on a centred flex/grid row, so any title that wrapped to two
+   or more lines shoved the icon down to the middle of the whole block (14px out on
+   a 2-line title, 48px on the 4-line Inventory card, desktop and phone alike).
+   Icons now sit on the FIRST line of their title. The px value is the fallback for
+   engines without the `lh` unit; the calc is the exact half-difference. */
+.grid>.card{align-items:start}
+.grid>.card .ic{align-self:start}
+.grid>.card .ic+h3{margin-top:11px;margin-top:calc((var(--icoh,48px) - 1lh)/2)}
+@media (max-width:899px){.grid>.card{--icoh:52px}}
+@media (min-width:900px){.grid.bento .card.feat{--icoh:56px}}
+
+.intcard .top{align-items:start}
+.intcard .top>.ic{align-self:start}
+.intcard .top>h3,.intcard .top>.go{margin-top:10px;margin-top:calc((52px - 1lh)/2)}
+
+.price .prow{align-items:start}
+.price .prow .pic{align-self:start}
+.price .prow .pt{margin-top:9px;margin-top:calc((38px - 1lh)/2)}
