@@ -62,7 +62,7 @@ nav.sitenav.mopen .navburger span:nth-child(3){transform:translateY(-6.5px) rota
 @media(max-width:780px){
   nav.sitenav .links{display:none}
   .bcaret{display:inline-block}
-  nav.sitenav.mopen .links{display:flex;flex-direction:column;align-items:stretch;gap:4px;position:absolute;top:calc(100% + 8px);left:-8px;right:-8px;background:linear-gradient(170deg,#131922,#0a0e14);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:0 24px 60px rgba(0,0,0,.6);z-index:60}
+  nav.sitenav.mopen .links{display:flex;flex-direction:column;align-items:stretch;gap:4px;position:absolute;top:calc(100% + 8px);left:-8px;right:-8px;background:linear-gradient(170deg,#131922,#0a0e14);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:0 24px 60px rgba(0,0,0,.6);z-index:60;max-height:calc(100vh - 100px);max-height:calc(100dvh - 100px);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding-bottom:calc(12px + env(safe-area-inset-bottom))}
   nav.sitenav.mopen .links>a{padding:12px 14px;border-radius:10px;font-size:15px}
   nav.sitenav.mopen .links>a:active{background:var(--glass)}
   nav.sitenav.mopen .links .drop>span{display:block;padding:12px 14px 4px;font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim2);pointer-events:none}

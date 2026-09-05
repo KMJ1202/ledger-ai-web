@@ -7,7 +7,7 @@ Idempotent: every insert is keyed on a marker comment and skipped when present.
 import re, sys, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CSS_V = "46"
+CSS_V = "47"
 
 # ---------- balanced-div helpers ----------
 TAG = re.compile(r"<div\b|</div>")
