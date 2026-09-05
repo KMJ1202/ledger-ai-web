@@ -268,6 +268,7 @@ nav.sitenav .links .menu svg.mico{width:17px;height:17px;flex-shrink:0}
 .price .prow.orange .pic{background:rgba(251,146,60,.15);color:var(--orange)}
 .price .prow.blue .pic{background:rgba(59,130,246,.15);color:var(--blue)}
 .price .prow.magenta .pic{background:rgba(224,92,240,.16);color:var(--magenta)}
+.prow.teal .pic{background:rgba(45,212,191,.14);color:var(--teal)}
 .price .prow.gold:hover{border-color:rgba(251,191,36,.45)}
 .price .prow.cyan:hover{border-color:rgba(58,200,245,.45)}
 .price .prow.purple:hover{border-color:rgba(168,85,247,.45)}
@@ -275,6 +276,7 @@ nav.sitenav .links .menu svg.mico{width:17px;height:17px;flex-shrink:0}
 .price .prow.orange:hover{border-color:rgba(251,146,60,.45)}
 .price .prow.blue:hover{border-color:rgba(59,130,246,.45)}
 .price .prow.magenta:hover{border-color:rgba(224,92,240,.45)}
+.prow.teal:hover{border-color:rgba(45,212,191,.45)}
 .price .pillrows + ul{margin:18px 0 26px;padding-top:14px;border-top:1px dashed var(--line)}
 
 /* ---------- how-it-works numbered steps ---------- */
