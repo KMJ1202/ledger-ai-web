@@ -2207,9 +2207,18 @@ function msProfit(v) {
   if (v == null) return "";
   return `<span class="profit${v < 0 ? " neg" : ""}">${v < 0 ? "−" : ""}${money(Math.abs(v))}</span>`;
 }
-function msSaleLine(sale, profit) {
+// `mode` "done" = the receipt is already on this job (profit is real);
+// "if" = a guess the owner has not confirmed, so the number is what the job
+// WOULD make once this receipt lands on it. A loss there is the tell that the
+// receipt is bigger than the sale — two jobs, or the wrong invoice.
+function msSaleLine(sale, profit, mode) {
   if (!sale) return "";
-  return `<b>Invoice ${sale.number ? "#" + esc(sale.number) : ""}</b>${sale.customer ? " · " + esc(sale.customer) : ""} · ${msDate(sale.date)} · sold ${money(sale.subtotal)}${profit != null ? " · profit " + msProfit(profit) : ""}`;
+  let tail = "";
+  if (profit != null) {
+    if (mode === "if") tail = profit < 0 ? " · would lose " + msProfit(profit) + " — bigger than this sale?" : " · you'd make " + msProfit(profit);
+    else tail = " · profit " + msProfit(profit);
+  }
+  return `<b>Invoice ${sale.number ? "#" + esc(sale.number) : ""}</b>${sale.customer ? " · " + esc(sale.customer) : ""} · ${msDate(sale.date)} · sold ${money(sale.subtotal)}${tail}`;
 }
 function msLines(lines) {
   return (lines || []).slice(0, 3).map((l) =>
@@ -2288,7 +2297,7 @@ function psMatchScreen(review, tally, after) {
       <div class="head"><b>${esc(c.vendor)}</b><span>${money(c.amount)}</span></div>
       <div class="meta">${c.doc_number ? esc(c.doc_number) + " · " : ""}arrived ${msDate(c.cost_date)}${c.waiting ? " · was waiting for a sale" : ""}</div>
       ${msLines(c.lines)}
-      ${s ? `<div class="ms-guess">Looks like ${msSaleLine(s, c.job_profit)}</div>`
+      ${s ? `<div class="ms-guess">Looks like ${msSaleLine(s, c.job_profit, "if")}</div>`
           : `<div class="ms-guess none">No matching sale on file yet${c.lines_read ? "" : " — still reading this invoice"}.</div>`}
       ${s ? `<button class="btn em wide" data-msconfirm="${c.id}" data-sale="${s.id}">&#10003;&nbsp; That's the one</button>` : ""}
       <button class="btn ghost wide" data-mspick="${c.id}" data-rej="${s ? s.id : ""}">${s ? "Different invoice" : "Pick the invoice"}</button>
