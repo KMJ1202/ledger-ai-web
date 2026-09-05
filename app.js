@@ -2220,6 +2220,14 @@ function msSaleLine(sale, profit, mode) {
   }
   return `<b>Invoice ${sale.number ? "#" + esc(sale.number) : ""}</b>${sale.customer ? " · " + esc(sale.customer) : ""} · ${msDate(sale.date)} · sold ${money(sale.subtotal)}${tail}`;
 }
+// The order bought more tires than this invoice sold (8 in, 4 out): the rest
+// went to another job, so the guess is shown but never linked on its own.
+function msSpareLine(detail) {
+  const spare = detail && Number(detail.spare_qty) > 0 ? Number(detail.spare_qty) : 0;
+  if (!spare) return "";
+  const bought = Number(detail.receipt_tires), sold = Number(detail.sale_tires);
+  return `<div class="ms-spare">${bought} tires on this order, ${sold} on this invoice — the other ${spare} likely went to another job.</div>`;
+}
 function msLines(lines) {
   return (lines || []).slice(0, 3).map((l) =>
     `<div class="ms-line">${l.qty != null ? `<em>${esc(String(l.qty))}×</em>` : ""}${esc(l.text)}</div>`).join("");
@@ -2297,7 +2305,7 @@ function psMatchScreen(review, tally, after) {
       <div class="head"><b>${esc(c.vendor)}</b><span>${money(c.amount)}</span></div>
       <div class="meta">${c.doc_number ? esc(c.doc_number) + " · " : ""}arrived ${msDate(c.cost_date)}${c.waiting ? " · was waiting for a sale" : ""}</div>
       ${msLines(c.lines)}
-      ${s ? `<div class="ms-guess">Looks like ${msSaleLine(s, c.job_profit, "if")}</div>`
+      ${s ? `<div class="ms-guess">Looks like ${msSaleLine(s, c.job_profit, "if")}${msSpareLine(c.detail)}</div>`
           : `<div class="ms-guess none">No matching sale on file yet${c.lines_read ? "" : " — still reading this invoice"}.</div>`}
       ${s ? `<button class="btn em wide" data-msconfirm="${c.id}" data-sale="${s.id}">&#10003;&nbsp; That's the one</button>` : ""}
       <button class="btn ghost wide" data-mspick="${c.id}" data-rej="${s ? s.id : ""}">${s ? "Different invoice" : "Pick the invoice"}</button>
