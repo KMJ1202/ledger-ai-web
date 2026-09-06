@@ -2179,7 +2179,8 @@ async function runProfitSweep() {
   catch { /* the board already updated; a review hiccup shouldn't eat the sweep */ }
   const after = () => psCard(cards, 0, tally);
   const nothingToMatch = !review.auto.length && !review.proposed.length && !review.waiting.length
-    && !review.new_vendors.length && !review.unread_count && !gmailNeeds;
+    && !review.new_vendors.length && !review.unread_count && !gmailNeeds
+    && !(review.returns || []).length && !(review.credits || []).length;
   // Nothing arrived by email and nothing is on file for today at all — the one
   // moment the sweep volunteers a question, because it is the owner's explicit
   // tap that got us here, not a background nag.
@@ -2296,14 +2297,19 @@ function psNewVendors(cards, tally, after) {
 function psMatchScreen(review, tally, after) {
   const r = review || {};
   const auto = r.auto || [], proposed = r.proposed || [], waiting = r.waiting || [];
+  const returns = r.returns || [], credits = r.credits || [];
+  const overdue = returns.filter((x) => x.overdue).length;
   const unread = Number(r.unread_count || 0);
   const need = proposed.length;
   const headline = auto.length && need
     ? `${auto.length} matched to jobs on their own · ${need} need${need === 1 ? "s" : ""} a look`
     : auto.length ? `${auto.length} matched to jobs on their own — nothing needs you`
     : need ? `${need} receipt${need === 1 ? "" : "s"} need${need === 1 ? "s" : ""} a look`
+    : credits.length ? (credits.length === 1 ? "A supplier credit needs a home" : `${credits.length} supplier credits need a home`)
+    : overdue ? (overdue === 1 ? "One return still has no credit from the supplier" : `${overdue} returns still have no credit from the supplier`)
     : waiting.length ? "Nothing new to match — the rest is waiting for a sale"
     : unread ? "Reading your supplier invoices — matches land on the next pass"
+    : returns.length ? "Nothing to match — your returns are waiting on their credits"
     : "Nothing needs matching right now";
 
   const autoBlock = auto.length ? `
@@ -2333,6 +2339,7 @@ function psMatchScreen(review, tally, after) {
       ${s ? `<button class="btn em wide" data-msconfirm="${c.id}" data-sale="${s.id}">&#10003;&nbsp; That's the one</button>` : ""}
       <button class="btn ghost wide" data-mspick="${c.id}" data-rej="${s ? s.id : ""}">${s ? "Different invoice" : "Pick the invoice"}</button>
       <button class="btn ghost wide" data-mswait="${c.id}" data-rej="${s ? s.id : ""}">Not sold yet</button>
+      <button class="btn ghost wide" data-msreturned="${c.id}">&#8630;&nbsp; Returned to supplier</button>
       <button class="btn ghost wide" data-msdrop="${c.id}">&#10005;&nbsp; Not a business cost</button>
       <button class="linkbtn" data-msnone="${c.id}">Stock order — not for one job</button>
       <div class="ms-pick" data-mspickbox="${c.id}" hidden></div>
@@ -2350,6 +2357,43 @@ function psMatchScreen(review, tally, after) {
       </div>`).join("")}
     </details>` : "";
 
+  // Supplier credit notes the hourly pass could not place: the owner names the
+  // purchase, or says nothing on file matches it.
+  const creditBlock = credits.length ? `
+    <div class="ms-auto ms-credits">
+      <div class="headline"><span class="eyebrow">Credits from suppliers</span><span class="when">${credits.length} CREDIT${credits.length === 1 ? "" : "S"}</span></div>
+      <p class="sum">Money coming back. Which purchase does each one reverse?</p>
+      ${credits.map((k) => `<div class="ms-row" data-mscard="${k.receipt_id}">
+        <div class="top"><span>${esc(k.vendor)}${k.doc_number ? " · " + esc(k.doc_number) : ""}</span><span style="color:var(--emerald)">${money(k.amount)}</span></div>
+        <div class="to">received ${msDate(k.received_at)}</div>
+        <button class="btn ghost wide" data-mscreditpick="${k.receipt_id}">&#8630;&nbsp; Pick the purchase it reverses</button>
+        <button class="linkbtn" data-mscreditdrop="${k.receipt_id}">Nothing to tie it to</button>
+        <div class="ms-pick" data-mspickbox="${k.receipt_id}" hidden></div>
+      </div>`).join("")}
+    </div>` : "";
+
+  // Returned purchases: off the numbers, watched until the supplier's credit
+  // lands. Two weeks with no credit turns the row amber — that missing credit
+  // is the part that actually costs the shop money.
+  const returnRow = (x) => {
+    const days = Number(x.days_waiting || 0);
+    const status = x.credited
+      ? `<span style="color:${Number(x.shortfall || 0) > 0.009 ? "var(--gold)" : "var(--emerald)"}">Credit ${x.credit_doc_number ? "#" + esc(x.credit_doc_number) + " " : ""}${money(x.credit_amount || 0)} landed ${msDate(x.credited_at || x.returned_at)}${Number(x.shortfall || 0) > 0.009 ? `. ${money(x.shortfall)} short — that part still counts` : ""}</span>`
+      : x.overdue
+        ? `<b style="color:var(--gold)">No credit yet after ${days} days — worth a call to ${esc(x.vendor)}</b>`
+        : `No credit yet · ${days === 0 ? "returned today" : `${days} day${days === 1 ? "" : "s"}`}`;
+    return `<div class="ms-row" data-mscard="${x.id}">
+      <div class="top"><span>${esc(x.vendor)}${x.doc_number ? " · " + esc(x.doc_number) : ""}</span><span>${money(x.amount)}</span></div>
+      <div class="to">returned ${msDate(x.returned_at)} · ${status}</div>
+      <button class="linkbtn" data-msreturnundo="${x.id}">Didn't go back — undo</button>
+    </div>`;
+  };
+  const returnBlock = returns.length ? `
+    <details class="sc-all ms-wait ms-returns" ${overdue ? "open" : ""}><summary>Returned to supplier <em>${returns.length}</em>${overdue ? ` <b style="color:var(--gold)">· ${overdue} overdue</b>` : ""}</summary>
+      <p class="note" style="margin:4px 0 2px">Sent back, so they don't count against you. Each one waits here for the supplier's credit note.</p>
+      ${returns.map(returnRow).join("")}
+    </details>` : "";
+
   const gmailStrip = tally.gmailNeeds ? `
     <div class="warnstrip" style="margin-top:10px"><em>&#9888;</em><span>${esc(tally.gmailNeeds)} — until it's back, new supplier invoices can't be read or matched.
       <button class="btn primary" data-connect="/gmail/start" style="display:block;margin-top:8px;padding:9px 13px;font-size:13px">Reconnect Gmail</button></span></div>` : "";
@@ -2362,6 +2406,8 @@ function psMatchScreen(review, tally, after) {
     ${autoBlock}
     ${need ? `<p class="eyebrow" style="margin:16px 0 0;color:var(--gold)">Needs a look</p>` : ""}
     ${proposed.map(card).join("")}
+    ${creditBlock}
+    ${returnBlock}
     ${waitBlock}
     ${unreadNote}
     <div class="note err" id="msErr" style="margin-top:8px"></div>
@@ -2411,6 +2457,42 @@ function psMatchScreen(review, tally, after) {
       const id = e.currentTarget.dataset.msnone; busyCard(id, true); err.textContent = "";
       try { const d = await api("/profit/match-none", { id }); tally.stock += 1; rerender(d); }
       catch (er) { fail(er); busyCard(id, false); }
+    }, sh);
+    // "Returned to supplier": off the numbers now, credit watched from here.
+    on("[data-msreturned]", "click", async (e) => {
+      const id = e.currentTarget.dataset.msreturned; busyCard(id, true); err.textContent = "";
+      try { const d = await api("/profit/match-returned", { id }); tally.returned = (tally.returned || 0) + 1; rerender(d); }
+      catch (er) { fail(er); busyCard(id, false); }
+    }, sh);
+    on("[data-msreturnundo]", "click", async (e) => {
+      const id = e.currentTarget.dataset.msreturnundo; busyCard(id, true); err.textContent = "";
+      try { rerender(await api("/profit/match-return-undo", { id })); }
+      catch (er) { fail(er); busyCard(id, false); }
+    }, sh);
+    on("[data-mscreditdrop]", "click", async (e) => {
+      const id = e.currentTarget.dataset.mscreditdrop; busyCard(id, true); err.textContent = "";
+      try { rerender(await api("/profit/credit-dismiss", { receipt_id: id })); }
+      catch (er) { fail(er); busyCard(id, false); }
+    }, sh);
+    // A credit note the hourly pass could not place: same-supplier purchases,
+    // likeliest first. One tap on a row pairs it.
+    on("[data-mscreditpick]", "click", async (e) => {
+      const id = e.currentTarget.dataset.mscreditpick;
+      const box = sh.querySelector(`[data-mspickbox="${id}"]`);
+      if (!box.hidden) { box.hidden = true; return; }
+      box.hidden = false;
+      box.innerHTML = `<p class="note" style="margin:8px 0 4px">Which purchase does this credit reverse?</p><div class="note">Loading recent purchases…</div>`;
+      let rows = [];
+      try { rows = (await get(`/profit/credit-choices?id=${encodeURIComponent(id)}`)).choices || []; }
+      catch (er) { box.innerHTML = `<div class="note err">${esc(er.message)}</div>`; return; }
+      if (!rows.length) { box.innerHTML = `<p class="note" style="margin:8px 0">No recent purchases from this supplier to pick from.</p>`; return; }
+      box.innerHTML = `<p class="note" style="margin:8px 0 4px">Which purchase does this credit reverse?</p>` + rows.map((c) =>
+        `<button class="opt" data-mscreditopt="${c.id}"><b>${c.doc_number ? esc(c.doc_number) : esc(c.vendor)}</b><span>${c.returned ? "returned" : ""}${c.returned && c.likely ? " · " : ""}${c.likely ? "looks like the one" : ""}</span><i>${msDate(c.date)} · ${money(c.amount)}</i></button>`).join("");
+      on("[data-mscreditopt]", "click", async (ev) => {
+        busyCard(id, true); err.textContent = "";
+        try { rerender(await api("/profit/credit-pair", { receipt_id: id, cost_id: ev.currentTarget.dataset.mscreditopt })); }
+        catch (er) { fail(er); busyCard(id, false); }
+      }, box);
     }, sh);
     on("[data-msdrop]", "click", async (e) => {
       const id = e.currentTarget.dataset.msdrop; const box = sh.querySelector(`[data-mspickbox="${id}"]`);
@@ -2596,6 +2678,7 @@ async function psDone(count, tally) {
   if (tally.parked) bits.push(`${tally.parked} parked for a future job`);
   if (tally.excluded) bits.push(`${tally.excluded} removed`);
   if (tally.added) bits.push(`${tally.added} cost${tally.added === 1 ? "" : "s"} added by hand`);
+  if (tally.returned) bits.push(`${tally.returned} returned to the supplier — watching for the credit`);
   sheet(`<h2>Day locked in</h2>
     <p class="sh-sub">${count
       ? `${count} receipt${count === 1 ? "" : "s"} reviewed${bits.length ? " — " + bits.join(", ") : ""}.`
