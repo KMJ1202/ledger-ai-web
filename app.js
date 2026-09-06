@@ -786,6 +786,7 @@ function shopProfileSheet(onDone) {
     <div class="note" id="shopnote" style="margin-top:9px"></div>`, (sh) => {
     sh.querySelectorAll(".chip").forEach((c) => c.onclick = () => {
       const key = c.closest("[data-q]").dataset.q, v = c.dataset.v;
+      sh.querySelector("#shopnote").textContent = "";
       if (key === "intake_channels") {
         c.classList.toggle("on");
         picked.intake_channels = [...c.parentElement.querySelectorAll(".chip.on")].map((x) => x.dataset.v);
