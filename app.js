@@ -768,8 +768,8 @@ async function loadHomeSetup() {
     ? `Free until ${dateShort(bill.trial_ends_at)} — add a card so nothing stops on day 15.` : "Keep Ledger running after your trial.";
   slot.innerHTML = `<div class="setupcard">
     <div class="lanehead" style="margin-top:0"><span class="eyebrow">&#9889; Get set up</span><button class="pill" id="setuphide" title="Hide">Hide</button></div>
-    ${step(books, 1, "Choose your books", books ? "" : "Already use QuickBooks? Connect it and Ledger works from your real numbers. Otherwise Ledger's built-in books do invoices, estimates and payment links today.",
-      `<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn primary" data-connect="/quickbooks-oauth/start">QuickBooks</button><button class="btn ghost" id="setupnative">Built-in books</button></span>`)}
+    ${step(books, 1, "Choose your books", books ? "" : `Already on QuickBooks? Connect it. Otherwise Ledger's built-in books handle invoices, estimates and payment links.
+        <span style="display:flex;gap:8px;margin-top:9px"><button class="btn primary" data-connect="/quickbooks-oauth/start">QuickBooks</button><button class="btn ghost" id="setupnative">Built-in books</button></span>`, "")}
     ${step(cal, 2, "Connect Google Calendar", "See your week and let Ledger book jobs — every booking still needs your tap.",
       `<button class="btn ghost" data-connect="/google-calendar/start">Connect</button>`)}
     ${step(paid, 3, "Add a card", trialLine,
