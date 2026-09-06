@@ -8291,10 +8291,25 @@ supa.auth.onAuthStateChange((event, s) => {
 // nervous second run adds nothing.
 const MIGRATE_FIELD_LABELS = {
   first_name: "First name", last_name: "Last name", full_name: "Full name (one column)", company: "Company", email: "Email",
-  phone: "Phone", phone2: "Second phone", address: "Address", notes: "Notes", customer_source_id: "Customer ID",
+  phone: "Phone", phone2: "Second phone", address: "Address", address2: "Unit / address line 2", city: "City", province: "Province / state",
+  postal: "Postal / zip code", country: "Country", notes: "Notes", tags: "Tags", lead_source: "Lead source", customer_type: "Customer type",
+  access_code: "Gate / access code", customer_source_id: "Customer ID",
   vin: "VIN", year: "Year", make: "Make", model: "Model", trim: "Trim", plate: "Plate", odometer: "Odometer",
   vehicle_source_id: "Vehicle ID", engine: "Engine", color: "Colour",
 };
+// Excel (.xlsx/.xls) is what most shops actually export. Read the first sheet in the browser and hand the
+// backend the same CSV text a .csv file would give — SheetJS is fetched only when an Excel file is chosen.
+async function readSpreadsheetAsCsv(file) {
+  if (!/\.xlsx?$/i.test(file.name || "")) {
+    return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsText(file); });
+  }
+  const XLSX = await import("https://esm.sh/xlsx@0.18.5");
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(new Uint8Array(buf), { type: "array" });
+  const first = wb.SheetNames[0];
+  if (!first) throw new Error("That Excel file has no sheets in it.");
+  return XLSX.utils.sheet_to_csv(wb.Sheets[first], { blankrows: false });
+}
 function downloadCsv(name, csv) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = name; a.click();
@@ -8324,8 +8339,8 @@ function bringDataSheet() {
     }
     if (!C.analysis) {
       box.innerHTML = `
-        <p class="sh-sub">Export your customers (and vehicles) from your old system as a CSV or spreadsheet, then drop the file here. Works with Shopmonkey, Tekmetric, Jobber, Housecall Pro, Square, Shop-Ware and plain Excel.</p>
-        <input type="file" id="mgfile" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden>
+        <p class="sh-sub">Export your customers (and vehicles) from your old system as an Excel file or CSV, then drop the file here. Works with Jobber, Housecall Pro, ServiceTitan, QuickBooks, Shopmonkey, Tekmetric, Square, Google Contacts and plain Excel — in English or French.</p>
+        <input type="file" id="mgfile" accept=".csv,.tsv,.txt,.xlsx,.xls,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
         <button class="btn primary wide" id="mgpick" ${C.busy ? "disabled" : ""}>${C.busy ? "Reading…" : "Choose a file"}</button>
         <p class="note" style="margin-top:10px">Need a starting point? <a href="#" id="mgtplc">Customer template</a> · <a href="#" id="mgtplv">Vehicle template</a></p>
         ${C.error ? `<p class="note err">${esc(C.error)}</p>` : ""}`;
@@ -8336,7 +8351,7 @@ function bringDataSheet() {
         C.busy = true; C.error = ""; paint();
         try {
           C.file = file;
-          C.csv = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsText(file); });
+          C.csv = await readSpreadsheetAsCsv(file);
           const a = await api("/migrate/analyze", { csv: C.csv, file_name: file.name });
           C.analysis = a; C.map = { ...(a.map || {}) };
         } catch (e) { C.error = e.message; }
