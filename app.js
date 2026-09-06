@@ -59,8 +59,30 @@ const dateShort = (iso) => iso ? new Date(iso.length === 10 ? iso + "T12:00:00" 
 
 async function token() { const { data } = await supa.auth.getSession(); return data.session?.access_token ?? null; }
 
+// Which connector each data path needs. A shop that never connected
+// QuickBooks, Google or reviews used to fire every one of these on every
+// screen and collect a 409 each time (32 failed calls on first load — sim
+// bug 11). Once the connection list says a connector is absent, the call is
+// answered here with the same 409 the server would send, and no request goes
+// out. OAuth start/disconnect/status paths always go through.
+const CONNECTOR_PATHS = [
+  ["/quickbooks-data", "quickbooks", "QuickBooks is not connected"],
+  ["/quickbooks-invoice", "quickbooks", "QuickBooks is not connected"],
+  ["/google-calendar/", "google_calendar", "Google Calendar is not connected"],
+  ["/gmail/", "gmail", "Gmail is not connected"],
+  ["/google-business-profile/", "google_business_profile", "Business Profile is not connected"],
+];
+const CONNECTOR_PASSTHROUGH = /\/(start|callback|disconnect|status|oauth)/;
+function knownDisconnected(path) {
+  if (!S.connMap || CONNECTOR_PASSTHROUGH.test(path)) return null;
+  const hit = CONNECTOR_PATHS.find(([prefix]) => path.startsWith(prefix));
+  return hit && !S.connMap[hit[1]] ? hit[2] : null;
+}
+
 async function api(path, body, method = "POST") {
   const t = await token(); if (!t) throw new Error("Signed out");
+  const offline = knownDisconnected(path);
+  if (offline) { const err = new Error(offline); err.status = 409; err.data = { error: offline }; throw err; }
   const r = await fetch(FN + path, {
     method,
     headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" },
@@ -82,6 +104,20 @@ async function api(path, body, method = "POST") {
   return d;
 }
 const get = (path) => api(path, null, "GET");
+
+// Checkout is for a shop with no subscription. A shop that already has one
+// (trial with a card, active, past due) is refused with already_subscribed —
+// card changes go through the billing portal, never a second Checkout.
+async function startCheckout() {
+  try { return await startCheckout(); }
+  catch (e) {
+    if (e.status === 409 && e.data?.error === "already_subscribed" && e.data?.portal_available) {
+      toast("Your card is already on file — opening billing.");
+      return api("/stripe-billing/portal", {});
+    }
+    throw e;
+  }
+}
 
 function toast(text, kind) {
   const old = $("toast"); if (old) old.remove();
@@ -831,7 +867,9 @@ async function loadHomeSetup() {
   // or built-in books picked on purpose both count as done.
   const books = !!map.quickbooks || !!bs?.chosen;
   const cal = !!map.google_calendar;
-  const paid = bill && ["active", "past_due"].includes(bill.subscription_status);
+  // A card on file during the trial IS the card step done — offering "Add
+  // card" again opened a second Checkout (sim bug 1, double-billing risk).
+  const paid = !!bill && (["active", "past_due"].includes(bill.subscription_status) || !!bill.card_on_file);
   const shop = !!S.shop?.completed;
   if (shop && books && cal && paid) return;
   // Stalled = still not set up a day after signing up. Only then offer the
@@ -874,7 +912,7 @@ async function loadHomeSetup() {
   const card = slot.querySelector("#setupcard");
   if (card) card.onclick = async () => {
     card.disabled = true;
-    try { const c = await api("/stripe-billing/checkout", {}); location.href = c.url; }
+    try { const c = await startCheckout(); location.href = c.url; }
     catch (e) { card.disabled = false; toast(e.message, "err"); }
   };
 }
@@ -1138,7 +1176,14 @@ async function booksApi(body) { return api("/books", body); }
 // forecast. "—" when there is no prior period to compare against.
 // Built-in books store an issued invoice as "sent" (it is issued, not
 // necessarily emailed). Owners read SENT as "emailed" — show OPEN instead.
-function nativeStatusLabel(status) { return status === "sent" ? "open" : (status || ""); }
+// One word for both the list and the detail sheet: a created invoice is OPEN
+// until an email or text has actually gone out, then SENT (sim bug 5).
+function nativeStatusLabel(doc) {
+  const status = typeof doc === "string" ? doc : (doc?.status || "");
+  if (status !== "sent") return status;
+  const went = typeof doc === "object" && doc && (doc.sent_at || doc.email_sent_at || doc.sms_sent_at);
+  return went ? "sent" : "open";
+}
 
 function salesIntelNative(invoices) {
   const now = new Date();
@@ -1228,8 +1273,8 @@ async function loadNativeInvoices() {
   slot.innerHTML = `
     ${salesIntelNative(invoices)}
     <div class="fintiles">
-      <div class="fintile"><small>THIS MONTH</small><b>${money(thisMonth)}</b></div>
-      <div class="fintile"><small>YEAR TO DATE</small><b>${money(ytd)}</b></div>
+      <div class="fintile"><small>COLLECTED THIS MONTH</small><b>${money(thisMonth)}</b></div>
+      <div class="fintile"><small>COLLECTED THIS YEAR</small><b>${money(ytd)}</b></div>
       <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#36;</span><small>OUTSTANDING</small><b>${money(summary.open_balance || 0)}</b></div>
       <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#128196;</span><span class="nextchip">Next ${esc(String(nextNum))}</span><small>OPEN INVOICES</small><b>${summary.open_invoices ?? 0}</b></div>
     </div>
@@ -1270,7 +1315,7 @@ async function loadNativeInvoices() {
         <div class="main"><div class="ttl">${esc(i.customer || "—")}</div>
           <div class="sub">${esc(i.number)} · ${esc(dateShort(i.issue_date))}</div></div>
         <div class="amt">${money(i.total)}
-          <small><span class="tag ${i.status === "paid" ? "paid" : i.status === "void" ? "" : "open"}">${esc(nativeStatusLabel(i.status))}</span></small></div>
+          <small><span class="tag ${i.status === "paid" ? "paid" : i.status === "void" ? "" : "open"}">${esc(nativeStatusLabel(i))}</span></small></div>
       </button>`).join("")}</div>`
       : `<div class="empty">${S.invoiceSearch ? "No matches." : "No invoices yet — create your first, or ask Ledger in chat."}</div>`}`;
   $("newinv").onclick = () => nativeComposerSheet();
@@ -1312,13 +1357,14 @@ async function nativeInvoiceSheet(id) {
   const paint = () => {
     body().innerHTML = `
       <div class="lanehead"><span class="eyebrow">${esc(inv.number)}</span>
-        <span class="tag ${inv.status === "paid" ? "paid" : "open"}">${esc(inv.status)}</span></div>
+        <span class="tag ${inv.status === "paid" ? "paid" : "open"}">${esc(nativeStatusLabel(inv))}</span></div>
       <p class="note">${esc(inv.customer?.name || "")}${inv.customer?.email ? " · " + esc(inv.customer.email) : ""}<br>
         Issued ${esc(inv.issue_date)}${inv.due_date ? " · Due " + esc(inv.due_date) : ""}</p>
       <table class="dtable"><tbody>
         ${(inv.lines || []).map((l) => `<tr><td>${esc(l.name)} × ${l.quantity}</td><td style="text-align:right">${money(l.amount)}</td></tr>`).join("")}
         <tr><td>Subtotal</td><td style="text-align:right">${money(inv.subtotal)}</td></tr>
-        ${Number(inv.tax_total) > 0 ? `<tr><td>${esc(inv.tax_name || "Tax")}</td><td style="text-align:right">${money(inv.tax_total)}</td></tr>` : ""}
+        ${(Array.isArray(inv.taxes) && inv.taxes.length ? inv.taxes : (Number(inv.tax_total) > 0 ? [{ name: inv.tax_name, total: inv.tax_total }] : []))
+          .filter((t) => Number(t.total) > 0).map((t) => `<tr><td>${esc(t.name || "Tax")}</td><td style="text-align:right">${money(t.total)}</td></tr>`).join("")}
         <tr><td><b>Total</b></td><td style="text-align:right"><b>${money(inv.total)}</b></td></tr>
         ${Number(inv.balance) > 0 && Number(inv.balance) < Number(inv.total)
           ? `<tr><td>Balance due</td><td style="text-align:right">${money(inv.balance)}</td></tr>` : ""}
@@ -1332,7 +1378,7 @@ async function nativeInvoiceSheet(id) {
       ${Number(inv.balance) > 0 ? `
         <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Record a payment</span></div>
         <div class="f" style="display:flex;gap:8px">
-          <input id="bamt" type="number" min="0.01" step="0.01" class="cmpinput" style="flex:1" value="${inv.balance}">
+          <input id="bamt" type="number" min="0.01" max="${inv.balance}" step="0.01" class="cmpinput" style="flex:1" value="${inv.balance}">
           <select id="bmethod" class="pillbtn"><option value="etransfer">E-transfer</option><option value="cash">Cash</option>
             <option value="cheque">Cheque</option><option value="other">Other</option></select>
         </div>
@@ -1371,6 +1417,8 @@ async function nativeInvoiceSheet(id) {
       pay.disabled = true;
       try {
         const amount = Number(wrap.querySelector("#bamt").value);
+        // The books refuse an over-payment too; catching it here saves a round trip.
+        if (amount > Number(inv.balance) + 0.005) throw new Error(`That is more than the ${money(inv.balance)} still owing. Record up to ${money(inv.balance)}.`);
         const r = await booksApi({ action: "payment-record", invoice_id: inv.id, amount, method: wrap.querySelector("#bmethod").value });
         inv = { ...inv, ...r.invoice, link };
         toast(r.invoice.status === "paid" ? "Invoice paid in full" : "Payment recorded");
@@ -1407,7 +1455,7 @@ async function nativeEstimateSheet(id) {
       <table class="dtable"><tbody>
         ${(est.lines || []).map((l) => `<tr><td>${esc(l.name)} × ${l.quantity}</td><td style="text-align:right">${money(l.amount)}</td></tr>`).join("")}
         <tr><td>Subtotal</td><td style="text-align:right">${money(est.subtotal)}</td></tr>
-        ${Number(est.tax_total) > 0 ? `<tr><td>${esc(est.tax_name || "Tax")}</td><td style="text-align:right">${money(est.tax_total)}</td></tr>` : ""}
+        ${(Array.isArray(est.taxes) && est.taxes.length ? est.taxes : (Number(est.tax_total) > 0 ? [{ name: est.tax_name, total: est.tax_total }] : [])).filter((t) => Number(t.total) > 0).map((t) => `<tr><td>${esc(t.name || "Tax")}</td><td style="text-align:right">${money(t.total)}</td></tr>`).join("")}
         <tr><td><b>Total</b></td><td style="text-align:right"><b>${money(est.total)}</b></td></tr>
       </tbody></table>
       ${est.converted_invoice_number ? `<p class="note ok">Converted to invoice ${esc(est.converted_invoice_number)}</p>` : ""}
@@ -1499,7 +1547,10 @@ async function nativeComposerSheet(kind) {
   // kind "estimate": EST numbering, VALID FOR instead of payment terms, and the
   // create posts nothing to the books — money moves only on convert-to-invoice.
   const isEst = kind === "estimate";
-  const C = { customer: null, customers: [], query: "", lines: [{ name: "", quantity: 1, rate: 0 }], memo: "", termsDays: 0, validDays: 14, newCust: false, busy: false, shortcuts: [] };
+  // clientRef is minted once per open form: the server treats a repeat of the
+  // same ref as the same document, so a nervous double-tap can never bill twice.
+  const C = { customer: null, customers: [], query: "", lines: [{ name: "", quantity: 1, rate: 0, taxable2: true }], memo: "", termsDays: 0, validDays: 14, newCust: false, busy: false, shortcuts: [],
+    tax: null, noWayToPay: false, clientRef: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`) };
   const wrap = sheet(`<h2>${isEst ? "New Estimate" : "New Invoice"}</h2><div id="bcmp"><div class="skel"></div></div>`);
   const body = () => wrap.querySelector("#bcmp");
   try {
@@ -1511,8 +1562,32 @@ async function nativeComposerSheet(kind) {
     C.customers = cust.customers || [];
     C.shortcuts = sc.shortcuts || [];
     C.termsDays = set?.default_terms_days ?? 0;
+    C.tax = set?.tax || null;
+    // No card payments and no typed instructions = the customer's page shows
+    // a bill with no way to pay it. Say so here, before the invoice goes out.
+    C.noWayToPay = !isEst && !!set && !set.stripe_connected && !String(set.payment_instructions || "").trim();
   } catch { C.customers = []; }
-  const subtotal = () => C.lines.reduce((t, l) => t + Math.round((Number(l.quantity) || 0) * (Number(l.rate) || 0) * 100) / 100, 0);
+  const lineAmt = (l) => Math.round((Number(l.quantity) || 0) * (Number(l.rate) || 0) * 100) / 100;
+  const subtotal = () => C.lines.reduce((t, l) => t + lineAmt(l), 0);
+  const hasTax2 = () => !!(C.tax && C.tax.second_name && Number(C.tax.second_rate) > 0);
+  const pct = (r) => { const p = Number(r) * 100; return p.toFixed(p % 1 === 0 ? 0 : (p * 100) % 1 === 0 ? 2 : 3) + "%"; };
+  // Same math as the server: tax 1 on every line, tax 2 only on lines that keep it.
+  const totals = () => {
+    const sub = subtotal();
+    const r1 = Number(C.tax?.rate || 0), r2 = hasTax2() ? Number(C.tax.second_rate) : 0;
+    const t1 = Math.round(sub * r1 * 100) / 100;
+    const t2 = Math.round(C.lines.filter((l) => l.taxable2 !== false).reduce((t, l) => t + lineAmt(l), 0) * r2 * 100) / 100;
+    return { sub, t1, t2, total: Math.round((sub + t1 + t2) * 100) / 100 };
+  };
+  const totalsHtml = () => {
+    const t = totals();
+    return `<div class="lanehead" style="margin-top:10px"><span class="eyebrow">Subtotal before tax</span><b>${money(t.sub)}</b></div>
+      ${C.tax && Number(C.tax.rate) > 0 ? `<div class="lanehead" style="margin-top:4px"><span class="eyebrow">${esc(C.tax.name || "Tax")} ${pct(C.tax.rate)}</span><b>${money(t.t1)}</b></div>` : ""}
+      ${hasTax2() ? `<div class="lanehead" style="margin-top:4px"><span class="eyebrow">${esc(C.tax.second_name)} ${pct(C.tax.second_rate)}</span><b>${money(t.t2)}</b></div>` : ""}
+      <div class="lanehead" style="margin-top:4px"><span class="eyebrow">Total</span><b>${money(t.total)}</b></div>
+      ${C.tax && !(Number(C.tax.rate) > 0) && !hasTax2() ? `<p class="note">No sales tax is being added — this ${isEst ? "estimate" : "invoice"} goes out at 0%. If you charge tax, set the rate in Books settings.</p>` : ""}`;
+  };
+  const paintTotals = () => { const el = wrap.querySelector("#btotals"); if (el) el.innerHTML = totalsHtml(); };
   const paint = () => {
     const hits = C.query
       ? C.customers.filter((c) => (`${c.first_name} ${c.last_name} ${c.company || ""} ${c.email || ""}`).toLowerCase().includes(C.query.toLowerCase())).slice(0, 8)
@@ -1543,8 +1618,10 @@ async function nativeComposerSheet(kind) {
           <button class="del" data-bdel="${i}">&#128465;</button></div>
         <div id="bsug${i}" class="scsug"></div>
         <div class="f"><label>Qty<input type="number" min="1" step="1" data-bqty="${i}" value="${l.quantity}"></label>
-          <label>Rate<input type="number" min="0" step="0.01" data-brate="${i}" value="${l.rate}"></label></div>
+          <label>Rate<input type="number" min="0" step="0.01" data-brate="${i}" value="${l.rate}"></label>
+          ${hasTax2() ? `<label style="flex-direction:row;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" data-btax2="${i}" ${l.taxable2 !== false ? "checked" : ""} style="width:auto;margin:0">${esc(C.tax.second_name)} applies</label>` : ""}</div>
       </div>`).join("") || `<p class="note">Add what's being billed — free-form, priced by you.${C.shortcuts.length ? " Type a shortcut code to fill a line instantly." : ""}</p>`}
+      ${hasTax2() && C.lines.length ? `<p class="note">${esc(C.tax.second_name)} usually applies to goods, not to most services — untick it on labour or service lines.</p>` : ""}
       <button class="pillbtn" id="baddline">+ Add line</button>
       ${isEst ? `
       <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Valid for</span></div>
@@ -1558,7 +1635,8 @@ async function nativeComposerSheet(kind) {
           `<button class="${C.termsDays === d ? "on" : ""}" data-bterm="${d}">${lbl}</button>`).join("")}
       </div>`}
       <input id="bmemo" class="cmpinput sm" placeholder="Note to customer (optional)" value="${esc(C.memo)}">
-      <div class="lanehead" style="margin-top:10px"><span class="eyebrow">Subtotal before tax</span><b>${money(subtotal())}</b></div>
+      <div id="btotals">${totalsHtml()}</div>
+      ${C.noWayToPay ? `<p class="note" style="color:#b45309"><b>Heads up:</b> customers have no way to pay this online yet — card payments aren't set up and there are no payment instructions. <button class="linkbtn" id="bpayhow" style="display:inline;padding:0">Add payment instructions</button></p>` : ""}
       <button class="cta" id="bcreate" ${C.busy || !C.customer || !C.lines.length ? "disabled" : ""}>
         <span><b>${C.busy ? "Creating…" : isEst ? "Create estimate" : "Create invoice"}</b>
           <span>${isEst ? "EST-numbered quote with a share page — posts nothing" : "Numbered + payment link, tax applied"}</span></span></button>
@@ -1609,25 +1687,36 @@ async function nativeComposerSheet(kind) {
       delete C.lines[i].code;
       paintSuggestions(i, e.currentTarget.value);
     }, body());
-    on("[data-bqty]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.bqty)].quantity = e.currentTarget.value; }, body());
-    on("[data-brate]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.brate)].rate = e.currentTarget.value; }, body());
+    // Totals repaint in place as the numbers are typed — no full repaint, so
+    // the field keeps focus and the subtotal is never a line behind.
+    on("[data-bqty]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.bqty)].quantity = e.currentTarget.value; paintTotals(); }, body());
+    on("[data-brate]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.brate)].rate = e.currentTarget.value; paintTotals(); }, body());
+    on("[data-btax2]", "change", (e) => { C.lines[Number(e.currentTarget.dataset.btax2)].taxable2 = e.currentTarget.checked; paintTotals(); }, body());
     on("[data-bterm]", "click", (e) => { C.termsDays = Number(e.currentTarget.dataset.bterm); paint(); }, body());
     on("[data-bvalid]", "click", (e) => { C.validDays = Number(e.currentTarget.dataset.bvalid); paint(); }, body());
     wrap.querySelector("#bmemo").oninput = (e) => { C.memo = e.target.value; };
+    const payhow = wrap.querySelector("#bpayhow");
+    if (payhow) payhow.onclick = () => { closeSheet(); booksSettingsSheet(); };
     const create = wrap.querySelector("#bcreate");
-    if (create) create.onclick = async (e, force) => {
+    if (create) create.onclick = async (e, force, allowZero) => {
+      if (C.busy) return;
+      const kept = C.lines.filter((l) => l.name.trim());
+      // A $0 document is almost always a rate left blank. Ask once.
+      if (!allowZero && kept.length && subtotal() <= 0) {
+        if (!confirm(`This ${isEst ? "estimate" : "invoice"} is for $0.00. Create it anyway?`)) return;
+        allowZero = true;
+      }
       C.busy = true; paint();
       try {
-        const kept = C.lines.filter((l) => l.name.trim());
-        const mappedLines = kept.map((l) => ({ name: l.name.trim(), description: l.description || undefined, quantity: Number(l.quantity) || 1, rate: Number(l.rate) || 0 }));
+        const mappedLines = kept.map((l) => ({ name: l.name.trim(), description: l.description || undefined, quantity: Number(l.quantity) || 1, rate: Number(l.rate) || 0, taxable2: l.taxable2 !== false }));
         let r, docId, docNumber;
         if (isEst) {
           r = await booksApi({ action: "estimate-create", customer_id: C.customer.id, lines: mappedLines,
-            memo: C.memo, ...(C.validDays > 0 ? { valid_for_days: C.validDays } : {}) });
+            memo: C.memo, client_ref: C.clientRef, allow_zero: allowZero === true, ...(C.validDays > 0 ? { valid_for_days: C.validDays } : {}) });
           docId = r.estimate.id; docNumber = r.estimate.number;
         } else {
           r = await booksApi({ action: "invoice-create", customer_id: C.customer.id, lines: mappedLines,
-            memo: C.memo, terms_days: C.termsDays,
+            memo: C.memo, terms_days: C.termsDays, client_ref: C.clientRef, allow_zero: allowZero === true,
             shortcut_codes: kept.map((l) => l.code).filter(Boolean), force: force === true });
           docId = r.invoice.id; docNumber = r.invoice.number;
         }
@@ -1643,7 +1732,9 @@ async function nativeComposerSheet(kind) {
       } catch (err) {
         C.busy = false; paint();
         if (err.status === 409 && err.data?.duplicate_of) {
-          if (confirm(err.message + "\n\nCreate anyway?")) return create.onclick(null, true);
+          if (confirm(err.message + "\n\nCreate anyway?")) return create.onclick(null, true, allowZero);
+        } else if (err.status === 409 && err.data?.zero_total) {
+          if (confirm(`This ${isEst ? "estimate" : "invoice"} is for $0.00. Create it anyway?`)) return create.onclick(null, force, true);
         } else wrap.querySelector("#bcerr").textContent = err.message;
       }
     };
@@ -1743,7 +1834,10 @@ async function booksSettingsSheet() {
     <div id="sclist"></div>
     <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Tax &amp; numbering</span></div>
     <label class="emailrow">Tax name<input id="stax" class="cmpinput" value="${esc(s.tax.name)}"></label>
-    <label class="emailrow">Tax rate %<input id="srate" type="number" min="0" max="100" step="0.01" class="cmpinput" value="${(Number(s.tax.rate) * 100).toFixed(2)}"></label>
+    <label class="emailrow">Tax rate %<input id="srate" type="number" min="0" max="100" step="0.001" class="cmpinput" value="${(Number(s.tax.rate) * 100).toFixed(3).replace(/\.?0+$/, "")}"></label>
+    <label class="emailrow">Second tax name (PST / RST / QST — leave blank if none)<input id="stax2" class="cmpinput" value="${esc(s.tax.second_name || "")}" placeholder="e.g. PST"></label>
+    <label class="emailrow">Second tax rate %<input id="srate2" type="number" min="0" max="100" step="0.001" class="cmpinput" value="${(Number(s.tax.second_rate || 0) * 100).toFixed(3).replace(/\.?0+$/, "")}"></label>
+    <p class="note">${s.tax.second_name ? "Both taxes print as separate lines. The second tax can be switched off per line when you write an invoice — most services are exempt from it." : Number(s.tax.rate) > 0 ? "" : "Tax is 0% — nothing is added to your invoices. Set the rate your area requires, or leave it at 0 if you don't charge sales tax."}</p>
     <label class="emailrow">Tax registration # (shown on invoices)<input id="sreg" class="cmpinput" value="${esc(s.tax.registration_number || "")}"></label>
     <label class="emailrow">Invoice prefix<input id="spre" class="cmpinput" value="${esc(s.numbering.prefix)}"></label>
     <p class="note">Next invoice: ${esc(s.numbering.prefix)}${s.numbering.next_number}</p>
@@ -1777,6 +1871,8 @@ async function booksSettingsSheet() {
     try {
       await booksApi({ action: "settings-save",
         tax_name: wrap.querySelector("#stax").value, tax_rate: Number(wrap.querySelector("#srate").value) / 100,
+        second_name: wrap.querySelector("#stax2").value.trim(),
+        second_rate: wrap.querySelector("#stax2").value.trim() ? Number(wrap.querySelector("#srate2").value) / 100 : 0,
         registration_number: wrap.querySelector("#sreg").value, prefix: wrap.querySelector("#spre").value,
         payment_instructions: wrap.querySelector("#spay").value,
         accent_color: wrap.querySelector("#saccent").value,
@@ -5385,7 +5481,7 @@ function wireRequestNumber(pending, locked) {
   if (locked) {
     const sub = $("rnsubscribe");
     if (sub) sub.onclick = async () => {
-      try { const c = await api("/stripe-billing/checkout", {}); location.href = c.url; }
+      try { const c = await startCheckout(); location.href = c.url; }
       catch (err) { const note = $("rnnote"); note.className = "note err"; note.textContent = err.message; }
     };
     return;
@@ -5849,12 +5945,15 @@ function nativeCustomerSheet(existing) {
       if (!first && !last && !company) { sh.querySelector("#ncErr").textContent = "A name or company is required"; return; }
       e.currentTarget.disabled = true;
       try {
-        await booksApi({ action: "customer-save", customer: {
+        const r = await booksApi({ action: "customer-save", customer: {
           ...(existing ? { id: existing.id } : {}),
           first_name: first, last_name: last, company, email: v("ncEmail"), phone: v("ncPhone"),
         } });
         closeSheet();
-        toast(existing ? "Customer updated" : "Customer added");
+        // The books match a new entry to an existing customer by email/phone —
+        // say so, instead of "added" for a customer that was already there.
+        const who = r?.customer ? `${r.customer.first_name || ""} ${r.customer.last_name || ""}`.trim() || r.customer.company : "";
+        toast(existing ? "Customer updated" : r?.customer?.matched_existing ? `Already on file as ${who} — no duplicate made` : "Customer added");
         loadDirectory();
       } catch (err) { e.currentTarget.disabled = false; sh.querySelector("#ncErr").textContent = err.message; }
     };
@@ -6555,7 +6654,7 @@ function renderAccessBanner(s) {
   a.textContent = ""; a.style.background = ""; a.style.color = ""; a.style.display = "none";
   const link = (label, path) => {
     const b = document.createElement("u"); b.style.cursor = "pointer"; b.textContent = label;
-    b.onclick = async () => { try { const c = await api(path, {}); location.href = c.url; } catch (e) { toast(e.message, "err"); } };
+    b.onclick = async () => { try { const c = path === "/stripe-billing/checkout" ? await startCheckout() : await api(path, {}); location.href = c.url; } catch (e) { toast(e.message, "err"); } };
     a.appendChild(b);
   };
   const access = s.access || "full";
@@ -6805,6 +6904,7 @@ async function connectionStates() {
     const rows = await r.json();
     const map = {};
     if (Array.isArray(rows)) rows.forEach((row) => { if (!map[row.connector]) map[row.connector] = row; });
+    if (Array.isArray(rows)) S.connMap = map;
     return map;
   } catch { return {}; }
 }
@@ -7374,8 +7474,8 @@ function lockView(seed) {
       // A shop that already has a Stripe customer resumes in the portal; a
       // trial that never added a card goes to checkout.
       const st = await api("/stripe-billing/status", {}).catch(() => ({}));
-      const path = expiredTrial || !st.portal_available ? "/stripe-billing/checkout" : "/stripe-billing/portal";
-      const c = await api(path, {}); location.href = c.url;
+      const c = expiredTrial || !st.portal_available ? await startCheckout() : await api("/stripe-billing/portal", {});
+      location.href = c.url;
     } catch (err) { toast(err.message, "err"); e.currentTarget.disabled = false; }
   };
   $("lk-export").onclick = async (e) => {
@@ -7557,15 +7657,28 @@ const ONBOARD_QUESTIONS = [
   { id: "obq4", q: "What are your hours and service area?", ph: "e.g. Mon-Sat 9-6, Calgary and area", fact: "Hours and service area", cat: "operations" },
 ];
 
-function onboardInterview(bizName) {
+// Shown once, but never lost: the open interview is pinned in localStorage
+// with every keystroke, so closing the tab or losing signal on this screen
+// brings the customer back to it — answers intact — on the next open (sim bug 16).
+const OB_KEY = "ledger.onboard.pending";
+function onboardPending() { try { return JSON.parse(localStorage.getItem(OB_KEY) || "null"); } catch { return null; } }
+function onboardInterview(bizName, restored) {
+  const pending = restored || onboardPending() || {};
+  try { localStorage.setItem(OB_KEY, JSON.stringify({ ...pending, bizName, email: S.email || pending.email || "" })); } catch {}
   root.innerHTML = `<div class="login" style="max-width:440px"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>Tell Ledger about ${esc(bizName)}</h2>
     <p>Answer what you like, skip what you don't — Ledger remembers all of it and starts day one already knowing your business.</p>
     ${ONBOARD_QUESTIONS.map((o) => `<label class="fld" style="text-align:left;display:block;margin-top:12px">${esc(o.q).toUpperCase()}</label>
-      <input id="${o.id}" placeholder="${esc(o.ph)}" maxlength="400">`).join("")}
+      <input id="${o.id}" placeholder="${esc(o.ph)}" maxlength="400" value="${esc(pending[o.id] || "")}">`).join("")}
     <button class="btn" id="obgo" style="margin-top:18px">Finish setup →</button>
     <button class="btn ghost" id="obskip" style="margin-top:8px">Skip for now</button></div>`;
+  ONBOARD_QUESTIONS.forEach((o) => { $(o.id).oninput = () => {
+    const cur = onboardPending() || { bizName };
+    cur[o.id] = $(o.id).value;
+    try { localStorage.setItem(OB_KEY, JSON.stringify(cur)); } catch {}
+  }; });
   const finish = async (save) => {
     const btn = $("obgo"); btn.disabled = true; btn.textContent = "Saving…";
+    try { localStorage.removeItem(OB_KEY); } catch {}
     let saved = 0;
     if (save) {
       for (const o of ONBOARD_QUESTIONS) {
@@ -7645,7 +7758,12 @@ async function boot() {
     if (b.needs_setup) { setupView(); return; }
     // Hard lock (2026-09-05): a lapsed subscription never sees the app shell.
     if (accessLocked(b)) { lockView({ name: b.name, subscription_status: b.subscription_status, trial_ends_at: b.trial_ends_at }); return; }
-    await loadProfile(b);
+    // Know what is connected before the first screen paints, so a built-in
+    // books shop never fires QuickBooks/Google requests it can't answer.
+    await Promise.all([loadProfile(b), connectionStates()]);
+    // An interview that was open when the app closed comes straight back.
+    const ob = onboardPending();
+    if (ob && (!ob.email || ob.email === S.email)) { onboardInterview(ob.bizName || b.name || "", ob); return; }
     appView();
   } catch { appView(); }
   // app.html#vin opens the scanner straight away (Home Screen shortcut / QR on the shop wall).

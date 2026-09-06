@@ -80,7 +80,10 @@ function render(data, justPaid){
     rs.setProperty("--accent-text", (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#14181d" : "#ffffff");
     rs.setProperty("--accent-soft", `rgba(${r},${g},${b},.18)`);
   }
-  const contact = [biz.address, biz.phone].filter(Boolean).join(" · ");
+  const contact = [biz.address, biz.phone, biz.tax_registration ? `GST/HST # ${biz.tax_registration}` : ""].filter(Boolean).join(" · ");
+  const taxRows = (Array.isArray(inv.taxes) && inv.taxes.length ? inv.taxes : (inv.tax_total > 0 ? [{ name: inv.tax_name, rate: inv.tax_rate, total: inv.tax_total }] : []))
+    .filter((t) => t.total > 0)
+    .map((t) => { const pct = t.rate * 100; return `<tr><td>${esc(t.name || "Tax")} (${pct.toFixed(pct % 1 ? ((pct * 100) % 1 ? 3 : 2) : 0)}%)</td><td class="num">${cur(t.total, c)}</td></tr>`; }).join("");
   const chip = inv.status === "paid" ? ["paid","PAID"] : inv.status === "partial" ? ["partial","PARTIALLY PAID"] : inv.status === "void" ? ["due","VOID"] : ["due","DUE"];
   card.innerHTML = `
     <div class="biz">${biz.logo_url ? `<img src="${esc(biz.logo_url)}" alt="">` : ""}<div><div class="name">${esc(biz.name)}</div>${contact ? `<div class="bizmeta">${esc(contact)}</div>` : ""}</div></div>
@@ -91,7 +94,7 @@ function render(data, justPaid){
     </tbody></table>
     <table class="totals"><tbody>
       <tr><td>Subtotal</td><td class="num">${cur(inv.subtotal, c)}</td></tr>
-      ${inv.tax_total > 0 ? `<tr><td>${esc(inv.tax_name || "Tax")} (${(inv.tax_rate*100).toFixed(inv.tax_rate*100 % 1 ? 2 : 0)}%)</td><td class="num">${cur(inv.tax_total, c)}</td></tr>` : ""}
+      ${taxRows}
       <tr class="grand"><td>Total</td><td class="num">${cur(inv.total, c)}</td></tr>
       ${inv.balance > 0 && inv.balance < inv.total ? `<tr><td class="balance">Balance due</td><td class="num balance">${cur(inv.balance, c)}</td></tr>` : ""}
     </tbody></table>
@@ -100,6 +103,7 @@ function render(data, justPaid){
     ${justPaid ? `<div class="paidbanner">✓ Payment received — thank you!</div>` : ""}
     ${!justPaid && inv.balance > 0 && data.can_pay ? `<button class="paybtn" id="pay">Pay ${cur(inv.balance, c)}</button>` : ""}
     ${!justPaid && inv.balance > 0 && !data.can_pay && data.payment_instructions ? `<div class="instructions"><b>How to pay</b>\n${esc(data.payment_instructions)}</div>` : ""}
+    ${!justPaid && inv.balance > 0 && !data.can_pay && !data.payment_instructions ? `<div class="instructions"><b>How to pay</b>\nContact ${esc(biz.name || "the business")}${biz.phone ? ` at ${esc(biz.phone)}` : ""} to arrange payment.</div>` : ""}
     ${biz.footer_note ? `<div class="footnote">${esc(biz.footer_note)}</div>` : ""}
   `;
   const btn = document.getElementById("pay");

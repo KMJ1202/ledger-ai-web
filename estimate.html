@@ -85,6 +85,9 @@ function render(data, justResponded){
     rs.setProperty("--accent-soft", `rgba(${r},${g},${b},.18)`);
   }
   const contact = [biz.address, biz.phone].filter(Boolean).join(" · ");
+  const taxRows = (Array.isArray(est.taxes) && est.taxes.length ? est.taxes : (est.tax_total > 0 ? [{ name: est.tax_name, rate: est.tax_rate, total: est.tax_total }] : []))
+    .filter((t) => t.total > 0)
+    .map((t) => { const pct = t.rate * 100; return `<tr><td>${esc(t.name || "Tax")} (${pct.toFixed(pct % 1 ? ((pct * 100) % 1 ? 3 : 2) : 0)}%)</td><td class="num">${cur(t.total, c)}</td></tr>`; }).join("");
   const chips = {open:["open","AWAITING YOUR RESPONSE"], accepted:["accepted","ACCEPTED"], declined:["declined","DECLINED"], converted:["converted","INVOICED"], expired:["expired","EXPIRED"]};
   const chip = chips[est.status] || ["expired", est.status.toUpperCase()];
   card.innerHTML = `
@@ -96,7 +99,7 @@ function render(data, justResponded){
     </tbody></table>
     <table class="totals"><tbody>
       <tr><td>Subtotal</td><td class="num">${cur(est.subtotal, c)}</td></tr>
-      ${est.tax_total > 0 ? `<tr><td>${esc(est.tax_name || "Tax")} (${(est.tax_rate*100).toFixed(est.tax_rate*100 % 1 ? 2 : 0)}%)</td><td class="num">${cur(est.tax_total, c)}</td></tr>` : ""}
+      ${taxRows}
       <tr class="grand"><td>Total</td><td class="num">${cur(est.total, c)}</td></tr>
     </tbody></table>
     ${est.memo ? `<div class="memo">${esc(est.memo)}</div>` : ""}
