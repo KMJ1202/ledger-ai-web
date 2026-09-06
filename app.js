@@ -286,8 +286,8 @@ function appView() {
       }
       if ($("chat").childElementCount !== 1) return;
       sys(S.booksProvider === "native"
-        ? "Your built-in books are on. Use QuickBooks? Tap Connect QuickBooks on the Home tab and I'll work from your real numbers."
-        : "Nothing's connected yet — tap Connect QuickBooks on the Home tab to bring your books in.");
+        ? "Your built-in books are on. Already use QuickBooks? Choose it on the Home tab and I'll work from your real numbers."
+        : "Nothing's connected yet — choose your books on the Home tab to bring them in.");
     });
   }
   renderTab();
@@ -369,8 +369,37 @@ function connectPanel(kind) {
 function wireConnect(scope) {
   on("[data-connect]", "click", async (e) => {
     const b = e.currentTarget; b.disabled = true;
-    try { const d = await api(b.dataset.connect + (b.dataset.connect.startsWith("/g") ? "?web=1" : ""), {}); location.href = d.authorization_url; }
-    catch (err) { b.disabled = false; toast(err.message, "err"); }
+    const path = b.dataset.connect;
+    const launch = async (extra) => { const d = await api(path + extra, {}); location.href = d.authorization_url; };
+    try { await launch(path.startsWith("/g") ? "?web=1" : ""); }
+    catch (err) {
+      // One set of books (2026-09-05): built-in invoices go out of sight while
+      // QuickBooks is on. Nothing is deleted — say so, then let the owner decide.
+      if (err.status === 409 && err.data?.code === "native_documents_exist") {
+        if (confirm(err.message + "\n\nConnect QuickBooks anyway?")) {
+          try { await launch("?acknowledge=native_hidden"); return; } catch (e2) { toast(e2.message, "err"); }
+        }
+        b.disabled = false; return;
+      }
+      b.disabled = false; toast(err.message, "err");
+    }
+  }, scope);
+}
+
+// Disconnect QuickBooks (2026-09-05): tokens are revoked at Intuit and
+// forgotten here; the workspace goes back to built-in books. QuickBooks itself
+// keeps every invoice. A reload afterwards because every screen caches the
+// provider for the session.
+function wireDisconnectQuickBooks(scope) {
+  on("[data-qbo-disconnect]", "click", async (e) => {
+    const b = e.currentTarget;
+    if (!confirm("Disconnect QuickBooks?\n\nLedger stops reading and writing your QuickBooks company and switches to built-in books. Your QuickBooks data stays in QuickBooks — nothing is deleted. You can reconnect any time.")) return;
+    b.disabled = true;
+    try {
+      await api("/quickbooks-oauth/disconnect", {});
+      toast("QuickBooks disconnected — you're on built-in books");
+      setTimeout(() => location.reload(), 900);
+    } catch (err) { b.disabled = false; toast(err.message, "err"); }
   }, scope);
 }
 
@@ -717,10 +746,17 @@ const SETUP_HIDE_KEY = "ledger.setupHidden";
 async function loadHomeSetup() {
   const slot = $("homesetup"); if (!slot) return;
   if (localStorage.getItem(SETUP_HIDE_KEY) === "1") return;
-  let map = {}, bill = null;
-  try { [map, bill] = await Promise.all([connectionStates(), api("/stripe-billing/status", {}).catch(() => null)]); } catch {}
+  let map = {}, bill = null, bs = null;
+  try {
+    [map, bill, bs] = await Promise.all([
+      connectionStates(), api("/stripe-billing/status", {}).catch(() => null),
+      booksApi({ action: "settings" }).catch(() => null),
+    ]);
+  } catch {}
   if (!$("homesetup")) return;
-  const books = !!map.quickbooks;
+  // Step 1 is a CHOICE, not a QuickBooks nag (2026-09-05): QuickBooks connected
+  // or built-in books picked on purpose both count as done.
+  const books = !!map.quickbooks || !!bs?.chosen;
   const cal = !!map.google_calendar;
   const paid = bill && ["active", "past_due"].includes(bill.subscription_status);
   if (books && cal && paid) return;
@@ -732,15 +768,24 @@ async function loadHomeSetup() {
     ? `Free until ${dateShort(bill.trial_ends_at)} — add a card so nothing stops on day 15.` : "Keep Ledger running after your trial.";
   slot.innerHTML = `<div class="setupcard">
     <div class="lanehead" style="margin-top:0"><span class="eyebrow">&#9889; Get set up</span><button class="pill" id="setuphide" title="Hide">Hide</button></div>
-    ${step(books, 1, "Connect QuickBooks", books ? "" : "Bring your invoices, customers and numbers in. Every post is confirmed by you first.",
-      `<button class="btn primary" data-connect="/quickbooks-oauth/start">Connect</button>`)}
+    ${step(books, 1, "Choose your books", books ? "" : "Already use QuickBooks? Connect it and Ledger works from your real numbers. Otherwise Ledger's built-in books do invoices, estimates and payment links today.",
+      `<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn primary" data-connect="/quickbooks-oauth/start">QuickBooks</button><button class="btn ghost" id="setupnative">Built-in books</button></span>`)}
     ${step(cal, 2, "Connect Google Calendar", "See your week and let Ledger book jobs — every booking still needs your tap.",
       `<button class="btn ghost" data-connect="/google-calendar/start">Connect</button>`)}
     ${step(paid, 3, "Add a card", trialLine,
       bill?.billing_ready ? `<button class="btn ghost" id="setupcard">Add card</button>` : "")}
-    ${books ? "" : `<p class="note" style="margin:8px 0 0">Don't use QuickBooks? Ledger's built-in books are already on — invoices, estimates and payment links work today.</p>`}
   </div>`;
   wireConnect(slot);
+  const native = slot.querySelector("#setupnative");
+  if (native) native.onclick = async () => {
+    native.disabled = true;
+    try {
+      await booksApi({ action: "provider-choose", provider: "native" });
+      S.booksProvider = "native";
+      toast("Built-in books it is — invoices and estimates are ready in Finance");
+      loadHomeSetup();
+    } catch (e) { native.disabled = false; toast(e.message, "err"); }
+  };
   const hide = slot.querySelector("#setuphide");
   if (hide) hide.onclick = () => { localStorage.setItem(SETUP_HIDE_KEY, "1"); slot.innerHTML = ""; };
   const card = slot.querySelector("#setupcard");
@@ -6931,11 +6976,14 @@ async function businessSheet() {
       slot.innerHTML = CONNECTORS.map((c) => {
         const row = map[c.key];
         const live = !!row;
+        const disconnect = live && c.key === "quickbooks"
+          ? `<button class="btn ghost" data-qbo-disconnect="1" style="padding:6px 11px;font-size:12px;color:var(--red)">Disconnect</button>` : "";
         return `<div class="kv"><span>${esc(c.name)}<br><small style="color:var(--dim)">${esc(row?.display_name || c.detail)}</small></span>
-          <span><button class="btn ghost" data-connect="${c.start}" style="padding:6px 11px;font-size:12px">
-            ${live ? `<span style="color:var(--emerald)">&#9679; Live</span> · Reconnect` : "Connect"}</button></span></div>`;
+          <span style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap"><button class="btn ghost" data-connect="${c.start}" style="padding:6px 11px;font-size:12px">
+            ${live ? `<span style="color:var(--emerald)">&#9679; Live</span> · Reconnect` : "Connect"}</button>${disconnect}</span></div>`;
       }).join("");
       wireConnect(slot);
+      wireDisconnectQuickBooks(slot);
     });
     renderCatalog(sh);
     // Online booking — public link customers use with no account; requests
