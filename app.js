@@ -2358,11 +2358,12 @@ function psMatchScreen(review, tally, after) {
 
   const waitBlock = waiting.length ? `
     <details class="sc-all ms-wait"><summary>Waiting for a sale <em>${waiting.length}</em></summary>
-      <p class="note" style="margin:4px 0 2px">Bought, not invoiced yet. Each one links itself the moment its sale shows up — or pick it now.</p>
+      <p class="note" style="margin:4px 0 2px">Bought, not invoiced yet. Each one links itself the moment its sale shows up — or pick it now. Sent it back instead? Mark it returned.</p>
       ${waiting.map((w) => `<div class="ms-row" data-mscard="${w.id}">
         <div class="top"><span>${esc(w.vendor)}${w.doc_number ? " · " + esc(w.doc_number) : ""}</span><span>${money(w.amount)}</span></div>
         <div class="to">since ${msDate(w.since || w.cost_date)}</div>
         <button class="linkbtn" data-mspick="${w.id}" data-rej="">Pick the invoice</button>
+        <button class="linkbtn" data-msreturned="${w.id}">&#8630; Returned to supplier</button>
         <div class="ms-pick" data-mspickbox="${w.id}" hidden></div>
       </div>`).join("")}
     </details>` : "";
