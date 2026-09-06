@@ -7069,6 +7069,8 @@ async function businessSheet() {
       ${native ? row("bzcard", "&#128179;", "Card payments", "Stripe setup — get paid online") : ""}
       ${row("bzphone", "&#128222;", "Phone & Front Desk", "Number, reminders, auto-replies")}
       ${row("bzshop", "&#127968;", "Your shop", shopSummary(S.shop))}
+      ${row("bzimport", "&#128229;", "Bring your data", "Customers and vehicles from Shopmonkey, Tekmetric, Jobber, Square or a spreadsheet")}
+      ${row("bzexport", "&#128228;", "Export your data", "Customers and vehicles to a spreadsheet — your data is yours")}
     </div>
     <div class="eyebrow" style="margin-top:20px">PROFILE</div>
     <label class="fld">BUSINESS NAME</label><input id="bn" value="${esc(b.name || "")}">
@@ -7140,6 +7142,8 @@ async function businessSheet() {
     };
     sh.querySelector("#bzphone").onclick = () => { closeSheet(); setTab("phone"); };
     sh.querySelector("#bzshop").onclick = () => shopProfileSheet(() => businessSheet());
+    sh.querySelector("#bzimport").onclick = () => bringDataSheet();
+    sh.querySelector("#bzexport").onclick = () => exportDataSheet();
     sh.querySelector("#bsupport").onclick = supportSheet;
     sh.querySelector("#bsupportchat").onclick = supportChatSheet;
     sh.querySelector("#blogo").onclick = () => sh.querySelector("#blogofile").click();
@@ -8278,3 +8282,135 @@ supa.auth.onAuthStateChange((event, s) => {
   if (event === "PASSWORD_RECOVERY") { newPasswordView(); return; }
   if (event === "SIGNED_IN" && s && !$("view") && !$("bizname") && !$("joincode") && !$("pw2")) boot();
 });
+
+
+// ---------------------------------------------------------------------------
+// Bring your data (Kyle 1202, 2026-09-06): customers + vehicles from another
+// platform's export. Three steps — drop the file, check the columns, import.
+// The server never writes during the check step; import is idempotent, so a
+// nervous second run adds nothing.
+const MIGRATE_FIELD_LABELS = {
+  first_name: "First name", last_name: "Last name", full_name: "Full name (one column)", company: "Company", email: "Email",
+  phone: "Phone", phone2: "Second phone", address: "Address", notes: "Notes", customer_source_id: "Customer ID",
+  vin: "VIN", year: "Year", make: "Make", model: "Model", trim: "Trim", plate: "Plate", odometer: "Odometer",
+  vehicle_source_id: "Vehicle ID", engine: "Engine", color: "Colour",
+};
+function downloadCsv(name, csv) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = name; a.click();
+}
+function bringDataSheet() {
+  const C = { file: null, csv: "", analysis: null, map: {}, busy: false, result: null, error: "" };
+  const paint = () => {
+    const box = document.querySelector("#mgbox"); if (!box) return;
+    if (C.result) {
+      const r = C.result;
+      box.innerHTML = `
+        <div class="cmpsect" style="text-align:center">
+          <div style="font-size:40px">&#10003;</div>
+          <h3 style="margin:6px 0">Imported</h3>
+          <p><b>${r.customers.created}</b> new customer${r.customers.created === 1 ? "" : "s"} · <b>${r.customers.matched}</b> already here${r.customers.updated ? ` (${r.customers.updated} filled in)` : ""}</p>
+          ${r.kind === "vehicles" ? `<p><b>${r.vehicles.created}</b> new vehicle${r.vehicles.created === 1 ? "" : "s"} · <b>${r.vehicles.matched}</b> already here</p>` : ""}
+          ${r.issue_count ? `<p class="note">${r.issue_count} row${r.issue_count === 1 ? "" : "s"} need a look. <a href="#" id="mgissues">Download the list</a></p>` : `<p class="note">Every row came in clean.</p>`}
+          ${r.skipped ? `<p class="note">${r.skipped} row${r.skipped === 1 ? "" : "s"} skipped (no name).</p>` : ""}
+        </div>
+        <button class="btn primary wide" id="mgdone">Done</button>
+        <button class="linkbtn" id="mgagain" style="margin-top:8px">Import another file</button>`;
+      box.querySelector("#mgdone").onclick = () => { closeSheet(); S.customers = null; if (typeof loadNativeCustomers === "function") loadNativeCustomers(); };
+      box.querySelector("#mgagain").onclick = () => { Object.assign(C, { file: null, csv: "", analysis: null, map: {}, result: null, error: "" }); paint(); };
+      const iss = box.querySelector("#mgissues");
+      if (iss) iss.onclick = (e) => { e.preventDefault(); downloadCsv("import-needs-a-look.csv", "Row,Issue\n" + r.issues.map((i) => `${i.line},"${i.issues.join("; ").replace(/"/g, '""')}"`).join("\n") + "\n"); };
+      return;
+    }
+    if (!C.analysis) {
+      box.innerHTML = `
+        <p class="sh-sub">Export your customers (and vehicles) from your old system as a CSV or spreadsheet, then drop the file here. Works with Shopmonkey, Tekmetric, Jobber, Housecall Pro, Square, Shop-Ware and plain Excel.</p>
+        <input type="file" id="mgfile" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden>
+        <button class="btn primary wide" id="mgpick" ${C.busy ? "disabled" : ""}>${C.busy ? "Reading…" : "Choose a file"}</button>
+        <p class="note" style="margin-top:10px">Need a starting point? <a href="#" id="mgtplc">Customer template</a> · <a href="#" id="mgtplv">Vehicle template</a></p>
+        ${C.error ? `<p class="note err">${esc(C.error)}</p>` : ""}`;
+      const input = box.querySelector("#mgfile");
+      box.querySelector("#mgpick").onclick = () => input.click();
+      input.onchange = async () => {
+        const file = input.files?.[0]; if (!file) return;
+        C.busy = true; C.error = ""; paint();
+        try {
+          C.file = file;
+          C.csv = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsText(file); });
+          const a = await api("/migrate/analyze", { csv: C.csv, file_name: file.name });
+          C.analysis = a; C.map = { ...(a.map || {}) };
+        } catch (e) { C.error = e.message; }
+        C.busy = false; paint();
+      };
+      box.querySelector("#mgtplc").onclick = async (e) => { e.preventDefault(); const t = await api("/migrate/template", { kind: "customers" }); downloadCsv("ledger-customers-template.csv", t.csv); };
+      box.querySelector("#mgtplv").onclick = async (e) => { e.preventDefault(); const t = await api("/migrate/template", { kind: "vehicles" }); downloadCsv("ledger-vehicles-template.csv", t.csv); };
+      return;
+    }
+    const a = C.analysis;
+    const fields = a.kind === "vehicles" ? [...a.fields.customers, ...a.fields.vehicles] : a.fields.customers;
+    const pick = (f) => `<label class="emailrow">${esc(MIGRATE_FIELD_LABELS[f] || f)}<select data-mgf="${f}" class="cmpinput">
+        <option value="">— not in this file —</option>
+        ${a.headers.filter(Boolean).map((h) => `<option value="${esc(h)}"${C.map[f] === h ? " selected" : ""}>${esc(h)}</option>`).join("")}</select></label>`;
+    const nameOk = C.map.first_name || C.map.last_name || C.map.full_name || C.map.company;
+    box.innerHTML = `
+      <div class="cmpsect">
+        <div class="lanehead"><span class="eyebrow">${esc(C.file?.name || "file")}</span><b>${a.row_count.toLocaleString()} row${a.row_count === 1 ? "" : "s"}</b></div>
+        <p>Found <b>${a.summary.customers}</b> customer${a.summary.customers === 1 ? "" : "s"}${a.kind === "vehicles" ? ` and <b>${a.summary.vehicles}</b> vehicle${a.summary.vehicles === 1 ? "" : "s"}` : ""}. ${a.summary.with_email} with an email, ${a.summary.with_phone} with a phone.${a.needs_review ? ` <b>${a.needs_review}</b> need a look after import.` : ""}</p>
+        ${a.truncated ? `<p class="note err">Only the first 20,000 rows will import — split the file for the rest.</p>` : ""}
+        ${nameOk ? "" : `<p class="note err">Pick which column holds the customer's name.</p>`}
+      </div>
+      <details ${nameOk ? "" : "open"}><summary class="eyebrow" style="cursor:pointer;margin:10px 0">Check the columns</summary>
+        <div class="cmpsect">${fields.map(pick).join("")}</div></details>
+      <div class="cmpsect"><div class="eyebrow">Preview</div>
+        ${(a.preview || []).map((p) => `<div class="note" style="margin-top:6px">${p.customer ? esc(`${p.customer.first_name} ${p.customer.last_name}`.trim() + (p.customer.company ? ` · ${p.customer.company}` : "") + (p.customer.email ? ` · ${p.customer.email}` : "") + (p.customer.phone ? ` · ${p.customer.phone}` : "")) : "<i>no customer</i>"}${p.vehicle ? esc(` — ${[p.vehicle.year, p.vehicle.make, p.vehicle.model].filter(Boolean).join(" ")}${p.vehicle.vin ? ` (${p.vehicle.vin})` : p.vehicle.plate ? ` (${p.vehicle.plate})` : ""}`) : ""}${p.issues.length ? ` <span style="color:var(--gold)">· ${esc(p.issues.join("; "))}</span>` : ""}</div>`).join("")}
+      </div>
+      <button class="btn primary wide" id="mggo" ${C.busy || !nameOk ? "disabled" : ""}>${C.busy ? "Importing…" : `Import ${a.summary.customers} customer${a.summary.customers === 1 ? "" : "s"}${a.kind === "vehicles" ? ` + ${a.summary.vehicles} vehicles` : ""}`}</button>
+      <button class="linkbtn" id="mgback" style="margin-top:8px">Choose a different file</button>
+      <p class="note" style="margin-top:8px">Already-known customers are matched by email, phone or name and never duplicated. Running the same file twice adds nothing.</p>
+      ${C.error ? `<p class="note err">${esc(C.error)}</p>` : ""}`;
+    box.querySelectorAll("[data-mgf]").forEach((sel) => sel.onchange = async () => {
+      C.map[sel.dataset.mgf] = sel.value;
+      C.busy = true; paint();
+      try { C.analysis = await api("/migrate/analyze", { csv: C.csv, file_name: C.file?.name, column_map: C.map, kind: a.kind }); C.map = { ...(C.analysis.map || {}) }; }
+      catch (e) { C.error = e.message; }
+      C.busy = false; paint();
+    });
+    box.querySelector("#mgback").onclick = () => { Object.assign(C, { file: null, csv: "", analysis: null, map: {}, error: "" }); paint(); };
+    box.querySelector("#mggo").onclick = async () => {
+      C.busy = true; C.error = ""; paint();
+      try { C.result = await api("/migrate/import", { csv: C.csv, file_name: C.file?.name, column_map: C.map, kind: a.kind, source: (C.file?.name || "import").replace(/\.[^.]+$/, "").slice(0, 40) }); toast("Import finished"); }
+      catch (e) { C.error = e.message; }
+      C.busy = false; paint();
+    };
+  };
+  sheet(`<h2>Bring your data</h2><div id="mgbox"></div>`, () => paint());
+}
+
+function exportDataSheet() {
+  sheet(`<h2>Export your data</h2>
+    <p class="sh-sub">Everything downloads as a spreadsheet you can open anywhere, in the same layout Ledger can import again.</p>
+    <div class="cmpsect">
+      <button class="btn primary wide" id="mgxc">Customers</button>
+      <button class="btn wide" id="mgxv" style="margin-top:8px">Vehicles (with their customers)</button>
+      <button class="btn wide" id="mgxi" style="margin-top:8px">Invoices &amp; payments</button>
+    </div>
+    <p class="note" id="mgxnote"></p>`, (sh) => {
+    const note = sh.querySelector("#mgxnote");
+    const run = async (kind, name) => {
+      note.textContent = "Preparing…";
+      try { const r = await api("/migrate/export", { kind }); downloadCsv(name, r.csv); note.textContent = `${r.count.toLocaleString()} ${kind} exported.`; }
+      catch (e) { note.textContent = e.message; }
+    };
+    sh.querySelector("#mgxc").onclick = () => run("customers", "ledger-customers.csv");
+    sh.querySelector("#mgxv").onclick = () => run("vehicles", "ledger-vehicles.csv");
+    sh.querySelector("#mgxi").onclick = async () => {
+      note.textContent = "Preparing…";
+      try {
+        const ex = await booksApi({ action: "export" });
+        downloadCsv("ledger-invoices.csv", ex.invoices_csv || ""); downloadCsv("ledger-invoice-lines.csv", ex.lines_csv || ""); downloadCsv("ledger-payments.csv", ex.payments_csv || "");
+        note.textContent = "Invoices, invoice lines and payments exported as three files.";
+      }
+      catch (e) { note.textContent = e.message; }
+    };
+  });
+}
