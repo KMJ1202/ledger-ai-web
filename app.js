@@ -8310,6 +8310,8 @@ async function readSpreadsheetAsCsv(file) {
   if (!first) throw new Error("That Excel file has no sheets in it.");
   return XLSX.utils.sheet_to_csv(wb.Sheets[first], { blankrows: false });
 }
+// The address lives in notes as "Address: …" — show it in the preview so a plumber can see their service addresses came through.
+const previewAddress = (c) => ((c?.notes || "").split("\n").find((l) => l.startsWith("Address: ")) || "").slice(9, 80);
 function downloadCsv(name, csv) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = name; a.click();
@@ -8377,7 +8379,7 @@ function bringDataSheet() {
       <details ${nameOk ? "" : "open"}><summary class="eyebrow" style="cursor:pointer;margin:10px 0">Check the columns</summary>
         <div class="cmpsect">${fields.map(pick).join("")}</div></details>
       <div class="cmpsect"><div class="eyebrow">Preview</div>
-        ${(a.preview || []).map((p) => `<div class="note" style="margin-top:6px">${p.customer ? esc(`${p.customer.first_name} ${p.customer.last_name}`.trim() + (p.customer.company ? ` · ${p.customer.company}` : "") + (p.customer.email ? ` · ${p.customer.email}` : "") + (p.customer.phone ? ` · ${p.customer.phone}` : "")) : "<i>no customer</i>"}${p.vehicle ? esc(` — ${[p.vehicle.year, p.vehicle.make, p.vehicle.model].filter(Boolean).join(" ")}${p.vehicle.vin ? ` (${p.vehicle.vin})` : p.vehicle.plate ? ` (${p.vehicle.plate})` : ""}`) : ""}${p.issues.length ? ` <span style="color:var(--gold)">· ${esc(p.issues.join("; "))}</span>` : ""}</div>`).join("")}
+        ${(a.preview || []).map((p) => `<div class="note" style="margin-top:6px">${p.customer ? esc(`${p.customer.first_name} ${p.customer.last_name}`.trim() + (p.customer.company ? ` · ${p.customer.company}` : "") + (p.customer.email ? ` · ${p.customer.email}` : "") + (p.customer.phone ? ` · ${p.customer.phone}` : "") + (previewAddress(p.customer) ? ` · ${previewAddress(p.customer)}` : "")) : "<i>no customer</i>"}${p.vehicle ? esc(` — ${[p.vehicle.year, p.vehicle.make, p.vehicle.model].filter(Boolean).join(" ")}${p.vehicle.vin ? ` (${p.vehicle.vin})` : p.vehicle.plate ? ` (${p.vehicle.plate})` : ""}`) : ""}${p.issues.length ? ` <span style="color:var(--gold)">· ${esc(p.issues.join("; "))}</span>` : ""}</div>`).join("")}
       </div>
       <button class="btn primary wide" id="mggo" ${C.busy || !nameOk ? "disabled" : ""}>${C.busy ? "Importing…" : `Import ${a.summary.customers} customer${a.summary.customers === 1 ? "" : "s"}${a.kind === "vehicles" ? ` + ${a.summary.vehicles} vehicles` : ""}`}</button>
       <button class="linkbtn" id="mgback" style="margin-top:8px">Choose a different file</button>
