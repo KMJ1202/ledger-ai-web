@@ -92,7 +92,7 @@ footer a{color:var(--dim)}
 
   <main>
     <h1>Privacy Policy</h1>
-    <div class="meta">Effective September 3, 2026 &middot; Ledger AI, Calgary, Alberta, Canada</div>
+    <div class="meta">Effective September 6, 2026 &middot; Ledger AI, Calgary, Alberta, Canada</div>
 
     <div class="card">
       <p>Ledger AI is a business copilot: it connects to the tools you already run your business on and answers questions about your own data. This page explains, plainly, what we collect, why, where it lives, who else touches it, and how to get rid of it.</p>
@@ -100,7 +100,7 @@ footer a{color:var(--dim)}
 
     <div class="card">
       <h2>What we collect, and why</h2>
-      <p>We only collect what's needed to run the features you turn on. Every connection below requires your explicit OAuth consent — nothing connects itself.</p>
+      <p>We only collect what's needed to run the features you turn on. Every connection below requires your explicit consent — nothing connects itself.</p>
       <ul>
         <li><b>Account &amp; billing</b> — your name, email, and subscription status, so you can sign in and we know your plan is active. Card details are handled entirely by Stripe; they never reach our servers.</li>
         <li><b>QuickBooks Online</b> — invoices, customers, and sales/P&amp;L data, so the assistant can answer questions about your books and, when you ask it to, draft invoices or expenses. Nothing posts to QuickBooks without your confirmation.</li>
@@ -109,13 +109,20 @@ footer a{color:var(--dim)}
         <li><b>Google Business Profile</b> — your business reviews, so the assistant can surface and help you respond to them.</li>
         <li><b>Receipt photos</b> — images you snap of paper receipts, stored privately and accessed only through signed, time-limited URLs.</li>
         <li><b>Conversations with the assistant</b> — what you type or say, plus the business data needed to answer it, so the assistant can hold a conversation and remember context within a session.</li>
-        <li><b>Usage metering</b> — token counts and cost per request, so we can enforce your plan's monthly AI allowance.</li>
+        <li><b>Your customers and crew</b> — the names, phone numbers, emails, addresses, vehicles, invoices, appointments, hours worked and clock-in times you enter or that arrive through your booking page, phone line and crew links. This is your business's data about the people you serve and employ; we hold and process it only on your instructions and you're responsible for collecting it lawfully.</li>
+        <li><b>Business phone</b> — if you use a Ledger-provided number or forward your own line: call logs, caller numbers, text messages in both directions, voicemail recordings and their written transcripts, so missed calls, texts and voicemails show up in the app.</li>
+        <li><b>Vehicle lookups</b> — a VIN or licence-plate you scan or type is sent to a vehicle-data service to identify the year, make, model and tire sizes. Nothing else about the customer goes with it.</li>
+        <li><b>Inventory &amp; price lists</b> — the spreadsheets you upload, so the assistant can quote from your own numbers.</li>
+        <li><b>Business memory</b> — facts you tell the assistant to remember (rates, policies, suppliers), kept until you change or delete them.</li>
+        <li><b>Push notifications</b> — a device token for your iPhone or browser, so we can alert you when a customer texts, a review lands or a job needs cover. You can turn these off in your device settings.</li>
+        <li><b>Usage metering</b> — token counts and cost per request, plus text-message counts, so we can enforce your plan's monthly AI and texting allowances.</li>
+        <li><b>Cookies and analytics</b> — none. We don't run advertising trackers or third-party analytics on our website or in the app; the only thing stored in your browser is what keeps you signed in.</li>
       </ul>
     </div>
 
     <div class="card">
       <h2>Where it lives</h2>
-      <p>Your account data, receipts, and conversation history are stored with <b>Supabase</b> (database, authentication, and file storage), running in their cloud infrastructure. Receipt images are kept in private storage and served only through signed URLs that expire — they are not publicly accessible.</p>
+      <p>Your account data, receipts, and conversation history are stored with <b>Supabase</b> (database, authentication, and file storage) in their <b>Canadian region (Montréal)</b>, so your business data stays in Canada at rest. Some processors below run outside Canada — the AI providers, Stripe and the phone carrier are US-based — and receive only what's needed for the feature in use. Receipt images are kept in private storage and served only through signed URLs that expire — they are not publicly accessible.</p>
     </div>
 
     <div class="card">
@@ -141,7 +148,11 @@ footer a{color:var(--dim)}
         <li><b>Anthropic</b> (Claude models) — receives your conversation content and the business data needed to answer it, as the processor behind the AI assistant's text responses.</li>
         <li><b>OpenAI</b> (Realtime API) — receives audio/conversation content when you use voice mode, as the processor behind spoken conversations.</li>
         <li><b>Supabase</b> — hosts our database, authentication, and file storage.</li>
-        <li><b>Stripe</b> — processes subscription payments. Your card number never touches Ledger AI's servers.</li>
+        <li><b>Stripe</b> — processes your subscription payments and, if you turn on card payments, your customers' payments through your own Stripe account. Card numbers never touch Ledger AI's servers.</li>
+        <li><b>Telnyx</b> — the carrier behind Ledger-provided business numbers: routes calls and texts, stores voicemail recordings and produces the written transcripts.</li>
+        <li><b>Resend</b> — delivers the emails we send on your behalf (invoices, estimates, sign-in links, receipts).</li>
+        <li><b>Apple</b> (Push Notification service) and your browser's push service — deliver notifications to your devices. They see the device token and the notification text, nothing else.</li>
+        <li><b>Wheel-Size</b> and the <b>US NHTSA vehicle database</b> — decode the VIN or plate you look up into year, make, model and tire sizes.</li>
         <li><b>Google</b> (Gmail, Calendar, Business Profile) and <b>Intuit</b> (QuickBooks Online) — the source systems you connect; we read from and, where you direct us to, write to their APIs under the OAuth permissions you grant.</li>
       </ul>
     </div>
@@ -157,7 +168,7 @@ footer a{color:var(--dim)}
 
     <div class="card">
       <h2>Retention</h2>
-      <p>We keep your workspace data — receipts, conversations, and connected-account data — for as long as your account is active. If you delete your account, that data is permanently removed rather than archived. Usage metering records are kept for billing and support purposes for the life of the account.</p>
+      <p>We keep your workspace data — receipts, conversations, and connected-account data — for as long as your account is active. If you delete your account, that data is permanently removed rather than archived. Usage metering records are kept for billing and support purposes for the life of the account. If your subscription ends, your workspace becomes read-only and is kept for at least 90 days so you can export or come back; after that we may delete it permanently. Business phone numbers are held for 30 days after cancellation and then released.</p>
     </div>
 
     <div class="card">
@@ -216,7 +227,7 @@ footer a{color:var(--dim)}
         <a href="mailto:supportteam@heyledger.ai">supportteam@heyledger.ai</a>
       </div>
     </div>
-    <div class="fbase"><span>© 2026 Ledger AI — made in Calgary, Alberta, Canada.</span><span class="noseat">No per-seat fees. Ever.</span></div>
+    <div class="fbase"><span>© 2026 Ledger AI — made in Calgary, Alberta, Canada.</span><span class="noseat">No per-seat fees for crew or customers.</span></div>
   </div>
 </footer>
 </div>
