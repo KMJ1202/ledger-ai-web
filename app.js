@@ -7319,28 +7319,116 @@ function lockView(seed) {
   }, 6000);
 }
 
-function loginView(sent) {
-  root.innerHTML = `<div class="login"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>Ledger AI</h2>
-    <p>${sent ? `We emailed a sign-in link to <b>${esc(sent)}</b>. Tap it and you'll land right back here.` : "Your business copilot. Sign in with your work email — new here? The same link starts your free trial."}</p>
-    ${sent ? `<p class="note">Not there in a minute? Check Spam or Updates. <a href="#" id="resend" style="color:var(--cyan)">Send it again</a> · <a href="#" id="retype" style="color:var(--cyan)">Wrong address?</a></p>`
-      : '<input id="email" type="email" placeholder="you@business.com" autocomplete="email"><button class="btn" id="go">Send sign-in link</button><p class="note" style="margin-top:10px">14-day free trial · no card needed · no password to remember</p>'}
-    <p style="margin-top:18px;font-size:12.5px"><a href="privacy.html" style="color:var(--dim)">Privacy</a> &middot; <a href="support.html" style="color:var(--dim)">Support</a></p></div>`;
-  if (sent) {
-    $("retype").onclick = (e) => { e.preventDefault(); loginView(); };
-    $("resend").onclick = async (e) => {
-      e.preventDefault();
-      const { error } = await supa.auth.signInWithOtp({ email: sent, options: { emailRedirectTo: location.href.split("#")[0].split("?")[0] } });
-      toast(error ? error.message : "Sent again — give it a minute.", error ? "err" : undefined);
+// One sign-in everywhere (2026-09-05, #7): email + password on the web, the
+// same account the iPhone app uses. The magic-link screen is gone — Kyle:
+// "it makes me put my email in and then sends a link, which is silly". Three
+// modes share one card: signin · signup · forgot. Password resets always land
+// on this page (?reset=1) so a phone user sets the new password here, then
+// signs in on the phone — one path, no deep-link gymnastics.
+const AUTH_LEGAL = `<p style="margin-top:18px;font-size:12.5px"><a href="privacy.html" style="color:var(--dim)">Privacy</a> &middot; <a href="terms.html" style="color:var(--dim)">Terms</a> &middot; <a href="support.html" style="color:var(--dim)">Support</a></p>`;
+const APP_URL = location.origin + location.pathname;
+function authCard(title, lead, fields, button, links) {
+  root.innerHTML = `<div class="login"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>${title}</h2>
+    <p>${lead}</p>${fields}${button ? `<button class="btn" id="go">${button}</button>` : ""}
+    <p class="note" style="margin-top:12px;line-height:2">${links}</p>${AUTH_LEGAL}</div>`;
+  const go = $("go");
+  root.querySelectorAll("input").forEach((i) => i.addEventListener("keydown", (e) => { if (e.key === "Enter" && go) go.click(); }));
+  return go;
+}
+const authErr = (error) => {
+  const m = String(error?.message || "");
+  if (/invalid login credentials/i.test(m)) return "Wrong email or password. Try again, or tap Forgot password.";
+  if (/email not confirmed/i.test(m)) return "Confirm your email first — the link is in your inbox (check Spam).";
+  if (/already registered|already been registered/i.test(m)) return "That email already has an account — sign in instead.";
+  if (/rate limit|too many/i.test(m)) return "Too many tries — give it a minute and try again.";
+  return m || "Something went wrong — try again.";
+};
+const emailOf = () => ($("email")?.value || "").trim().toLowerCase();
+const pwField = (id, ph, ct) => `<input id="${id}" type="password" placeholder="${ph}" autocomplete="${ct}" minlength="8">`;
+
+function loginView(mode = "signin", email = "") {
+  if (mode === "signup") {
+    const go = authCard("Create your account", "14-day free trial · no card needed · cancel any time.",
+      `<input id="email" type="email" placeholder="you@business.com" autocomplete="email" value="${esc(email)}">${pwField("pw", "Choose a password (8+ characters)", "new-password")}`,
+      "Create account", `Already have an account? <a href="#" id="tosignin" style="color:var(--cyan)">Sign in</a>`);
+    $("tosignin").onclick = (e) => { e.preventDefault(); loginView("signin", emailOf()); };
+    go.onclick = async () => {
+      const em = emailOf(), pw = $("pw").value;
+      if (!em.includes("@")) { toast("Enter your work email", "err"); return; }
+      if (pw.length < 8) { toast("Use at least 8 characters", "err"); return; }
+      go.disabled = true;
+      const { data, error } = await supa.auth.signUp({ email: em, password: pw, options: { emailRedirectTo: APP_URL } });
+      if (error) { go.disabled = false; toast(authErr(error), "err"); return; }
+      // Supabase hides "already registered" behind an empty identities list.
+      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) { go.disabled = false; toast(authErr({ message: "already registered" }), "err"); return; }
+      if (data?.session) return; // autoconfirm on → onAuthStateChange boots the app
+      loginView("sent-confirm", em);
     };
     return;
   }
-  const go = async () => {
-    const email = $("email").value.trim(); if (!email) return;
-    const { error } = await supa.auth.signInWithOtp({ email, options: { emailRedirectTo: location.href.split("#")[0].split("?")[0] } });
-    if (error) toast(error.message, "err"); else loginView(email);
+  if (mode === "forgot") {
+    const go = authCard("Reset your password", "Enter your email and we'll send a link to choose a new password. Works for the iPhone app too.",
+      `<input id="email" type="email" placeholder="you@business.com" autocomplete="email" value="${esc(email)}">`,
+      "Send reset link", `<a href="#" id="tosignin" style="color:var(--cyan)">Back to sign in</a>`);
+    $("tosignin").onclick = (e) => { e.preventDefault(); loginView("signin", emailOf()); };
+    go.onclick = async () => {
+      const em = emailOf(); if (!em.includes("@")) { toast("Enter your email", "err"); return; }
+      go.disabled = true;
+      const { error } = await supa.auth.resetPasswordForEmail(em, { redirectTo: APP_URL + "?reset=1" });
+      if (error) { go.disabled = false; toast(authErr(error), "err"); return; }
+      loginView("sent-reset", em);
+    };
+    return;
+  }
+  if (mode === "sent-confirm" || mode === "sent-reset") {
+    const reset = mode === "sent-reset";
+    authCard(reset ? "Check your email" : "Confirm your email",
+      reset ? `We sent a link to <b>${esc(email)}</b>. Tap it to choose a new password — then sign in here or on your phone.`
+            : `We sent a confirmation link to <b>${esc(email)}</b>. Tap it once and you're in.`,
+      "", "", `Not there in a minute? Check Spam or Updates. <a href="#" id="again" style="color:var(--cyan)">Send it again</a> · <a href="#" id="tosignin" style="color:var(--cyan)">Back to sign in</a>`);
+    $("tosignin").onclick = (e) => { e.preventDefault(); loginView("signin", email); };
+    $("again").onclick = async (e) => {
+      e.preventDefault();
+      const { error } = reset
+        ? await supa.auth.resetPasswordForEmail(email, { redirectTo: APP_URL + "?reset=1" })
+        : await supa.auth.resend({ type: "signup", email, options: { emailRedirectTo: APP_URL } });
+      toast(error ? authErr(error) : "Sent again — give it a minute.", error ? "err" : undefined);
+    };
+    return;
+  }
+  // signin
+  const go = authCard("Ledger AI", "Your business copilot. Same account on the web and the iPhone app.",
+    `<input id="email" type="email" placeholder="you@business.com" autocomplete="email" value="${esc(email)}">${pwField("pw", "Password", "current-password")}`,
+    "Sign in", `<a href="#" id="forgot" style="color:var(--cyan)">Forgot password?</a> &nbsp;·&nbsp; New here? <a href="#" id="tosignup" style="color:var(--cyan)">Start your free trial</a>`);
+  $("forgot").onclick = (e) => { e.preventDefault(); loginView("forgot", emailOf()); };
+  $("tosignup").onclick = (e) => { e.preventDefault(); loginView("signup", emailOf()); };
+  go.onclick = async () => {
+    const em = emailOf(), pw = $("pw").value;
+    if (!em.includes("@") || !pw) { toast("Enter your email and password", "err"); return; }
+    go.disabled = true;
+    const { error } = await supa.auth.signInWithPassword({ email: em, password: pw });
+    if (error) { go.disabled = false; toast(authErr(error), "err"); }
+    // success → onAuthStateChange(SIGNED_IN) boots the app
   };
-  $("go").onclick = go;
-  $("email").addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+}
+
+// Landing from a reset email: the session is already established by the link;
+// all that's left is choosing the password.
+function newPasswordView() {
+  const go = authCard("Choose a new password", "Then sign in with it here or on your phone.",
+    `${pwField("pw", "New password (8+ characters)", "new-password")}${pwField("pw2", "Repeat new password", "new-password")}`,
+    "Save password", "");
+  go.onclick = async () => {
+    const pw = $("pw").value;
+    if (pw.length < 8) { toast("Use at least 8 characters", "err"); return; }
+    if (pw !== $("pw2").value) { toast("Passwords don't match", "err"); return; }
+    go.disabled = true;
+    const { error } = await supa.auth.updateUser({ password: pw });
+    if (error) { go.disabled = false; toast(authErr(error), "err"); return; }
+    history.replaceState({}, "", location.pathname);
+    toast("Password saved — you're signed in");
+    boot();
+  };
 }
 
 function setupView() {
@@ -7437,7 +7525,12 @@ async function loadProfile(boot) {
 
 async function boot() {
   const { data: { session } } = await supa.auth.getSession();
-  if (!session) { loginView(false); return; }
+  if (!session) {
+    // A reset link with a dead/used code lands here signed out — say so.
+    if (new URLSearchParams(location.search).get("reset")) { history.replaceState({}, "", location.pathname); loginView("forgot"); toast("That reset link has expired — send a fresh one.", "err"); return; }
+    loginView("signin"); return;
+  }
+  if (new URLSearchParams(location.search).get("reset")) { newPasswordView(); return; }
   S.email = (session.user?.email || "").toLowerCase();
   try {
     const b = await api("/workspace-profile", { action: "bootstrap" });
@@ -7957,5 +8050,6 @@ function liveSheet() {
 
 boot();
 supa.auth.onAuthStateChange((event, s) => {
-  if (event === "SIGNED_IN" && s && !$("view") && !$("bizname") && !$("joincode")) boot();
+  if (event === "PASSWORD_RECOVERY") { newPasswordView(); return; }
+  if (event === "SIGNED_IN" && s && !$("view") && !$("bizname") && !$("joincode") && !$("pw2")) boot();
 });
