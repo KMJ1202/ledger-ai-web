@@ -73,6 +73,10 @@ async function api(path, body, method = "POST") {
     const err = new Error(d.message || d.error || ("Request failed (" + r.status + ")"));
     err.status = r.status; err.data = d;
     if (d.matches) err.matches = d.matches;
+    // Real paywall (2026-09-05): the server refused a write because the
+    // subscription is paused. One handler updates the banner so the customer
+    // sees why, whatever screen they were on.
+    if (r.status === 402 && d.code === "subscription_required") paywallHit(d);
     throw err;
   }
   return d;
@@ -6401,24 +6405,51 @@ function smsSendFailed(ex) {
 async function billingCheck() {
   try {
     const s = await api("/stripe-billing/status", {});
-    const a = $("alertbar"); if (!a) return;
-    const link = (label) => {
-      const b = document.createElement("u"); b.style.cursor = "pointer"; b.textContent = label;
-      b.onclick = async () => { try { const c = await api("/stripe-billing/checkout", {}); location.href = c.url; } catch (e) { toast(e.message, "err"); } };
-      a.appendChild(b);
-    };
-    if (s.subscription_status === "canceled") {
-      a.textContent = "Subscription inactive — renew to keep your copilot."; a.style.display = "block";
-      if (s.billing_ready) link(" Renew now");
-    } else if (s.subscription_status === "trialing" && s.trial_days_left !== null) {
-      a.style.background = "rgba(251,191,36,.12)"; a.style.color = "var(--gold)";
-      a.textContent = s.trial_days_left > 0
-        ? `🎁 Free trial — ${s.trial_days_left} day${s.trial_days_left === 1 ? "" : "s"} left. Add a card so nothing stops on day 15.`
-        : "⏰ Your free trial has ended.";
-      if (s.billing_ready) link(s.trial_days_left > 0 ? " Add a card" : " Subscribe now");
-      a.style.display = "block";
-    }
+    S.access = s.access || "full";
+    renderAccessBanner(s);
   } catch {}
+}
+
+// A blocked write already carries the same fields the status call returns,
+// so the banner is drawn from either without a second round-trip.
+let paywallLastToast = 0;
+function paywallHit(d) {
+  S.access = d.access || "read_only";
+  renderAccessBanner({ access: d.access, access_reason: d.reason, access_message: d.message, subscription_status: d.subscription_status, billing_ready: true });
+  if (Date.now() - paywallLastToast > 8000) { paywallLastToast = Date.now(); toast(d.message || "Ledger is in read-only mode until the subscription is resumed.", "err"); }
+}
+
+function renderAccessBanner(s) {
+  const a = $("alertbar"); if (!a) return;
+  a.textContent = ""; a.style.background = ""; a.style.color = ""; a.style.display = "none";
+  const link = (label, path) => {
+    const b = document.createElement("u"); b.style.cursor = "pointer"; b.textContent = label;
+    b.onclick = async () => { try { const c = await api(path, {}); location.href = c.url; } catch (e) { toast(e.message, "err"); } };
+    a.appendChild(b);
+  };
+  const access = s.access || "full";
+  const reason = s.access_reason || "";
+  if (access === "read_only") {
+    a.textContent = "🔒 " + (s.access_message || "Ledger is in read-only mode. Your records are safe to view and export.");
+    if (s.billing_ready !== false) link(reason === "trial_expired" || !s.portal_available ? " Subscribe now" : " Resume subscription", reason === "trial_expired" || !s.portal_available ? "/stripe-billing/checkout" : "/stripe-billing/portal");
+    a.style.display = "block";
+  } else if (access === "grace") {
+    a.style.background = "rgba(251,191,36,.12)"; a.style.color = "var(--gold)";
+    a.textContent = "⚠️ " + (s.access_message || "We couldn't charge your card. Update it in Billing to keep everything running.");
+    if (s.portal_available) link(" Update card", "/stripe-billing/portal");
+    a.style.display = "block";
+  } else if (s.subscription_status === "trialing" && s.trial_days_left !== null && s.trial_days_left !== undefined) {
+    a.style.background = "rgba(251,191,36,.12)"; a.style.color = "var(--gold)";
+    const days = `${s.trial_days_left} day${s.trial_days_left === 1 ? "" : "s"} left`;
+    if (s.card_on_file) {
+      const when = s.trial_ends_at ? new Date(s.trial_ends_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "day 15";
+      a.textContent = `🎁 Free trial — ${days}. Your card is on file; your first charge is on ${when}.`;
+    } else {
+      a.textContent = s.trial_days_left > 0 ? `🎁 Free trial — ${days}. Add a card so nothing stops on day 15.` : "⏰ Your free trial has ended.";
+      if (s.billing_ready) link(s.trial_days_left > 0 ? " Add a card" : " Subscribe now", "/stripe-billing/checkout");
+    }
+    a.style.display = "block";
+  }
 }
 
 // Matches MAX_MESSAGE_CHARS in the ledger-ai function — a long paste used to
