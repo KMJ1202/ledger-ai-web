@@ -529,11 +529,11 @@ async function renderHome() {
           <span class="ictile">${segIc(icon)}</span><span class="arrow">&#8599;</span>
           <b>${label}</b><small>${sub}</small></button>`).join("")}
       </div>
-      <button class="bizrow vinrow" data-goto="vin">
+      ${isAuto() ? `<button class="bizrow vinrow" data-goto="vin">
         <span class="ic">${segIc("car")}</span>
         <span class="m"><b>Scan a VIN</b><small>LIVE CAMERA · EVERY SPEC · ONE CARD</small></span>
         <span class="go">&#8599;</span>
-      </button>
+      </button>` : ""}
 
       ${srail("pulse", "Today", "cy", `Updated ${new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`)}
       <div id="homekpis"><div class="ptiles">
@@ -739,6 +739,78 @@ async function homeCustomers() {
     .map((d) => d.row);
 }
 
+// ---------------- Shop profile (#6B, 2026-09-05) ----------------
+// Six tap-answers that fit the app to the shop and brief the copilot. No free
+// text. business_type is the one that changes the screens: anything but
+// automotive hides VIN scan, vehicle lookup, tire fitment and "vehicle" on
+// bookings. Existing shops were backfilled as automotive and never see the
+// step; Settings → Your shop edits any answer later.
+const isAuto = () => (S.shop?.business_type ?? "automotive") === "automotive";
+const SHOP_Q = [
+  { key: "business_type", q: "What kind of business?", opts: [["automotive", "Automotive"], ["trades", "Trades"], ["other", "Other services"]],
+    hint: "Automotive = tires, mechanical, detailing. Trades = plumbing, electrical, HVAC, renovation." },
+  { key: "pricing_model", q: "How do you charge?", opts: [["flat", "Flat price per job"], ["hourly", "Hourly + parts"], ["mix", "A mix"]] },
+  { key: "customer_mix", q: "Who do you serve?", opts: [["individuals", "Mostly individuals"], ["businesses", "Mostly businesses & fleets"], ["both", "Both"]] },
+  { key: "team_size", q: "How big is the team?", opts: [["solo", "Just me"], ["small", "2–5"], ["large", "6+"]] },
+  { key: "intake_channels", q: "How do jobs come in?", multi: true, opts: [["phone", "Phone"], ["text", "Text"], ["online", "Online"], ["walkin", "Walk-in"]] },
+];
+const REGIONS = [["", "Choose…"], ["AB", "Alberta"], ["BC", "British Columbia"], ["MB", "Manitoba"], ["NB", "New Brunswick"], ["NL", "Newfoundland and Labrador"],
+  ["NS", "Nova Scotia"], ["NT", "Northwest Territories"], ["NU", "Nunavut"], ["ON", "Ontario"], ["PE", "Prince Edward Island"], ["QC", "Quebec"], ["SK", "Saskatchewan"], ["YT", "Yukon"],
+  ["US", "United States"]];
+function shopSummary(sp) {
+  if (!sp?.completed) return "Tell Ledger what you do";
+  const t = { automotive: "Automotive", trades: "Trades", other: "Services" }[sp.business_type] || "Business";
+  const pm = { flat: "flat-rate", hourly: "hourly + parts", mix: "flat & hourly" }[sp.pricing_model];
+  return [t, pm, sp.region_code].filter(Boolean).join(" · ");
+}
+function shopProfileSheet(onDone) {
+  const cur = { ...(S.shop || {}) };
+  const picked = { intake_channels: [...(cur.intake_channels || [])] };
+  for (const q of SHOP_Q) if (!q.multi && cur[q.key]) picked[q.key] = cur[q.key];
+  const group = (q) => `<div class="cmpsect" data-q="${q.key}">
+      <label class="fld">${esc(q.q)}</label>
+      <div class="chips" style="display:flex;flex-wrap:wrap;gap:8px">${q.opts.map(([v, l]) => {
+        const on = q.multi ? picked.intake_channels.includes(v) : picked[q.key] === v;
+        return `<button type="button" class="chip${on ? " on" : ""}" data-v="${v}">${esc(l)}</button>`; }).join("")}</div>
+      ${q.hint ? `<p class="note" style="margin-top:6px">${esc(q.hint)}</p>` : ""}
+    </div>`;
+  sheet(`<h2>Tell Ledger about your shop</h2>
+    <p class="sh-sub">Six taps. Ledger fits the app to how you work and talks like it already knows the business.</p>
+    ${SHOP_Q.map(group).join("")}
+    <div class="cmpsect">
+      <label class="fld">Where are you?</label>
+      <select id="shopregion" class="cmpinput">${REGIONS.map(([v, l]) => `<option value="${v}"${(cur.region_code || "") === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>
+      <p class="note" style="margin-top:6px">Sets the right sales tax on your invoices. You can change it any time in Books settings.</p>
+    </div>
+    <button class="btn primary wide" style="margin-top:14px" id="shopsave">Save</button>
+    <div class="note" id="shopnote" style="margin-top:9px"></div>`, (sh) => {
+    sh.querySelectorAll(".chip").forEach((c) => c.onclick = () => {
+      const key = c.closest("[data-q]").dataset.q, v = c.dataset.v;
+      if (key === "intake_channels") {
+        c.classList.toggle("on");
+        picked.intake_channels = [...c.parentElement.querySelectorAll(".chip.on")].map((x) => x.dataset.v);
+      } else {
+        c.parentElement.querySelectorAll(".chip").forEach((x) => x.classList.remove("on"));
+        c.classList.add("on"); picked[key] = v;
+      }
+    });
+    const note = sh.querySelector("#shopnote"), btn = sh.querySelector("#shopsave");
+    btn.onclick = async () => {
+      if (!picked.business_type) { note.className = "note err"; note.textContent = "Pick what kind of business you run — the rest can wait."; return; }
+      const region = sh.querySelector("#shopregion").value;
+      btn.disabled = true; note.className = "note"; note.textContent = "Saving…";
+      try {
+        const r = await api("/workspace-profile", { action: "shop-profile-save", ...picked, region_code: region });
+        S.shop = r.shop_profile;
+        if (S.profile) S.profile.business = { ...(S.profile.business || {}), ...r };
+        const tax = r.tax_set ? ` Sales tax set to ${r.tax_set.name} ${(r.tax_set.rate * 100).toFixed(r.tax_set.rate * 100 % 1 ? 3 : 0)}%.` : (r.us_region ? " Add your state's sales tax in Books settings." : "");
+        closeSheet(); toast("Got it — Ledger knows your shop now." + tax);
+        if (onDone) onDone(); else { S.cal = null; setTab("home"); }
+      } catch (e) { btn.disabled = false; note.className = "note err"; note.textContent = e.message; }
+    };
+  });
+}
+
 // Three-step setup checklist at the top of Home for a workspace that is not
 // fully set up: books, calendar, card. Every step deep-links to the action.
 // Disappears on its own when all three are done, or when the owner hides it.
@@ -759,7 +831,12 @@ async function loadHomeSetup() {
   const books = !!map.quickbooks || !!bs?.chosen;
   const cal = !!map.google_calendar;
   const paid = bill && ["active", "past_due"].includes(bill.subscription_status);
-  if (books && cal && paid) return;
+  const shop = !!S.shop?.completed;
+  if (shop && books && cal && paid) return;
+  // Stalled = still not set up a day after signing up. Only then offer the
+  // founder's calendar — most shops never need the call (Kyle, 2026-09-05).
+  const since = S.profile?.business?.member_since ? Date.parse(S.profile.business.member_since) : Date.now();
+  const stalled = Date.now() - since > 24 * 3600 * 1000;
   const step = (done, num, title, detail, action) => `<div class="setupstep${done ? " done" : ""}">
       <span class="num">${done ? "&#10003;" : num}</span>
       <span class="m"><b>${title}</b><small>${detail}</small></span>
@@ -768,14 +845,19 @@ async function loadHomeSetup() {
     ? `Free until ${dateShort(bill.trial_ends_at)} — add a card so nothing stops on day 15.` : "Keep Ledger running after your trial.";
   slot.innerHTML = `<div class="setupcard">
     <div class="lanehead" style="margin-top:0"><span class="eyebrow">&#9889; Get set up</span><button class="pill" id="setuphide" title="Hide">Hide</button></div>
-    ${step(books, 1, "Choose your books", books ? "" : `Already on QuickBooks? Connect it. Otherwise Ledger's built-in books handle invoices, estimates and payment links.
+    ${step(shop, 1, "Tell Ledger about your shop", shop ? "" : "Six taps — what you do, how you charge, who you serve. Ledger fits itself to your business.",
+      `<button class="btn primary" id="setupshop">Start</button>`)}
+    ${step(books, 2, "Choose your books", books ? "" : `Already on QuickBooks? Connect it. Otherwise Ledger's built-in books handle invoices, estimates and payment links.
         <span style="display:flex;gap:8px;margin-top:9px"><button class="btn primary" data-connect="/quickbooks-oauth/start">QuickBooks</button><button class="btn ghost" id="setupnative">Built-in books</button></span>`, "")}
-    ${step(cal, 2, "Connect Google Calendar", "See your week and let Ledger book jobs — every booking still needs your tap.",
+    ${step(cal, 3, "Connect Google Calendar", "See your week and let Ledger book jobs — every booking still needs your tap.",
       `<button class="btn ghost" data-connect="/google-calendar/start">Connect</button>`)}
-    ${step(paid, 3, "Add a card", trialLine,
+    ${step(paid, 4, "Add a card", trialLine,
       bill?.billing_ready ? `<button class="btn ghost" id="setupcard">Add card</button>` : "")}
+    ${stalled ? `<p class="note" style="margin-top:10px">Stuck? <a href="https://heyledger.ai/talk" target="_blank" rel="noopener">Book 15 minutes with Kyle</a> and he'll walk you through it.</p>` : ""}
   </div>`;
   wireConnect(slot);
+  const shopBtn = slot.querySelector("#setupshop");
+  if (shopBtn) shopBtn.onclick = () => shopProfileSheet(() => { S.cal = null; setTab("home"); });
   const native = slot.querySelector("#setupnative");
   if (native) native.onclick = async () => {
     native.disabled = true;
@@ -3297,8 +3379,8 @@ function eventSheet(e, back) {
     <div class="kv"><span>Status</span><span>${esc((e.status || "confirmed").replace(/^./, (c) => c.toUpperCase()))}</span></div>
     ${e.location ? `<div class="kv"><span>Location</span><span>${esc(e.location)}</span></div>` : ""}
     ${e.description ? `<p class="note" style="white-space:pre-wrap;margin-top:11px">${esc(e.description)}</p>` : ""}
-    <button class="btn primary wide" style="margin-top:14px" id="evscan">&#128663; Scan VIN &amp; close job</button>
-    <p class="note" style="margin-top:6px">Scan the VIN and door placard, type the kilometres, and the completion message is ready to send. Nothing is invoiced.</p>
+    ${isAuto() ? `<button class="btn primary wide" style="margin-top:14px" id="evscan">&#128663; Scan VIN &amp; close job</button>
+    <p class="note" style="margin-top:6px">Scan the VIN and door placard, type the kilometres, and the completion message is ready to send. Nothing is invoiced.</p>` : ""}
     <div class="rowbtns" style="margin-top:12px">
       <button class="btn ghost" id="evdel">Delete</button>
       <button class="btn ghost" id="evedit" ${e.all_day ? "disabled" : ""}>Edit</button>
@@ -3307,7 +3389,8 @@ function eventSheet(e, back) {
     <div class="note" id="evnote" style="margin-top:9px"></div>`, (sh) => {
     const note = sh.querySelector("#evnote");
     if (back) sh.querySelector("#evback").onclick = () => back();
-    sh.querySelector("#evscan").onclick = () => vehicleScanSheet(e, () => eventSheet(e, back));
+    const evscan = sh.querySelector("#evscan");
+    if (evscan) evscan.onclick = () => vehicleScanSheet(e, () => eventSheet(e, back));
     sh.querySelector("#evedit").onclick = () => bookingSheet(evDayKey(e.start), e);
     sh.querySelector("#evdel").onclick = async (ev) => {
       if (!confirm(`Delete "${e.title}" from the calendar? This can't be undone.`)) return;
@@ -3342,8 +3425,8 @@ function bookingSheet(dayISO, editing) {
     <div class="eyebrow">Appointment</div>
     <div class="cmpsect">
       <input id="bkService" class="cmpinput" placeholder="Service">
-      <input id="bkVehicle" class="cmpinput" placeholder="Vehicle — year, make, model, trim">
-      <input id="bkTire" class="cmpinput" placeholder="Tire size, if relevant">
+      <input id="bkVehicle" class="cmpinput" placeholder="${isAuto() ? "Vehicle — year, make, model, trim" : "Job details — what needs doing, where"}">
+      ${isAuto() ? `<input id="bkTire" class="cmpinput" placeholder="Tire size, if relevant">` : ""}
     </div>`}
     <label class="fld">STARTS</label>
     <input id="bkStart" class="cmpinput" type="datetime-local" value="${localVal(startAt)}">
@@ -3378,11 +3461,11 @@ function bookingSheet(dayISO, editing) {
           return;
         }
         const required = ["bkFirst", "bkLast", "bkPhone", "bkEmail", "bkVehicle", "bkService"];
-        if (required.some((id) => !val(id))) { note.className = "note err"; note.textContent = "Fill in name, phone, email, vehicle and service."; return; }
+        if (required.some((id) => !val(id))) { note.className = "note err"; note.textContent = `Fill in name, phone, email, ${isAuto() ? "vehicle" : "job details"} and service.`; return; }
         if (!confirm(`Create this booking?\n\n${val("bkService")} for ${val("bkFirst")} ${val("bkLast")}\n${start.toLocaleString()}`)) return;
         ev.currentTarget.disabled = true;
         const details = [
-          `Phone: ${val("bkPhone")}`, `Email: ${val("bkEmail")}`, `Vehicle: ${val("bkVehicle")}`,
+          `Phone: ${val("bkPhone")}`, `Email: ${val("bkEmail")}`, `${isAuto() ? "Vehicle" : "Job"}: ${val("bkVehicle")}`,
           val("bkTire") ? `Tire size: ${val("bkTire")}` : null,
           `Source: ${val("bkSource")}`, val("bkNotes") ? `Notes: ${val("bkNotes")}` : null,
         ].filter(Boolean).join("\n");
@@ -6884,6 +6967,7 @@ async function businessSheet() {
         : row("bzbooks", "&#9881;", "Books", "This workspace runs on QuickBooks Online")}
       ${native ? row("bzcard", "&#128179;", "Card payments", "Stripe setup — get paid online") : ""}
       ${row("bzphone", "&#128222;", "Phone & Front Desk", "Number, reminders, auto-replies")}
+      ${row("bzshop", "&#127968;", "Your shop", shopSummary(S.shop))}
     </div>
     <div class="eyebrow" style="margin-top:20px">PROFILE</div>
     <label class="fld">BUSINESS NAME</label><input id="bn" value="${esc(b.name || "")}">
@@ -6954,6 +7038,7 @@ async function businessSheet() {
       catch (e) { toast(e.message, "err"); }
     };
     sh.querySelector("#bzphone").onclick = () => { closeSheet(); setTab("phone"); };
+    sh.querySelector("#bzshop").onclick = () => shopProfileSheet(() => businessSheet());
     sh.querySelector("#bsupport").onclick = supportSheet;
     sh.querySelector("#bsupportchat").onclick = supportChatSheet;
     sh.querySelector("#blogo").onclick = () => sh.querySelector("#blogofile").click();
@@ -7520,9 +7605,13 @@ function joinView(businessName) {
 // currency_code isn't on either payload, so it comes from the workspaces row (RLS: members read).
 async function loadProfile(boot) {
   const profile = { ...boot, business: { name: boot.name || "", address: "", logo_url: null } };
+  // Shop profile rides on bootstrap; a payload without it (older function) means an
+  // established automotive shop, never a nag.
+  S.shop = boot.shop_profile || { business_type: "automotive", completed: true };
   try {
     const detail = await api("/workspace-profile", { action: "get" });
     profile.business = { ...profile.business, ...detail };
+    if (detail.shop_profile) S.shop = detail.shop_profile;
   } catch {}
   try {
     const { data } = await supa.from("workspaces").select("currency_code").eq("id", boot.workspace_id).maybeSingle();
