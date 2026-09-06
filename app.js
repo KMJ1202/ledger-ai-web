@@ -7407,6 +7407,11 @@ function loginView(mode = "signin", email = "") {
     if (!em.includes("@") || !pw) { toast("Enter your email and password", "err"); return; }
     go.disabled = true;
     const { error } = await supa.auth.signInWithPassword({ email: em, password: pw });
+    if (error && /email not confirmed/i.test(error.message)) {
+      // Right password, unconfirmed account: send a fresh confirmation and say so.
+      await supa.auth.resend({ type: "signup", email: em, options: { emailRedirectTo: APP_URL } }).catch(() => {});
+      loginView("sent-confirm", em); return;
+    }
     if (error) { go.disabled = false; toast(authErr(error), "err"); }
     // success → onAuthStateChange(SIGNED_IN) boots the app
   };
@@ -7414,7 +7419,7 @@ function loginView(mode = "signin", email = "") {
 
 // Landing from a reset email: the session is already established by the link;
 // all that's left is choosing the password.
-function newPasswordView() {
+function newPasswordView(tokenHash = null) {
   const go = authCard("Choose a new password", "Then sign in with it here or on your phone.",
     `${pwField("pw", "New password (8+ characters)", "new-password")}${pwField("pw2", "Repeat new password", "new-password")}`,
     "Save password", "");
@@ -7423,6 +7428,10 @@ function newPasswordView() {
     if (pw.length < 8) { toast("Use at least 8 characters", "err"); return; }
     if (pw !== $("pw2").value) { toast("Passwords don't match", "err"); return; }
     go.disabled = true;
+    if (tokenHash) {
+      const { error: verr } = await supa.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" });
+      if (verr) { history.replaceState({}, "", location.pathname); loginView("forgot"); toast("That reset link has expired — send a fresh one.", "err"); return; }
+    }
     const { error } = await supa.auth.updateUser({ password: pw });
     if (error) { go.disabled = false; toast(authErr(error), "err"); return; }
     history.replaceState({}, "", location.pathname);
@@ -7525,12 +7534,20 @@ async function loadProfile(boot) {
 
 async function boot() {
   const { data: { session } } = await supa.auth.getSession();
+  const qs = new URLSearchParams(location.search);
+  // Reset emails carry a one-time token_hash that is only spent when the
+  // customer taps Save — so inbox link-scanners that pre-open links (Gmail
+  // did this to a test reset tonight) can't burn it before they get there.
+  if (qs.get("reset") && qs.get("token_hash")) { newPasswordView(qs.get("token_hash")); return; }
   if (!session) {
-    // A reset link with a dead/used code lands here signed out — say so.
-    if (new URLSearchParams(location.search).get("reset")) { history.replaceState({}, "", location.pathname); loginView("forgot"); toast("That reset link has expired — send a fresh one.", "err"); return; }
+    const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+    if (qs.get("reset")) { history.replaceState({}, "", location.pathname); loginView("forgot"); toast("That reset link has expired — send a fresh one.", "err"); return; }
+    // A confirmation link that was already opened (by the customer or a
+    // scanner) has done its job — the account is confirmed. Just sign in.
+    if (hash.get("error_code")) { history.replaceState({}, "", location.pathname); loginView("signin"); toast(/expired|invalid/i.test(hash.get("error_code")) ? "That link was already used — just sign in with your password." : hash.get("error_description") || "That link didn't work — sign in below.", "err"); return; }
     loginView("signin"); return;
   }
-  if (new URLSearchParams(location.search).get("reset")) { newPasswordView(); return; }
+  if (qs.get("reset")) { newPasswordView(); return; }
   S.email = (session.user?.email || "").toLowerCase();
   try {
     const b = await api("/workspace-profile", { action: "bootstrap" });
