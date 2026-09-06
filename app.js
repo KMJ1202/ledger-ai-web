@@ -6406,17 +6406,19 @@ async function billingCheck() {
   try {
     const s = await api("/stripe-billing/status", {});
     S.access = s.access || "full";
+    if (S.access === "locked") { lockView(s); return; }
     renderAccessBanner(s);
   } catch {}
 }
 
 // A blocked write already carries the same fields the status call returns,
 // so the banner is drawn from either without a second round-trip.
-let paywallLastToast = 0;
 function paywallHit(d) {
-  S.access = d.access || "read_only";
+  S.access = d.access || "locked";
+  // Hard lock (2026-09-05): the server said locked, so the app closes to the
+  // subscribe screen — no banner, no half-working shell.
+  if (S.access === "locked") { lockView({ subscription_status: d.subscription_status, trial_ends_at: d.trial_ends_at, access_reason: d.reason, access_message: d.message }); return; }
   renderAccessBanner({ access: d.access, access_reason: d.reason, access_message: d.message, subscription_status: d.subscription_status, billing_ready: true });
-  if (Date.now() - paywallLastToast > 8000) { paywallLastToast = Date.now(); toast(d.message || "Ledger is in read-only mode until the subscription is resumed.", "err"); }
 }
 
 function renderAccessBanner(s) {
@@ -6429,11 +6431,7 @@ function renderAccessBanner(s) {
   };
   const access = s.access || "full";
   const reason = s.access_reason || "";
-  if (access === "read_only") {
-    a.textContent = "🔒 " + (s.access_message || "Ledger is in read-only mode. Your records are safe to view and export.");
-    if (s.billing_ready !== false) link(reason === "trial_expired" || !s.portal_available ? " Subscribe now" : " Resume subscription", reason === "trial_expired" || !s.portal_available ? "/stripe-billing/checkout" : "/stripe-billing/portal");
-    a.style.display = "block";
-  } else if (access === "grace") {
+  if (access === "grace") {
     a.style.background = "rgba(251,191,36,.12)"; a.style.color = "var(--gold)";
     a.textContent = "⚠️ " + (s.access_message || "We couldn't charge your card. Update it in Billing to keep everything running.");
     if (s.portal_available) link(" Update card", "/stripe-billing/portal");
@@ -7206,6 +7204,73 @@ function supportChatSheet() {
 }
 
 /* ---------------- AUTH / SETUP / JOIN ---------------- */
+/* ---------------- Hard lock (2026-09-05) ----------------
+   Same verdict as the server's entitlement module: trial over with no card,
+   or any status other than active / past_due / trialing = locked. Nothing
+   in the app opens; the only doors are pay, export, delete, sign out. */
+function accessLocked(row) {
+  const status = String(row?.subscription_status ?? "trialing");
+  if (status === "active" || status === "past_due") return false;
+  if (status === "trialing") return Boolean(row?.trial_ends_at) && new Date(row.trial_ends_at).getTime() <= Date.now();
+  return true;
+}
+let lockPoll = null;
+function lockView(seed) {
+  if (lockPoll) clearInterval(lockPoll);
+  closeSheet?.();
+  const s = seed || {};
+  const status = String(s.subscription_status ?? "trialing");
+  const expiredTrial = status === "trialing" || s.access_reason === "trial_expired";
+  const name = s.name || S.profile?.business?.name || "";
+  const headline = expiredTrial ? "Your free trial has ended" : "Your subscription has ended";
+  const body = expiredTrial
+    ? "Subscribe to keep using Ledger. Everything you created is saved and waiting for you."
+    : "Resume your subscription to keep using Ledger. Your records are saved and waiting for you.";
+  root.innerHTML = `<div class="login"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div>
+    <h2>${esc(headline)}</h2>
+    ${name ? `<p class="note" style="margin-top:-6px">${esc(name)}</p>` : ""}
+    <p>${esc(body)}</p>
+    <button class="btn" id="lk-pay">${expiredTrial ? "Subscribe now" : "Resume subscription"}</button>
+    <p class="note" style="margin-top:10px">Cancel any time · your records stay exactly as you left them</p>
+    <p style="margin-top:22px;font-size:13px;line-height:2"><a href="#" id="lk-export" style="color:var(--cyan)">Export my data</a> &middot; <a href="#" id="lk-delete" style="color:var(--dim)">Delete my account</a> &middot; <a href="#" id="lk-out" style="color:var(--dim)">Sign out</a></p>
+    <p style="margin-top:12px;font-size:12.5px"><a href="privacy.html" style="color:var(--dim)">Privacy</a> &middot; <a href="terms.html" style="color:var(--dim)">Terms</a> &middot; <a href="support.html" style="color:var(--dim)">Support</a></p></div>`;
+  $("lk-pay").onclick = async (e) => {
+    e.currentTarget.disabled = true;
+    try {
+      // A shop that already has a Stripe customer resumes in the portal; a
+      // trial that never added a card goes to checkout.
+      const st = await api("/stripe-billing/status", {}).catch(() => ({}));
+      const path = expiredTrial || !st.portal_available ? "/stripe-billing/checkout" : "/stripe-billing/portal";
+      const c = await api(path, {}); location.href = c.url;
+    } catch (err) { toast(err.message, "err"); e.currentTarget.disabled = false; }
+  };
+  $("lk-export").onclick = async (e) => {
+    e.preventDefault();
+    try {
+      const ex = await api("/books", { action: "export" });
+      const rows = (csv) => Math.max(0, String(csv || "").trim().split("\n").length - 1);
+      if (!rows(ex.customers_csv) && !rows(ex.invoices_csv) && !rows(ex.payments_csv)) { toast("Nothing to export here — your books live in QuickBooks, which you still own.", "err"); return; }
+      const blob = new Blob(["== CUSTOMERS ==\n" + ex.customers_csv + "\n\n== INVOICES ==\n" + ex.invoices_csv + "\n\n== LINES ==\n" + ex.lines_csv + "\n\n== PAYMENTS ==\n" + ex.payments_csv], { type: "text/csv" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "ledger-books-export.csv"; a.click();
+      toast("Export downloaded");
+    } catch (err) { toast(err.message, "err"); }
+  };
+  $("lk-delete").onclick = async (e) => {
+    e.preventDefault();
+    if (!confirm("Delete your account? This permanently deletes your account and cannot be undone — receipts, conversations and connections go with it. If you're the workspace owner, this also deletes the workspace and every teammate's access.")) return;
+    const typed = prompt("Type DELETE to confirm.");
+    if (typed !== "DELETE") { if (typed !== null) toast("Account not deleted — you didn't type DELETE.", "err"); return; }
+    try { await api("/workspace-profile", { action: "delete-account", confirm: "DELETE" }); await supa.auth.signOut(); location.reload(); }
+    catch (err) { toast(err.message, "err"); }
+  };
+  $("lk-out").onclick = (e) => { e.preventDefault(); supa.auth.signOut().then(() => location.reload()); };
+  // Payment lands by webhook a few seconds after Stripe sends them back here:
+  // keep asking, and open the app the moment the workspace is unlocked.
+  lockPoll = setInterval(async () => {
+    try { const st = await api("/stripe-billing/status", {}); if (st.access && st.access !== "locked") { clearInterval(lockPoll); location.reload(); } } catch {}
+  }, 6000);
+}
+
 function loginView(sent) {
   root.innerHTML = `<div class="login"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>Ledger AI</h2>
     <p>${sent ? `We emailed a sign-in link to <b>${esc(sent)}</b>. Tap it and you'll land right back here.` : "Your business copilot. Sign in with your work email — new here? The same link starts your free trial."}</p>
@@ -7330,6 +7395,8 @@ async function boot() {
     const b = await api("/workspace-profile", { action: "bootstrap" });
     if (b.invite_pending) { joinView(b.invited_business || "A business"); return; }
     if (b.needs_setup) { setupView(); return; }
+    // Hard lock (2026-09-05): a lapsed subscription never sees the app shell.
+    if (accessLocked(b)) { lockView({ name: b.name, subscription_status: b.subscription_status, trial_ends_at: b.trial_ends_at }); return; }
     await loadProfile(b);
     appView();
   } catch { appView(); }
