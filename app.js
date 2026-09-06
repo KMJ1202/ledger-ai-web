@@ -2227,7 +2227,15 @@ function msSpareLine(detail) {
   const spare = detail && Number(detail.spare_qty) > 0 ? Number(detail.spare_qty) : 0;
   if (!spare) return "";
   const bought = Number(detail.receipt_tires), sold = Number(detail.sale_tires);
-  return `<div class="ms-spare">${bought} tires on this order, ${sold} on this invoice — the other ${spare} likely went to another job.</div>`;
+  return `<div class="ms-spare">${bought} tires on this order, ${sold} on this invoice — the other ${spare} went to another job or are still in stock. Only ${sold} tire${sold === 1 ? "'s" : "s'"} cost lands here.</div>`;
+}
+// Tires on the order: the card's per-tire share says it outright; otherwise
+// count the product lines' quantities (a levy line has no size/code words).
+function msUnits(c) {
+  if (!c) return 0;
+  if (c.count_split) return Number(c.count_split.order_qty) || 0;
+  if (c.detail && Number(c.detail.receipt_tires) > 0) return Number(c.detail.receipt_tires);
+  return 0;
 }
 function msLines(lines) {
   return (lines || []).slice(0, 3).map((l) =>
@@ -2336,8 +2344,10 @@ function psMatchScreen(review, tally, after) {
       ${msLines(c.lines)}
       ${s ? `<div class="ms-guess">Looks like ${msSaleLine(s, c.job_profit, "if")}${msSaleLines(s)}${msSpareLine(c.detail)}</div>${msSplitBlock(c)}`
           : `<div class="ms-guess none">No matching sale on file yet${c.lines_read ? "" : " — still reading this invoice"}.</div>`}
-      ${s ? `<button class="btn em wide" data-msconfirm="${c.id}" data-sale="${s.id}">&#10003;&nbsp; That's the one</button>` : ""}
+      ${s && c.count_split ? `<button class="btn em wide" data-mscountone="${c.id}" data-sale="${s.id}" data-qty="${c.count_split.sale_qty}">&#10003;&nbsp; Yes — ${c.count_split.sale_qty} of ${c.count_split.order_qty} went here</button>`
+        : s ? `<button class="btn em wide" data-msconfirm="${c.id}" data-sale="${s.id}">&#10003;&nbsp; That's the one</button>` : ""}
       <button class="btn ghost wide" data-mspick="${c.id}" data-rej="${s ? s.id : ""}">${s ? "Different invoice" : "Pick the invoice"}</button>
+      ${msUnits(c) > 1 ? `<button class="btn ghost wide" data-mscount="${c.id}">&#9776;&nbsp; Split by count — ${msUnits(c)} tires, several invoices</button>` : ""}
       <button class="btn ghost wide" data-mswait="${c.id}" data-rej="${s ? s.id : ""}">Not sold yet</button>
       <button class="btn ghost wide" data-msreturned="${c.id}">&#8630;&nbsp; Returned to supplier</button>
       <button class="btn ghost wide" data-msdrop="${c.id}">&#10005;&nbsp; Not a business cost</button>
@@ -2504,6 +2514,59 @@ function psMatchScreen(review, tally, after) {
         try { applyBoard(await api("/profit/exclude-cost", { id })); tally.excluded += 1; await reload(); }
         catch (er) { fail(er); busyCard(id, false); }
       };
+    }, sh);
+    // "Yes — 1 of 4 went here": place exactly this invoice's tires on it; the
+    // rest wait in stock and get asked about when they sell.
+    on("[data-mscountone]", "click", async (e) => {
+      const id = e.currentTarget.dataset.mscountone, saleId = e.currentTarget.dataset.sale, qty = Number(e.currentTarget.dataset.qty);
+      busyCard(id, true); err.textContent = "";
+      try {
+        const d = await api("/profit/match-split-count", { id, parts: [{ sale_id: saleId, qty }] });
+        applyBoard(d); tally.matched += 1; rerender(d);
+      } catch (er) { fail(er); busyCard(id, false); }
+    }, sh);
+    // "Split by count": how many of this order's tires went to each invoice.
+    // Steppers per invoice, a running total, and whatever is not placed stays
+    // in stock. One tap on "Split it" writes every share.
+    on("[data-mscount]", "click", async (e) => {
+      const id = e.currentTarget.dataset.mscount;
+      const box = sh.querySelector(`[data-mspickbox="${id}"]`);
+      if (!box.hidden && box.dataset.mode === "count") { box.hidden = true; return; }
+      box.hidden = false; box.dataset.mode = "count";
+      const item = proposed.find((c) => c.id === id);
+      const units = msUnits(item);
+      box.innerHTML = `<p class="note" style="margin:8px 0 4px">${units} tires came in. How many went to each invoice?</p><div class="note">Loading recent invoices…</div>`;
+      const seen = new Set();
+      const rows = [];
+      if (item?.sale && !seen.has(item.sale.id)) { seen.add(item.sale.id); rows.push(item.sale); }
+      for (const s of (item?.alternatives || [])) if (!seen.has(s.id)) { seen.add(s.id); rows.push(s); }
+      try {
+        const d = await get(`/profit/match-choices?id=${encodeURIComponent(id)}`);
+        for (const s of d.choices || []) if (!seen.has(s.id)) { seen.add(s.id); rows.push(s); }
+      } catch (er) { if (!rows.length) { box.innerHTML = `<div class="note err">${esc(er.message)}</div>`; return; } }
+      if (!rows.length) { box.innerHTML = `<p class="note" style="margin:8px 0">No recent invoices to choose from yet.</p>`; return; }
+      const counts = {};
+      if (item?.count_split && item.sale) counts[item.sale.id] = Number(item.count_split.sale_qty) || 0;
+      const render = () => {
+        const placed = Object.values(counts).reduce((a, b) => a + b, 0);
+        const left = units - placed;
+        box.innerHTML = `<p class="note" style="margin:8px 0 4px">${units} tires came in. How many went to each invoice?</p>` + rows.map((s) =>
+          `<div class="opt ms-count-row"><b>${s.number ? "#" + esc(s.number) : "—"}</b><span>${esc(s.customer || "")} · ${msDate(s.date)}${s.lines?.length ? "<br>" + esc(s.lines[0].text) : ""}</span>
+            <span class="ms-step"><button class="stepbtn" data-msdec="${s.id}" ${!(counts[s.id] > 0) ? "disabled" : ""}>−</button><i>${counts[s.id] || 0}</i><button class="stepbtn" data-msinc="${s.id}" ${left <= 0 ? "disabled" : ""}>+</button></span></div>`).join("")
+          + `<div class="ms-count-sum">${placed} of ${units} placed${left > 0 ? ` · <b>${left} still in stock</b> — the sweep asks about ${left === 1 ? "it" : "them"} when ${left === 1 ? "it" : "they"} sell${left === 1 ? "s" : ""}` : ""}</div>
+          <button class="btn em wide" data-mscountgo="${id}" ${placed < 1 ? "disabled" : ""}>&#10003;&nbsp; Split it${placed < units ? ` — ${placed} sold, ${left} in stock` : " across these invoices"}</button>`;
+        on("[data-msinc]", "click", (ev) => { const k = ev.currentTarget.dataset.msinc; counts[k] = (counts[k] || 0) + 1; render(); }, box);
+        on("[data-msdec]", "click", (ev) => { const k = ev.currentTarget.dataset.msdec; counts[k] = Math.max(0, (counts[k] || 0) - 1); if (!counts[k]) delete counts[k]; render(); }, box);
+        on("[data-mscountgo]", "click", async () => {
+          const parts = Object.entries(counts).filter(([, q]) => q > 0).map(([sale_id, qty]) => ({ sale_id, qty }));
+          busyCard(id, true); err.textContent = "";
+          try {
+            const d = await api("/profit/match-split-count", { id, parts });
+            applyBoard(d); tally.matched += parts.length; rerender(d);
+          } catch (er) { fail(er); busyCard(id, false); }
+        }, box);
+      };
+      render();
     }, sh);
     // "Different invoice": the next-best guesses first, then the recent sales
     // ranked for this receipt. One tap on a row is the answer.
