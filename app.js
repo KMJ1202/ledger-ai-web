@@ -1570,7 +1570,7 @@ async function nativeComposerSheet(kind) {
   const lineAmt = (l) => Math.round((Number(l.quantity) || 0) * (Number(l.rate) || 0) * 100) / 100;
   const subtotal = () => C.lines.reduce((t, l) => t + lineAmt(l), 0);
   const hasTax2 = () => !!(C.tax && C.tax.second_name && Number(C.tax.second_rate) > 0);
-  const pct = (r) => { const p = Number(r) * 100; return p.toFixed(p % 1 === 0 ? 0 : (p * 100) % 1 === 0 ? 2 : 3) + "%"; };
+  const pct = (r) => { const p = Math.round(Number(r) * 100000) / 1000; return p.toFixed(p % 1 === 0 ? 0 : (p * 100) % 1 === 0 ? 2 : 3) + "%"; };
   // Same math as the server: tax 1 on every line, tax 2 only on lines that keep it.
   const totals = () => {
     const sub = subtotal();

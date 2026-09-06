@@ -83,7 +83,7 @@ function render(data, justPaid){
   const contact = [biz.address, biz.phone, biz.tax_registration ? `GST/HST # ${biz.tax_registration}` : ""].filter(Boolean).join(" · ");
   const taxRows = (Array.isArray(inv.taxes) && inv.taxes.length ? inv.taxes : (inv.tax_total > 0 ? [{ name: inv.tax_name, rate: inv.tax_rate, total: inv.tax_total }] : []))
     .filter((t) => t.total > 0)
-    .map((t) => { const pct = t.rate * 100; return `<tr><td>${esc(t.name || "Tax")} (${pct.toFixed(pct % 1 ? ((pct * 100) % 1 ? 3 : 2) : 0)}%)</td><td class="num">${cur(t.total, c)}</td></tr>`; }).join("");
+    .map((t) => { const pct = Math.round(t.rate * 100000) / 1000; return `<tr><td>${esc(t.name || "Tax")} (${pct.toFixed(pct % 1 ? ((pct * 100) % 1 ? 3 : 2) : 0)}%)</td><td class="num">${cur(t.total, c)}</td></tr>`; }).join("");
   const chip = inv.status === "paid" ? ["paid","PAID"] : inv.status === "partial" ? ["partial","PARTIALLY PAID"] : inv.status === "void" ? ["due","VOID"] : ["due","DUE"];
   card.innerHTML = `
     <div class="biz">${biz.logo_url ? `<img src="${esc(biz.logo_url)}" alt="">` : ""}<div><div class="name">${esc(biz.name)}</div>${contact ? `<div class="bizmeta">${esc(contact)}</div>` : ""}</div></div>
