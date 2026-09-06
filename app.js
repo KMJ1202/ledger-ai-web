@@ -7399,7 +7399,7 @@ function loginView(mode = "signin", email = "") {
   // signin
   const go = authCard("Ledger AI", "Your business copilot. Same account on the web and the iPhone app.",
     `<input id="email" type="email" placeholder="you@business.com" autocomplete="email" value="${esc(email)}">${pwField("pw", "Password", "current-password")}`,
-    "Sign in", `<a href="#" id="forgot" style="color:var(--cyan)">Forgot password?</a> &nbsp;·&nbsp; New here? <a href="#" id="tosignup" style="color:var(--cyan)">Start your free trial</a>`);
+    "Sign in", `<a href="#" id="forgot" style="color:var(--cyan)">Forgot password?</a><br>New here? <a href="#" id="tosignup" style="color:var(--cyan)">Start your free trial</a>`);
   $("forgot").onclick = (e) => { e.preventDefault(); loginView("forgot", emailOf()); };
   $("tosignup").onclick = (e) => { e.preventDefault(); loginView("signup", emailOf()); };
   go.onclick = async () => {
