@@ -3410,7 +3410,140 @@ function openAddCost() {
 /* ---------------- CALENDAR ---------------- */
 // CALENDAR — mirrors iOS AppointmentCommandView: day search, three schedule stats,
 // a Next Up card, a real month booking grid, a Book button, and the selected DAY SCHEDULE.
-const CAL = { sel: null, month: null, q: "" };
+const CAL = { sel: null, month: null, q: "", hours: null, hoursLine: "" };
+
+/* ---------------- Calendar parity helpers (Kyle 1202, 2026-09-06) ----------------
+   The iPhone's Business hours row + editor, the outside-hours override, crew
+   dispatch on a booking, the crew section on an appointment, the needs-cover
+   flag on the run sheet, and a Crew screen (Track record / Time cards / Roster). */
+const HOUR_DAYS = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]];
+const hoursLineOf = (d) => (d?.description || "").trim() || "Not set — bookings at any time are allowed";
+
+async function loadCalendarHoursLine() {
+  if (!$("bizhoursline")) return;
+  try {
+    const d = await api("/google-calendar/hours", null, "GET");
+    CAL.hours = d; CAL.hoursLine = hoursLineOf(d);
+  } catch { CAL.hoursLine = "Couldn't load your hours"; }
+  const el = $("bizhoursline"); if (el) el.textContent = CAL.hoursLine;
+}
+
+async function calendarHoursSheet() {
+  let d = CAL.hours;
+  if (!d) { try { d = await api("/google-calendar/hours", null, "GET"); CAL.hours = d; } catch (err) { toast(err.message, "err"); return; } }
+  const hours = { ...(d.business_hours || {}) };
+  const rule = "Bookings outside these hours are refused unless you choose Book anyway. Turn every day off to allow any time.";
+  sheet(`<h2>Business hours</h2>
+    <p class="sh-sub">When can customers be booked?</p>
+    ${HOUR_DAYS.map(([k, l]) => { const h = hours[k]; return `<div class="hourrow" data-hday="${k}">
+      <label class="hourtoggle"><input type="checkbox" data-hon="${k}" ${h ? "checked" : ""}> <b>${l}</b></label>
+      <span class="hourtimes" ${h ? "" : "hidden"}><input type="time" data-hopen="${k}" value="${esc(h?.open || "08:00")}"> <em>to</em> <input type="time" data-hclose="${k}" value="${esc(h?.close || "17:00")}"></span>
+    </div>`; }).join("")}
+    <p class="note" style="margin-top:10px">${esc(d.timezone ? `${rule} Times are ${d.timezone}.` : rule)}</p>
+    <button class="btn em wide" style="margin-top:13px" id="hoursave">Save hours</button>
+    <div class="note" id="hoursnote" style="margin-top:8px"></div>`, (sh) => {
+    sh.querySelectorAll("[data-hon]").forEach((c) => c.onchange = () => {
+      sh.querySelector(`.hourrow[data-hday="${c.dataset.hon}"] .hourtimes`).hidden = !c.checked;
+    });
+    sh.querySelector("#hoursave").onclick = async (e) => {
+      e.currentTarget.disabled = true; const note = sh.querySelector("#hoursnote");
+      const body = {};
+      for (const [k] of HOUR_DAYS) {
+        const on = sh.querySelector(`[data-hon="${k}"]`).checked;
+        body[k] = on ? { open: sh.querySelector(`[data-hopen="${k}"]`).value || "08:00", close: sh.querySelector(`[data-hclose="${k}"]`).value || "17:00" } : null;
+      }
+      try {
+        const saved = await api("/google-calendar/hours", { business_hours: body });
+        CAL.hours = saved; CAL.hoursLine = hoursLineOf(saved);
+        toast("Business hours saved"); closeSheet();
+        const el = $("bizhoursline"); if (el) el.textContent = CAL.hoursLine;
+      } catch (err) { note.className = "note err"; note.textContent = err.message; e.currentTarget.disabled = false; }
+    };
+  });
+}
+
+/** Today's run sheet: how many upcoming jobs have someone on them who is off today (iOS needsCover). */
+async function loadRunSheetCover(todayTimed) {
+  const el = $("rscover"); if (!el || !todayTimed.length) return;
+  const today = dayKey(new Date());
+  try {
+    const d = await api("/crew", { action: "dispatch", from: today, to: today });
+    const rows = (d.days || []).flatMap((x) => x.assignments || []);
+    const now = new Date();
+    const uncovered = todayTimed.filter((e) => new Date(e.end || e.start) >= now
+      && rows.some((a) => a.eventId === e.id && a.crewOff && a.status !== "done")).length;
+    const el2 = $("rscover"); if (!el2) return;
+    if (uncovered) { el2.textContent = `${uncovered} need${uncovered === 1 ? "s" : ""} cover`; el2.hidden = false; }
+  } catch { /* no roster, or signed out — the run sheet simply carries no cover flag */ }
+}
+
+/** Crew on an appointment: who's on it, off-day warnings, tap to add or remove (iOS CalendarDetailView + AssignCrewSheet). */
+async function loadEventCrew(sh, e) {
+  const box = sh.querySelector("#evcrew"), tag = sh.querySelector("#evcrewtag"); if (!box) return;
+  let assignments = [], roster = [];
+  try {
+    const [a, r] = await Promise.all([api("/crew", { action: "for-event", event_id: e.id }), api("/crew", { action: "list" })]);
+    assignments = a.assignments || []; roster = (r.employees || []).filter((x) => x.active !== false);
+  } catch (err) { box.innerHTML = `<span class="note">${esc(err.message)}</span>`; return; }
+  if (!sh.contains(box)) return;
+  const off = assignments.filter((a) => a.crewOff && a.status !== "done").length;
+  tag.textContent = !assignments.length ? "Nobody on it yet" : off ? "Someone on this job is off" : "";
+  tag.style.color = (!assignments.length || off) ? "var(--orange)" : "";
+  box.innerHTML = `<div class="chips" style="display:flex;flex-wrap:wrap;gap:8px">
+      ${assignments.map((a) => `<button type="button" class="chip on" data-evunassign="${esc(a.employeeId)}" title="Tap to take them off">${esc(a.employeeName || "Crew")}${a.crewOff && a.status !== "done" ? " · off that day — needs cover" : ""}</button>`).join("")}
+      ${roster.filter((x) => !assignments.some((a) => a.employeeId === x.id)).map((x) => `<button type="button" class="chip" data-evassign="${esc(x.id)}">${esc(x.name)}</button>`).join("")}
+    </div>
+    <p class="note" style="margin-top:6px">${roster.length
+      ? `Tap a name to put them on this job ${esc(dayLabel(e.start))}. Tap again to take them off.`
+      : "No crew on the roster yet. Add crew members from the Crew card on the Calendar tab first."}</p>`;
+  const rerun = () => loadEventCrew(sh, e);
+  box.querySelectorAll("[data-evassign]").forEach((b) => b.onclick = async () => {
+    b.disabled = true;
+    try {
+      await api("/crew", { action: "assign", employee_id: b.dataset.evassign, event_id: e.id, job_date: evDayKey(e.start),
+        job_title: e.title, job_start: e.start, job_location: e.location || "", job_details: e.description || "" });
+      rerun();
+    } catch (err) { toast(err.message, "err"); b.disabled = false; }
+  });
+  box.querySelectorAll("[data-evunassign]").forEach((b) => b.onclick = async () => {
+    b.disabled = true;
+    try { await api("/crew", { action: "unassign", employee_id: b.dataset.evunassign, event_id: e.id }); rerun(); }
+    catch (err) { toast(err.message, "err"); b.disabled = false; }
+  });
+}
+
+/** The Crew screen (iOS CrewCommandView): Track record, Time cards, Roster. */
+async function crewCommandSheet() {
+  let rec = [];
+  try { rec = (await api("/crew", { action: "track-record" })).track_record || []; } catch { rec = []; }
+  const jobsMonth = rec.reduce((t, r) => t + (r.thisMonth || 0), 0);
+  const row = (id, icon, title, sub) => `<button class="attnrow cyan" data-crewgo="${id}" style="width:100%"><span class="ic">${icon}</span><span class="m"><b>${title}</b><span>${sub}</span></span><span class="chev">&#8250;</span></button>`;
+  sheet(`<h2>Crew</h2>
+    <p class="sh-sub">Roster, time cards and who's on what${jobsMonth ? ` · ${jobsMonth} job${jobsMonth === 1 ? "" : "s"} this month` : ""}</p>
+    <div class="attn" style="margin-top:10px">
+      ${row("track", "&#127942;", "Track record", "Jobs per crew member — total, 7 days, this month")}
+      ${row("cards", "&#9201;", "Time cards", "Clock-in hours per crew member — payroll-ready totals")}
+      ${row("roster", "&#128101;", "Roster", "Crew Members — add, shifts, time off")}
+    </div>`, (sh) => {
+    on("[data-crewgo]", "click", (e) => {
+      const k = e.currentTarget.dataset.crewgo; closeSheet();
+      if (k === "track") crewTrackRecordSheet(rec);
+      else if (k === "cards") crewHoursSheet();
+      else crewRosterSheet();
+    }, sh);
+  });
+}
+
+function crewTrackRecordSheet(rec) {
+  sheet(`<h2>Track record</h2>
+    <p class="sh-sub">Jobs per crew member — total, 7 days, this month</p>
+    ${rec.length ? `<div class="list">${rec.map((r) => `<div class="item"><div class="main"><div class="ttl">${esc(r.name)}</div>
+      <div class="sub">${r.total} job${r.total === 1 ? "" : "s"} · ${r.last7Days} in 7 days · ${r.thisMonth} this month</div></div></div>`).join("")}</div>`
+      : `<div class="empty">No jobs dispatched yet. Put crew on an appointment and they show up here.</div>`}
+    <button class="btn ghost wide" style="margin-top:12px" id="trback">&#8592; Back to Crew</button>`, (sh) => {
+    sh.querySelector("#trback").onclick = () => { closeSheet(); crewCommandSheet(); };
+  });
+}
 const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const evDayKey = (iso) => { const d = new Date(iso && iso.length === 10 ? iso + "T12:00:00" : iso); return isNaN(d) ? "" : dayKey(d); };
@@ -3524,7 +3657,7 @@ function drawCalendar() {
     runRows.sort((a, b) => a.at - b.at);
   }
   const runSheet = runRows.length ? `<div class="runsheet">
-    <div class="rshead">&#128421; TODAY'S RUN SHEET</div>
+    <div class="rshead">&#128421; TODAY'S RUN SHEET<span id="rscover" class="rscover" hidden></span></div>
     ${runRows.map((r) => {
       if (r.kind === "now") return `<div class="rsnow"><i></i><span>NOW · ${esc(clock(now))}</span><u></u></div>`;
       if (r.kind === "gap") return `<div class="rsgap"><span>&#10022; OPEN · ${esc(r.label)}</span>
@@ -3578,7 +3711,7 @@ function drawCalendar() {
       <div class="bchead">
         <div><span class="eyebrow">Booking calendar</span>
           <b>${first.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</b></div>
-        <div class="nav"><button data-mo="-1">&#8249;</button><button data-mo="0">TODAY</button><button data-mo="1">&#8250;</button></div>
+        <div class="nav"><button data-mo="-1">&#8249;</button><button data-mo="0">Today</button><button data-mo="1">&#8250;</button></div>
       </div>
       <div class="cgrid">
         ${["M", "T", "W", "T", "F", "S", "S"].map((d) => `<span class="dow">${d}</span>`).join("")}
@@ -3587,15 +3720,20 @@ function drawCalendar() {
       <div class="bcfoot"><span>&#128337; ${selCount} appointment${selCount === 1 ? "" : "s"}</span>
         <span>${selDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</span></div>
     </div>
-    <button class="bookbtn" id="bookday">
-      <span class="ic">&#128197;</span>
-      <span class="m"><b>BOOK ${selDate.toLocaleDateString(undefined, { month: "short", day: "numeric" }).toUpperCase()}</b>
-        <span>Live availability · verified Calendar write</span></span>
-      <span class="go">&#8599;</span></button>
     <button class="bookbtn" id="crewbtn">
       <span class="ic">&#128119;</span>
-      <span class="m"><b>CREW</b>
-        <span>Hours, time cards, roster &amp; shifts</span></span>
+      <span class="m"><b>Crew</b>
+        <span>Roster, time cards and who's on what</span></span>
+      <span class="go">&#8599;</span></button>
+    <button class="bookbtn" id="bookday">
+      <span class="ic">&#128197;</span>
+      <span class="m"><b>Book ${selDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b>
+        <span>Pick a time, add the crew, it lands on the calendar</span></span>
+      <span class="go">&#8599;</span></button>
+    <button class="bookbtn" id="bizhours">
+      <span class="ic">&#128337;</span>
+      <span class="m"><b>Business hours</b>
+        <span id="bizhoursline">${esc(CAL.hoursLine || "Loading…")}</span></span>
       <span class="go">&#8599;</span></button>
     <div class="dayhead">
       <div><span class="eyebrow">Day schedule</span>
@@ -3606,10 +3744,11 @@ function drawCalendar() {
       const past = new Date(e.end || e.start) < now;
       return `<button class="item${past ? " past" : ""}" data-ev="${esc(e.id)}">
         <div class="main"><div class="ttl">${e.id === nextSelId ? '<span class="tag new">NEXT</span> ' : ""}${esc(e.title)}</div>
-          <div class="sub">${esc(timeLabel(e.start))}${e.location ? " · " + esc(e.location) : ""}</div></div>
+          <div class="sub">${esc(timeLabel(e.start))}${e.location ? " · " + esc(e.location) : ""}</div>
+          ${isAuto() && !past ? `<div class="scanlink" data-evscan="${esc(e.id)}">&#128663; Scan vehicle &amp; close job</div>` : ""}</div>
         <div class="amt"><small>${esc((e.status || "").toUpperCase())}</small></div></button>`;
     }).join("")}</div>`
-      : `<button class="empty tapable" id="bookempty">This day is open.<br>Tap to create a verified appointment.</button>`}
+      : `<button class="empty tapable" id="bookempty">This day is open<br>Tap to book it</button>`}
   </div>`;
 
   const search = $("calsearch");
@@ -3624,7 +3763,15 @@ function drawCalendar() {
   on("[data-day]", "click", (e) => { CAL.sel = e.currentTarget.dataset.day; drawCalendar(); });
   on("[data-ev]", "click", (e) => eventSheet(all.find((x) => x.id === e.currentTarget.dataset.ev)));
   $("bookday").onclick = () => bookingSheet(CAL.sel);
-  $("crewbtn").onclick = () => crewHoursSheet();
+  $("crewbtn").onclick = () => crewCommandSheet();
+  $("bizhours").onclick = () => calendarHoursSheet();
+  loadCalendarHoursLine();
+  loadRunSheetCover(todayTimed);
+  on("[data-evscan]", "click", (ev) => {
+    ev.stopPropagation();
+    const e = calEvents().find((x) => x.id === ev.currentTarget.dataset.evscan);
+    if (e) vehicleScanSheet(e, () => {});
+  });
   if ($("bookempty")) $("bookempty").onclick = () => bookingSheet(CAL.sel);
 }
 
@@ -3638,7 +3785,9 @@ function eventSheet(e, back) {
     <div class="kv"><span>Status</span><span>${esc((e.status || "confirmed").replace(/^./, (c) => c.toUpperCase()))}</span></div>
     ${e.location ? `<div class="kv"><span>Location</span><span>${esc(e.location)}</span></div>` : ""}
     ${e.description ? `<p class="note" style="white-space:pre-wrap;margin-top:11px">${esc(e.description)}</p>` : ""}
-    ${isAuto() ? `<button class="btn primary wide" style="margin-top:14px" id="evscan">&#128663; Scan VIN &amp; close job</button>
+    <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Crew</span><span class="note" id="evcrewtag"></span></div>
+    <div id="evcrew"><span class="note">Loading…</span></div>
+    ${isAuto() ? `<button class="btn primary wide" style="margin-top:14px" id="evscan">&#128663; Scan vehicle &amp; close job</button>
     <p class="note" style="margin-top:6px">Scan the VIN and door placard, type the kilometres, and the completion message is ready to send. Nothing is invoiced.</p>` : ""}
     <div class="rowbtns" style="margin-top:12px">
       <button class="btn ghost" id="evdel">Delete</button>
@@ -3650,6 +3799,7 @@ function eventSheet(e, back) {
     if (back) sh.querySelector("#evback").onclick = () => back();
     const evscan = sh.querySelector("#evscan");
     if (evscan) evscan.onclick = () => vehicleScanSheet(e, () => eventSheet(e, back));
+    loadEventCrew(sh, e);
     sh.querySelector("#evedit").onclick = () => bookingSheet(evDayKey(e.start), e);
     sh.querySelector("#evdel").onclick = async (ev) => {
       if (!confirm(`Delete "${e.title}" from the calendar? This can't be undone.`)) return;
@@ -3694,16 +3844,33 @@ function bookingSheet(dayISO, editing) {
       `<option value="${n}" ${n === mins ? "selected" : ""}>${n < 60 ? n + " minutes" : n === 60 ? "1 hour" : (n / 60) + " hours"}</option>`).join("")}</select>
     ${editing ? `<label class="fld">LOCATION</label><input id="bkLoc" class="cmpinput" value="${esc(editing.location || "")}">
       <label class="fld">DETAILS</label><textarea id="bkNotes" class="cmpinput" rows="4">${esc(editing.description || "")}</textarea>`
-      : `<div class="eyebrow" style="margin-top:13px">Source &amp; job details</div>
+      : `<div class="eyebrow" style="margin-top:13px">Crew dispatch</div>
+    <div class="cmpsect"><div class="chips" id="bkCrew" style="display:flex;flex-wrap:wrap;gap:8px"><span class="note">Loading crew…</span></div></div>
+    <div class="eyebrow" style="margin-top:13px">Source &amp; job details</div>
     <div class="cmpsect">
       <select id="bkSource" class="cmpinput">${BOOK_SOURCES.map((x) => `<option>${x}</option>`).join("")}</select>
       <textarea id="bkNotes" class="cmpinput" rows="4" placeholder="Pricing, order status and job notes"></textarea>
     </div>`}
-    <button class="btn primary wide" style="margin-top:13px" id="bkGo">${editing ? "Save changes" : "Review &amp; Add Booking"}</button>
+    <button class="btn primary wide" style="margin-top:13px" id="bkGo">${editing ? "Save changes" : "Create Appointment"}</button>
     <p class="note" style="margin-top:9px">The calendar is checked live for conflicts before anything is created.</p>
     <div class="note" id="bkNote" style="margin-top:6px"></div>`, (sh) => {
     const note = sh.querySelector("#bkNote");
     const val = (id) => (sh.querySelector("#" + id)?.value || "").trim();
+    // Crew dispatch (web parity, Kyle 2026-09-06): the roster as tap-chips,
+    // each picked name is put on the new job the moment it exists.
+    const picked = new Set();
+    const crewBox = sh.querySelector("#bkCrew");
+    if (crewBox) api("/crew", { action: "list" }).then((r) => {
+      if (!sh.contains(crewBox)) return;
+      const crew = (r.employees || []).filter((x) => x.active !== false);
+      crewBox.innerHTML = crew.length
+        ? crew.map((x) => `<button type="button" class="chip" data-bkcrew="${esc(x.id)}">${esc(x.name)}</button>`).join("")
+        : `<span class="note">No crew on the roster yet — add crew members from the Crew card on the Calendar tab.</span>`;
+      crewBox.querySelectorAll("[data-bkcrew]").forEach((b) => b.onclick = () => {
+        const id = b.dataset.bkcrew;
+        if (picked.has(id)) { picked.delete(id); b.classList.remove("on"); } else { picked.add(id); b.classList.add("on"); }
+      });
+    }).catch(() => { if (crewBox) crewBox.innerHTML = ""; });
     sh.querySelector("#bkGo").onclick = async (ev) => {
       const startVal = val("bkStart");
       if (!startVal) { note.className = "note err"; note.textContent = "Pick a start time."; return; }
@@ -3728,12 +3895,36 @@ function bookingSheet(dayISO, editing) {
           val("bkTire") ? `Tire size: ${val("bkTire")}` : null,
           `Source: ${val("bkSource")}`, val("bkNotes") ? `Notes: ${val("bkNotes")}` : null,
         ].filter(Boolean).join("\n");
-        await api("/google-calendar/bookings", {
+        const payload = {
           title: `${val("bkFirst")} ${val("bkLast")} — ${val("bkService")}`,
           description: details, email: val("bkEmail"),
           start: start.toISOString(), end: end.toISOString(),
-        });
-        S.cal = null; closeSheet(); toast("Appointment booked"); renderCalendar();
+        };
+        const finish = async (created) => {
+          const eventId = created?.event?.id;
+          for (const employeeId of picked) {
+            if (!eventId) break;
+            try {
+              await api("/crew", { action: "assign", employee_id: employeeId, event_id: eventId, job_date: localDay(start),
+                job_title: payload.title, job_start: payload.start, job_location: "", job_details: details });
+            } catch (err) { toast(`Couldn't put crew on the job: ${err.message}`, "err"); }
+          }
+          S.cal = null; closeSheet(); toast("Appointment booked"); renderCalendar();
+        };
+        try {
+          await finish(await api("/google-calendar/bookings", payload));
+        } catch (e) {
+          if (e.data?.error !== "outside_hours") throw e;
+          // Outside business hours: say so and offer the iPhone's override.
+          ev.currentTarget.disabled = false;
+          note.className = "note err";
+          note.innerHTML = `${esc(e.message)}<br><button class="btn ghost wide" style="margin-top:9px" id="bkForce">&#10003;&nbsp; Book outside hours anyway</button>`;
+          note.querySelector("#bkForce").onclick = async (ev2) => {
+            ev2.currentTarget.disabled = true;
+            try { await finish(await api("/google-calendar/bookings", { ...payload, force: true })); }
+            catch (err) { ev2.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
+          };
+        }
       } catch (e) { ev.currentTarget.disabled = false; note.className = "note err"; note.textContent = e.message; }
     };
   });
@@ -5293,7 +5484,7 @@ function crewReminderEditSheet(rem, crewCache) {
     </div>
     <label class="fld" style="margin-top:14px">WHO GETS IT</label>
     <div class="rowbtns" style="margin-top:6px">
-      <button class="btn ${audience === "all" ? "em" : ""}" id="crWhoAll" type="button">Everyone on the crew</button>
+      <button class="btn ${audience === "all" ? "em" : ""}" id="crWhoAll" type="button">Everyone</button>
       <button class="btn ${audience === "selected" ? "em" : ""}" id="crWhoSome" type="button">Only who I pick</button>
     </div>
     <div id="crPickWrap" style="display:${audience === "selected" ? "block" : "none"}">
