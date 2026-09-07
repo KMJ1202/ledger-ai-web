@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 98;
+const APP_BUILD = 99;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -2118,15 +2118,15 @@ async function loadInvoices() {
           <span class="tic" style="background:rgba(58,200,245,.3);color:#fff">&#43;</span>
           <em>New invoice</em><i>Draft, review, post</i></button>
         <button class="fintile act" id="newest">
-          <span class="tic" style="background:rgba(47,224,160,.16);color:var(--emerald)">&#128221;</span>
+          <span class="tic" style="background:rgba(47,224,160,.16);color:var(--emerald)">${segIc("receipts")}</span>
           <em>New estimate</em><i>Quote &mdash; posts nothing</i></button>
-        <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">&#9728;</span>
+        <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">${segIc("pulse")}</span>
           <span class="dot cyan"></span><small>Today</small><b>${money(k.today_sales || 0)}</b></div>
-        <div class="fintile"><span class="tic" style="background:rgba(168,85,247,.15);color:var(--magenta)">&#128200;</span>
+        <div class="fintile"><span class="tic" style="background:rgba(168,85,247,.15);color:var(--magenta)">${segIc("profit")}</span>
           <span class="dot em"></span><small>Year to date</small><b>${money(k.ytd_sales || 0)}</b></div>
-        <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#8987;</span>
+        <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">${segIc("calclock")}</span>
           <span class="dot orange"></span><small>Outstanding</small><b>${money(k.outstanding || 0)}</b></div>
-        <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#128196;</span>
+        <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">${segIc("receipts")}</span>
           <span class="nextchip">Next #${esc(String(k.next_invoice ?? "—"))}</span><small>Open invoices</small><b>${k.open_count ?? 0}</b></div>
       </div>
       <div class="searchwrap"><span class="mag">${MAG}</span>
