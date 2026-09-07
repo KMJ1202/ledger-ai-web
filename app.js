@@ -720,6 +720,8 @@ async function loadHomeReviewsPulse() {
   try {
     const board = (await get("/google-business-profile/reviews?limit=10")).reviews;
     const unanswered = Number(board.unanswered_count) || 0;
+    S.revUnanswered = unanswered;
+    localStorage.removeItem("kmj.gbpOff");
     const avg = Number(board.average_rating) || 0;
     const total = Number(board.total_review_count ?? board.total_count) || 0;
     const latest = (board.items || []).find((r) => r.comment);
@@ -731,8 +733,13 @@ async function loadHomeReviewsPulse() {
       </div>
       ${latest ? `<p class="rvquote">&ldquo;${esc(latest.comment)}&rdquo;</p>` : ""}
     </button>`;
-    $("rvpulse").onclick = () => { S.lane = "reviews"; setTab("customers"); };
-  } catch { slot.innerHTML = ""; }
+    const pulse = slot.querySelector("#rvpulse");
+    if (pulse) pulse.onclick = () => { S.lane = "reviews"; setTab("customers"); };
+  } catch (e) {
+    slot.innerHTML = "";
+    S.revUnanswered = 0;
+    if (e && (e.status === 409 || e.status === 403)) localStorage.setItem("kmj.gbpOff", "1");
+  }
 }
 
 async function loadHomeCalendar() {
@@ -1274,12 +1281,13 @@ async function loadHomeMail() {
   } catch (e) {
     body = /not connected/i.test(e.message) ? connectCopy : pvretry("Couldn't load your latest emails.");
   }
-  if (!$("homemail")) return;
+  if (!slot.isConnected) return;
   slot.innerHTML = `<div class="panel pvcard rd inboxcard">
     ${srail("inbox", "Inbox", "rd", `<span class="bdg" style="--gt:${unread ? "255,107,107" : "194,209,230"}">${unread ? `${unread} unread` : "Clear"}</span><button class="rfbtn" id="mailrefresh" title="Refresh inbox">&#8635;</button>`)}
     <div class="pvbody">${body}</div></div>`;
   on("[data-mail]", "click", (e) => emailSheet(S.emails[Number(e.currentTarget.dataset.mail)]), slot);
-  $("mailrefresh").onclick = (e) => { e.stopPropagation(); loadHomeMail(); };
+  const mailRefresh = slot.querySelector("#mailrefresh");
+  if (mailRefresh) mailRefresh.onclick = (e) => { e.stopPropagation(); loadHomeMail(); };
   wireRetry(slot, () => loadHomeMail());
 }
 
@@ -6190,9 +6198,11 @@ async function renderCustomers() {
     // opening the lane, so fetch the count once per session.
     if (S.revUnanswered === undefined) {
       S.revUnanswered = 0;
-      get("/google-business-profile/reviews?limit=10")
-        .then((d) => { S.revUnanswered = d.reviews?.unanswered_count || 0; if (S.tab === "customers" && S.revUnanswered) renderCustomers(); })
-        .catch(() => {});
+      if (localStorage.getItem("kmj.gbpOff") !== "1") {
+        get("/google-business-profile/reviews?limit=10")
+          .then((d) => { S.revUnanswered = d.reviews?.unanswered_count || 0; if (S.tab === "customers" && S.revUnanswered) renderCustomers(); })
+          .catch((e) => { if (e && (e.status === 409 || e.status === 403)) localStorage.setItem("kmj.gbpOff", "1"); });
+      }
     }
   } else if (S.lane === "reviews") loadReviewsLane();
   else loadBoard();
