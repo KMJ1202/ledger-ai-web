@@ -238,6 +238,11 @@ const SEG_ICONS = {
   camera: `<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>`,
   pulse: `<path d="M3 12h3l2-5 3 10 2-5h8"/>`,
   calendar: `<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>`,
+  tag: `<path d="M3 12V4h8l9 9-8 8-9-9z"/><circle cx="7.5" cy="8.5" r="1.3"/>`,
+  bubble: `<path d="M4 5h11v8H8l-4 3V5z"/><path d="M15 9h5v8l-3-2h-6v-3"/>`,
+  mic: `<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0012 0M12 17v4M9 21h6"/>`,
+  search: `<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/>`,
+  warn: `<path d="M12 3l10 18H2L12 3zM12 10v5M12 18v.5"/>`,
   phone: `<path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/>`,
   dollar: `<circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.5 9.5c0-1.1-1.1-1.8-2.5-1.8s-2.5.7-2.5 1.8 1.1 1.6 2.5 1.9 2.5.8 2.5 1.9-1.1 1.8-2.5 1.8-2.5-.7-2.5-1.8"/>`,
   people: `<circle cx="9" cy="8" r="3"/><path d="M3 19c0-3.3 2.7-6 6-6s6 2.7 6 6M16 5.5a3 3 0 010 5.8M18 13.5c2 .8 3 2.6 3 5.5"/>`,
@@ -285,7 +290,6 @@ function appView() {
     <button class="hchat" id="hchat" title="Ask Ledger">&#128172;</button>
     <button class="avatar" id="more" title="Your business"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.6" fill="currentColor"/><path d="M5.5 19.4c.9-3.2 3.5-5 6.5-5s5.6 1.8 6.5 5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
   </header>
-  <div id="banner">💡 Advisor Mode — business guidance beyond your books, on your AI allowance</div>
   <div id="alertbar"></div>
   <main id="view"></main>
   <nav id="tabs">${TABS.map((t) => `<button data-tab="${t.key}" class="${S.tab === t.key ? "on" : ""}">
@@ -297,6 +301,7 @@ function appView() {
       <span class="pill${S.advisor ? " on" : ""}" id="advisor">💡 Advisor</span>
       <button class="pill" id="newconv" title="New conversation">✚</button>
     </header>
+    <div id="banner">💡 Advisor Mode — business guidance beyond your books, on your AI allowance</div>
     <main id="chat" class="chatpane"></main>
     <footer><textarea id="box" rows="1" placeholder="Ask about your business…"></textarea><button id="send">↑</button></footer>
   </div>`;
@@ -492,11 +497,11 @@ function ptile({ label, value, detail, icon, tone, loading = false, unavailable 
 }
 
 /** One row inside a preview card. */
-function pvline(primary, secondary, badge, icon) {
+function pvline(primary, secondary, badge, icon, badgeRgb) {
   return `<div class="pvline">
     ${icon ? `<span class="pic">${segIc(icon)}</span>` : ""}
     <span class="m"><b>${esc(primary)}</b>${secondary ? `<small>${esc(secondary)}</small>` : ""}</span>
-    ${badge ? `<span class="bdg">${esc(badge)}</span>` : ""}</div>`;
+    ${badge ? `<span class="bdg"${badgeRgb ? ` style="--gt:${badgeRgb}"` : ""}>${esc(badge)}</span>` : ""}</div>`;
 }
 
 /** Section rail + rows + full-width gradient CTA, exactly like LedgerPreviewCard. */
@@ -515,37 +520,40 @@ function pvstats(items) {
 
 async function renderHome() {
   const logo = S.profile?.business?.logo_url;
+  homeSrc = null; // one fetch per source per render, shared by every card below
   // Section order is the iPhone app's, line for line (LedgerHomeView.body):
-  // hero → profile & settings → Ask Ledger → Go to → Today → reviews → needs
-  // your attention → Calendar → Phone → Finance → Customers → Inbox → safety.
-  // The big "— HOME / LEDGER" masthead is gone here for the same reason it left
-  // iOS in build 71: the brand bar above and the hero below already say it.
+  // banner → hero → profile & settings → Ask Ledger → Go to → Today → reviews →
+  // needs your attention → Calendar → Phone → Finance → Customers → Inbox → safety.
+  // Parity pass (Kyle 1202, 2026-09-06): "Get set up" stays and is ported to the
+  // iPhone; "Ledger's next move", the VIN row and the ONLINE tag are gone because
+  // the iPhone never had them. The camera glyph in the Ask box is decoration on
+  // both platforms — the box opens chat, the Receipts tile files receipts.
   view().innerHTML = `
     <div class="sect">
+      <div id="homebanner"></div>
       <div class="brandcard">
         <div class="tile">${logo ? `<img src="${esc(logo)}" alt="">` : '<img src="assets/logo-mark-96.png" alt="">'}</div>
         <div class="who"><b class="chrome">Ledger AI</b><span>Your business, answered.</span></div>
-        <span class="status"><i></i>READY</span>
+        <span class="status"><i></i>Ready</span>
       </div>
 
       <div id="homesetup"></div>
 
       <button class="bizrow" id="bizsettings">
-        <span class="ic">&#9881;</span>
-        <span class="m"><b>Business profile &amp; settings</b><small>CONNECTIONS · BOOKS · PHONE · TEAM · BILLING</small></span>
+        <span class="ic">${segIc("gear")}</span>
+        <span class="m"><b>Business profile &amp; settings</b><small>Connections · branding · team</small></span>
         <span class="go">&#8599;</span>
       </button>
 
       <div class="console">
         <div class="chead">
           <b>Ask Ledger</b>
-          <span class="core">ONLINE</span>
-          <button class="livepill" id="livebtn"><span class="wv"><i></i><i></i><i></i><i></i></span>LIVE</button>
+          <button class="livepill" id="livebtn"><span class="wv"><i></i><i></i><i></i><i></i></span>Live</button>
         </div>
         <div class="askfield">
           <span class="sparkicon">&#10022;</span>
           <input id="askbox" placeholder="Tell Ledger what to do…" autocomplete="off">
-          <button class="iconbtn" id="askcam" title="Capture a receipt">&#9673;</button>
+          <span class="camic" aria-hidden="true">${segIc("camera")}</span>
           <button class="gobtn" id="askgo" title="Send">&#8593;</button>
         </div>
         <div class="askgrid">${ASK_CHIPS.map((c, i) =>
@@ -555,23 +563,18 @@ async function renderHome() {
       ${srail("grid", "Go to", "sil")}
       <div class="gotogrid">
         ${[
-          ["finance", "em", "dollar", "Finance", "Invoices · profit"],
-          ["calendar", "purple", "calendar", "Calendar", "Bookings"],
-          ["phone", "cyan", "phone", "Phone", "Calls · leads"],
-          ["customers", "red", "people", "Customers", "Directory"],
-          ["receipts", "orange", "camera", "Receipts", "Snap · file"],
-          ["reviews", "gold", "star", "Reviews", "Win 5 stars"],
-        ].map(([k, tint, icon, label, sub]) => `<button class="gotile ${tint}" data-goto="${k}">
-          <span class="ictile">${segIc(icon)}</span><span class="arrow">&#8599;</span>
+          ["finance", "em", "dollar", "Finance", "Invoices · profit", "", false],
+          ["calendar", "purple", "calendar", "Calendar", "Bookings", "gobdg-calendar", false],
+          ["phone", "cyan", "phone", "Phone", "Calls · leads", "gobdg-phone", false],
+          ["customers", "red", "people", "Customers", "Directory", "", true],
+          ["receipts", "orange", "camera", "Receipts", "Snap · file", "", true],
+          ["reviews", "gold", "star", "Reviews", "Win 5 stars", "", true],
+        ].map(([k, tint, icon, label, sub, bdg, quiet]) => `<button class="gotile ${tint}${quiet ? " q" : ""}" data-goto="${k}">
+          <span class="ictile">${segIc(icon)}</span>${bdg ? `<span class="bdg" id="${bdg}" hidden></span>` : ""}<span class="arrow">&#8599;</span>
           <b>${label}</b><small>${sub}</small></button>`).join("")}
       </div>
-      ${isAuto() ? `<button class="bizrow vinrow" data-goto="vin">
-        <span class="ic">${segIc("car")}</span>
-        <span class="m"><b>Scan a VIN</b><small>LIVE CAMERA · EVERY SPEC · ONE CARD</small></span>
-        <span class="go">&#8599;</span>
-      </button>` : ""}
 
-      ${srail("pulse", "Today", "cy", `Updated ${new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`)}
+      ${srail("pulse", "Today", "cy", `<span id="homeupdated"></span>`)}
       <div id="homekpis"><div class="ptiles">
         <div class="skel" style="height:100px"></div><div class="skel" style="height:100px"></div>
         <div class="skel" style="height:100px"></div><div class="skel" style="height:100px"></div></div></div>
@@ -582,7 +585,6 @@ async function renderHome() {
       <div id="homefin"></div>
       <div id="homecust"></div>
       <div id="homemail"></div>
-      <div id="homenext"></div>
       <div class="safety"><span class="ic">&#128737;</span>Ledger is available from every tab and still follows all confirmation and safety rules.</div>
     </div>`;
   const box = $("askbox");
@@ -606,11 +608,9 @@ async function renderHome() {
   // Ledger Live (realtime voice) — same OpenAI Realtime session the iPhone app
   // opens, over the browser's own WebRTC (Kyle 2026-09-02, web parity).
   $("livebtn").onclick = () => liveSheet();
-  $("askcam").onclick = () => { S.financeLane = "receipts"; setTab("finance"); };
   $("bizsettings").onclick = () => businessSheet();
   on("[data-goto]", "click", (e) => {
     const k = e.currentTarget.dataset.goto;
-    if (k === "vin") { vinScannerSheet(); return; }
     if (k === "receipts") { S.financeLane = "receipts"; setTab("finance"); }
     else if (k === "reviews") { S.lane = "reviews"; setTab("customers"); }
     else if (k === "finance") { S.financeLane = "invoices"; setTab("finance"); }
@@ -627,8 +627,79 @@ async function renderHome() {
   loadHomeFinance();
   loadHomeCustomers();
   loadHomeMail();
-  loadHomeNext();
 }
+
+/* ---------------- home data sources ----------------
+   One fetch per source per render, shared by every card (KPIs, attention,
+   previews). A failed fetch clears its memo so a Retry button re-runs it. */
+let homeSrc = null;
+function homeSources() {
+  if (homeSrc) return homeSrc;
+  const once = (fn) => { let p = null; return () => (p ||= fn().catch((e) => { p = null; throw e; })); };
+  homeSrc = {
+    books: once(() => homeBooksKpis()),
+    cal: once(async () => { if (!S.cal) S.cal = await get("/google-calendar/events"); return S.cal; }),
+    phone: once(async () => { if (!S.phone) S.phone = await api("/phone", { action: "board" }); return S.phone; }),
+    review: once(async () => { if (!S.review) S.review = await get("/profit/review"); return S.review; }),
+    profit: once(async () => {
+      if (!S.profit || S.profitStale) { S.profit = (await get("/profit/board")).board || {}; S.profitStale = false; }
+      return S.profit;
+    }),
+  };
+  return homeSrc;
+}
+
+/** iOS loadingBanner / errorBanner: "Pulling your books…" on the first pull, Retry when it fails. */
+function homeBanner(state, msg) {
+  const el = $("homebanner"); if (!el) return;
+  if (state === "loading") el.innerHTML = `<div class="hbanner"><span class="spin"></span><span>Pulling your books…</span></div>`;
+  else if (state === "error") el.innerHTML = `<div class="hbanner err"><span class="ic">&#9888;</span>
+      <span class="m"><b>Couldn't reach your books</b><small>${esc(msg || "")}</small></span>
+      <button class="retry" id="homeretry">Retry</button></div>`;
+  else el.innerHTML = "";
+  const r = $("homeretry");
+  if (r) r.onclick = () => { S.qboStale = true; S.nativeSummary = null; S.profitStale = true; renderHome(); };
+}
+
+/** Count badge on a Go-to tile (iOS LedgerShortcutTile.badge). */
+function goBadge(id, n) { const el = $(id); if (!el) return; el.hidden = !(n > 0); el.textContent = n > 99 ? "99" : String(n); }
+
+/** Count badge on a tab-bar button (iOS `.badge(phoneWaiting)` on the Phone tab). */
+function tabBadge(key, n) {
+  const b = document.querySelector(`#tabs button[data-tab="${key}"]`); if (!b) return;
+  let el = b.querySelector(".cnt");
+  if (!(n > 0)) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement("span"); el.className = "cnt"; b.appendChild(el); }
+  el.textContent = n > 99 ? "99+" : String(n);
+}
+
+/** iOS ledgerCompactMoney: "$12.5k" from ten thousand up, whole dollars below. */
+function compactMoney(v) {
+  const n = Number(v) || 0;
+  if (Math.abs(n) >= 10000) return "$" + (n / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + "k";
+  return money0(n);
+}
+
+/** iOS ledgerRelative (abbreviated): "5 min ago", "2 hr ago", "yesterday". */
+function relTime(iso) {
+  const t = Date.parse(iso || ""); if (Number.isNaN(t)) return "";
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} hr ago`;
+  const d = Math.floor(s / 86400);
+  return d === 1 ? "yesterday" : `${d} days ago`;
+}
+
+/** iOS StarMeter: five stars, lit to the rating. */
+function starMeter(r) {
+  const n = Math.max(0, Math.min(5, Math.round(Number(r) || 0)));
+  return "&#9733;".repeat(n) + `<span style="opacity:.25">${"&#9733;".repeat(5 - n)}</span>`;
+}
+
+/** A card that couldn't load: the message plus Retry — the web's pull-to-refresh. */
+function pvretry(msg) { return `<p class="pvempty err">${esc(msg)}</p><button class="retry" data-retry>Retry</button>`; }
+function wireRetry(scope, fn) { const b = scope.querySelector("[data-retry]"); if (b) b.onclick = (e) => { e.stopPropagation(); fn(); }; }
 
 /* ---------------- home preview cards ----------------
    One per tab, in the iPhone app's order. Each is allowed to fail on its own:
@@ -643,17 +714,23 @@ function wirePv(id, go) {
 // exactly like iOS. Home never nags about a connector nobody asked for.
 async function loadHomeReviewsPulse() {
   const slot = $("homereviews"); if (!slot) return;
+  // iOS reviewsPulseStrip: rail + "N to answer" tag, big rating, star meter,
+  // review count, the latest comment. Hidden entirely until Google Business
+  // Profile is connected — home never nags.
   try {
     const board = (await get("/google-business-profile/reviews?limit=10")).reviews;
     const unanswered = Number(board.unanswered_count) || 0;
-    const rating = board.average_rating != null ? Number(board.average_rating).toFixed(1) : "—";
-    slot.innerHTML = `<button class="panel pvcard gd" id="rvpulse" style="width:100%;text-align:left">
-      ${srail("star", "Google reviews", "gd", `<span class="bdg" style="--gt:${unanswered ? "251,146,60" : "26,230,148"}">${unanswered ? `${unanswered} to answer` : "All replied"}</span>`)}
-      <div class="pvstats">
-        <div class="pvstat"><b style="color:var(--gold)">${esc(rating)}</b><small>average rating</small></div>
-        <div class="pvstat"><b>${Number(board.total_count) || 0}</b><small>reviews</small></div>
-        <div class="pvstat"><b style="color:${unanswered ? "var(--orange)" : "var(--emerald)"}">${unanswered}</b><small>awaiting reply</small></div>
-      </div></button>`;
+    const avg = Number(board.average_rating) || 0;
+    const total = Number(board.total_review_count ?? board.total_count) || 0;
+    const latest = (board.items || []).find((r) => r.comment);
+    slot.innerHTML = `<button class="panel pvcard gd rvpulse" id="rvpulse">
+      ${srail("star", "Google reviews", "gd", `<span class="bdg" style="--gt:${unanswered ? "251,146,60" : "26,230,148"}">${unanswered ? `${unanswered} to answer` : "All replied"}</span><span class="arrow">&#8599;</span>`)}
+      <div class="rvrow">
+        <b class="rvbig">${avg > 0 ? avg.toFixed(1) : "—"}</b>
+        <span class="m"><span class="starrow sm">${starMeter(avg)}</span><small>${total} Google review${total === 1 ? "" : "s"}</small></span>
+      </div>
+      ${latest ? `<p class="rvquote">&ldquo;${esc(latest.comment)}&rdquo;</p>` : ""}
+    </button>`;
     $("rvpulse").onclick = () => { S.lane = "reviews"; setTab("customers"); };
   } catch { slot.innerHTML = ""; }
 }
@@ -662,59 +739,73 @@ async function loadHomeCalendar() {
   const slot = $("homecal"); if (!slot) return;
   let inner;
   try {
-    if (!S.cal) S.cal = await get("/google-calendar/events");
-    const up = S.cal?.calendar?.upcoming || [];
+    const cal = await homeSources().cal();
+    const up = cal?.calendar?.upcoming || [];
+    const total = Number(cal?.calendar?.upcoming_count ?? up.length);
+    // A real glimpse of the day: the next three, the first one badged "Next".
     inner = up.length
-      ? up.slice(0, 3).map((e) => pvline(e.title || "Untitled appointment",
-          `${dayLabel(e.start)} · ${new Date(e.start).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`,
-          null, "calendar")).join("") +
-        (up.length > 3 ? `<p class="pvempty">+ ${up.length - 3} more upcoming</p>` : "")
+      ? up.slice(0, 3).map((e, i) => pvline(e.title || "Untitled appointment",
+          [e.all_day ? dateShort(e.start) : `${dateShort(e.start)} · ${timeLabel(e.start)}`, e.location].filter(Boolean).join(" · "),
+          i === 0 ? "Next" : null, i === 0 ? "calclock" : "calendar")).join("") +
+        (total > 3 ? `<p class="pvempty">+ ${total - 3} more upcoming</p>` : "")
       : `<p class="pvempty">Nothing booked yet.</p>`;
   } catch (e) {
     inner = /not connected/i.test(e.message)
       ? `<p class="pvempty">Google Calendar isn't connected yet — connect it in Business profile &amp; settings and your week lands here.</p>`
-      : `<p class="pvempty">Couldn't load the calendar.</p>`;
+      : pvretry("Couldn't load your calendar.");
   }
   slot.innerHTML = pvcard("pvcal", "calendar", "Calendar", "pu", "View Calendar", inner);
   wirePv("pvcal", () => setTab("calendar"));
+  wireRetry(slot, () => { S.cal = null; homeSrc = null; loadHomeCalendar(); });
 }
 
 async function loadHomePhone() {
   const slot = $("homephone"); if (!slot) return;
   let inner;
   try {
-    if (!S.phone) S.phone = await api("/phone", { action: "board" });
-    const d = S.phone;
+    const d = await homeSources().phone();
     if (!d.hasNumber) {
       inner = `<p class="pvempty">No business number connected yet — set one up in Phone.</p>`;
     } else {
       const m = d.metrics || {};
       inner = pvstats([
         [String(m.missedToday ?? 0), "missed today", (m.missedToday ?? 0) > 0 ? "var(--orange)" : "var(--dim)"],
-        [String(m.voicemailsUnheard ?? 0), "voicemails", (m.voicemailsUnheard ?? 0) > 0 ? "var(--cyan)" : "var(--dim)"],
-        [String(m.leads7d ?? 0), "leads · 7 days", "var(--emerald)"],
-      ]) + ((m.awaitingReply ?? 0) > 0
-        ? `<p class="pvempty">${m.awaitingReply} conversation${m.awaitingReply === 1 ? " is" : "s are"} waiting on a reply.</p>` : "");
+        [String(m.leads7d ?? 0), "leads · 7d", "var(--cyan)"],
+        [String(m.awaitingReply ?? 0), "awaiting reply", (m.awaitingReply ?? 0) > 0 ? "var(--orange)" : "var(--dim)"],
+      ]);
+      // Newest call, like iOS: one date parse per event, newest wins.
+      const newest = (d.events || [])
+        .map((r) => ({ r, t: Date.parse(r.occurredAt || "") || 0 }))
+        .sort((a, b) => b.t - a.t)[0]?.r;
+      if (newest) {
+        const status = newest.answered ? "Answered" : (newest.direction === "inbound" ? "Missed" : "Outgoing");
+        inner += `<div class="pvdiv"></div>` + pvline(newest.callerName || newest.callerNumber || "Unknown caller",
+          [status, relTime(newest.occurredAt)].filter(Boolean).join(" · "), "Newest",
+          newest.answered ? "phone" : "phonearrow", newest.answered ? "26,230,148" : "251,146,60");
+      }
     }
-  } catch { inner = `<p class="pvempty">Couldn't load phone activity.</p>`; }
+    tabBadge("phone", (d.needsYou || []).length);
+  } catch { inner = pvretry("Couldn't load phone activity."); }
   slot.innerHTML = pvcard("pvphone", "phone", "Phone", "cy", "Open Phone", inner);
   wirePv("pvphone", () => setTab("phone"));
+  wireRetry(slot, () => { S.phone = null; homeSrc = null; loadHomePhone(); });
 }
 
 async function loadHomeFinance() {
   const slot = $("homefin"); if (!slot) return;
   let inner;
   try {
-    const k = await homeBooksKpis();
+    const k = await homeSources().books();
     inner = pvstats([
-      [money0(k.today_sales), "sales today", "var(--emerald)"],
-      [money0(k.month_sales), "month to date", "var(--cyan)"],
-      [money0(k.outstanding), "outstanding", Number(k.outstanding) > 0 ? "var(--orange)" : "var(--dim)"],
+      [compactMoney(k.today_sales), "sales today", "var(--emerald)"],
+      [compactMoney(k.month_sales), "month to date", "var(--cyan)"],
+      [compactMoney(k.outstanding), "outstanding", Number(k.outstanding) > 0 ? "var(--orange)" : "var(--dim)"],
     ]) + (Number(k.outstanding) > 0
       ? `<p class="pvempty">${k.open_count || 0} invoice${(k.open_count || 0) === 1 ? "" : "s"} still unpaid.</p>` : "");
-  } catch { inner = `<p class="pvempty">Couldn't reach your books — pull down to retry.</p>`; }
+  } catch { inner = pvretry(S.booksProvider === "native" ? "Couldn't reach your books." : "Couldn't reach QuickBooks."); }
   slot.innerHTML = pvcard("pvfin", "dollar", "Finance", "em", "Open Finance", inner);
   wirePv("pvfin", () => { S.financeLane = "invoices"; setTab("finance"); });
+  wireRetry(slot, () => { S.qboStale = true; S.nativeSummary = null; homeSrc = null; loadHomeFinance(); });
 }
 
 async function loadHomeCustomers() {
@@ -722,13 +813,38 @@ async function loadHomeCustomers() {
   let inner;
   try {
     const rows = await homeCustomers();
-    inner = rows.length
-      ? rows.slice(0, 3).map((c) => pvline(c.name || "(no name)",
-          c.created_at ? `Added ${dateShort(c.created_at)}` : (c.email || c.phone || ""), null, "people")).join("")
-      : `<p class="pvempty">No customers on file yet.</p>`;
-  } catch { inner = `<p class="pvempty">Couldn't load your customer list.</p>`; }
+    if (!rows.length) {
+      inner = `<p class="pvempty">${S.booksProvider === "native"
+        ? "No customers yet — add one with your first invoice, or ask Ledger in chat."
+        : "No customers in QuickBooks yet."}</p>`;
+    } else {
+      // iOS customersPreview: name, "Added · $ open" line, then View Customer
+      // and Ask for Review on every row. Nothing sends on render — the review
+      // sheet is the intentional act.
+      const asked = reviewAsked();
+      inner = rows.slice(0, 3).map((c, i) => {
+        const parts = [];
+        if (c.created_at) parts.push(`Added ${dateShort(c.created_at)}`);
+        if (Number(c.balance) > 0) parts.push(`${money(c.balance)} open`);
+        if (!parts.length && c.email) parts.push(c.email);
+        const was = asked.has(String(c.id));
+        return `${i ? `<div class="pvdiv"></div>` : ""}${pvline(c.name || "(no name)", parts.join(" · "), null, "people")}
+          <div class="pvbtns">
+            <button class="pvbtn cy" data-viewcust="${esc(c.id)}">&#8599;&nbsp; View Customer</button>
+            <button class="pvbtn ${was ? "em" : "gd"}" data-askreview="${esc(c.id)}">${was ? "&#10003;&nbsp; Asked" : "&#9733;&nbsp; Ask for Review"}</button>
+          </div>`;
+      }).join("");
+    }
+  } catch { inner = pvretry(S.booksProvider === "native" ? "Couldn't load your customer list." : "Couldn't reach QuickBooks."); }
   slot.innerHTML = pvcard("pvcust", "people", "Recent customers", "pk", "View All Customers", inner);
   wirePv("pvcust", () => { S.lane = "directory"; setTab("customers"); });
+  wireRetry(slot, () => { S.qboStale = true; S.nativeCustomers = null; homeSrc = null; loadHomeCustomers(); });
+  on("[data-viewcust]", "click", () => { S.lane = "directory"; setTab("customers"); }, slot);
+  on("[data-askreview]", "click", async (e) => {
+    const id = e.currentTarget.dataset.askreview;
+    const c = (await homeCustomers()).find((x) => String(x.id) === id);
+    if (c) reviewSheet(c, reviewAsked().has(String(c.id)));
+  }, slot);
 }
 
 /** Today's numbers from whichever book the workspace runs on. */
@@ -926,11 +1042,13 @@ async function bizSettingsSheet() { return businessSheet(); }
 function kpiBlock(k) {
   // The four instrument tiles from the iPhone app's businessPulse, same order,
   // same labels, same captions.
-  const pct = (v) => v == null ? null : `${Number(v).toFixed(1)}% margin`;
+  const pct = (v) => v == null ? null : `${Number(v).toFixed(1).replace(/\.0$/, "")}% margin`;
   const profit = k.today_profit;
+  const down = !!k.booksDown;
   return `<div class="ptiles">
-    ${ptile({ label: "Sales today", value: money0(k.today_sales), detail: `${money0(k.month_sales)} this month`, icon: "dollar", tone: "em" })}
-    ${ptile({ label: "Est. profit", value: profit == null ? "—" : money0(profit),
+    ${ptile({ label: "Sales today", value: down ? "—" : compactMoney(k.today_sales),
+              detail: down ? "Books unreachable" : `${compactMoney(k.month_sales)} this month`, icon: "dollar", tone: "em", unavailable: down })}
+    ${ptile({ label: "Est. profit", value: profit == null ? "—" : compactMoney(profit),
               detail: profit == null ? "Capture costs in Finance → Profit" : (pct(k.profit_margin) || "sales minus captured costs"),
               icon: "profit", tone: "cy", unavailable: profit == null })}
     ${ptile({ label: "Appointments", value: k.appointments == null ? "—" : String(k.appointments),
@@ -944,42 +1062,47 @@ function kpiBlock(k) {
 
 async function loadHomeKpis() {
   const slot = $("homekpis"); if (!slot) return;
+  const src = homeSources();
   // Books, calendar and phone each answer for their own tile. One dead
   // connector greys one number — it never blanks the row.
+  const cached = S.booksProvider === "native" ? !!S.nativeSummary : (!!S.qbo && !S.qboStale);
+  if (!cached) homeBanner("loading");
+  let booksErr = null;
   const [books, cal, phone] = await Promise.all([
-    homeBooksKpis().catch(() => null),
-    (S.cal ? Promise.resolve(S.cal) : get("/google-calendar/events")).then((d) => { S.cal = d; return d; }).catch(() => null),
-    (S.phone ? Promise.resolve(S.phone) : api("/phone", { action: "board" })).then((d) => { S.phone = d; return d; }).catch(() => null),
+    src.books().catch((e) => { booksErr = e; return null; }),
+    src.cal().catch(() => null),
+    src.phone().catch(() => null),
   ]);
-  const k = { ...(books || {}) };
-  if (!books) { k.today_sales = 0; k.month_sales = 0; k.today_profit = null; }
-  k.appointments = cal ? (cal.calendar?.upcoming || []).length : null;
+  if (!$("homekpis")) return;
+  homeBanner(books ? "" : "error", booksErr?.message);
+  const k = { ...(books || {}), booksDown: !books };
+  // Est. profit on a QuickBooks shop comes from the profit board — the iPhone's
+  // loadQboProfit. The QuickBooks snapshot carries a placeholder zero there,
+  // which used to read as "$0 · 0% margin" on every web Home.
+  if (books && S.booksProvider !== "native") {
+    k.today_profit = null; k.profit_margin = null;
+    try {
+      const t = (await src.profit())?.today;
+      if (t && t.net_profit != null) {
+        k.today_profit = Number(t.net_profit);
+        k.profit_margin = Number(t.total_income) > 0 ? Number(t.net_profit) / Number(t.total_income) * 100 : null;
+      }
+    } catch { /* unresolved reads "—", exactly like iOS */ }
+  }
+  k.appointments = cal ? Number(cal.calendar?.upcoming_count ?? (cal.calendar?.upcoming || []).length) : null;
   k.missed = phone?.hasNumber ? (phone.metrics?.missedToday ?? 0) : (phone ? 0 : null);
   k.leads7d = phone?.metrics?.leads7d ?? 0;
-  slot.innerHTML = kpiBlock(k) + (books ? "" :
-    `<p class="note err" style="margin-top:8px">Couldn't reach your books just now.</p>`);
-}
-
-// Mirrors the iOS "LEDGER'S NEXT MOVE" card: one prioritised suggestion driven by open AR.
-async function loadHomeNext() {
-  const slot = $("homenext"); if (!slot) return;
-  try {
-    if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
-    const k = S.qbo?.qbo?.kpis || {};
-    const outstanding = Number(k.outstanding) || 0;
-    const openCount = Number(k.open_count) || 0;
-    const owed = outstanding > 0;
-    const headline = owed
-      ? `${money(outstanding)} is sitting in ${openCount} unpaid invoice${openCount === 1 ? "" : "s"}.`
-      : "Books are clean — dig into this month's momentum.";
-    const cta = owed ? "Ask Ledger who owes the most →" : "Ask Ledger for the month in review →";
-    const prompt = owed ? "Who owes me the most right now?" : "Give me this month in review.";
-    slot.innerHTML = `<button class="nextmove" id="nextmove">
-      <span class="ic">&#10022;</span>
-      <span class="m"><small>Ledger's next move</small><b>${esc(headline)}</b><span>${esc(cta)}</span></span>
-    </button>`;
-    $("nextmove").onclick = () => { openChat(); $("box").value = prompt; };
-  } catch { slot.innerHTML = ""; }
+  if (!$("homekpis")) return;
+  slot.innerHTML = kpiBlock(k);
+  // "Updated" is when the books were pulled, not when the page drew.
+  const gen = S.booksProvider === "native" ? null : S.qbo?.generated_at;
+  const up = $("homeupdated");
+  if (up) up.textContent = gen ? `Updated ${new Date(gen).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}` : "";
+  // Go-to badges (iOS LedgerShortcutTile): upcoming bookings, missed calls today.
+  goBadge("gobdg-calendar", k.appointments || 0);
+  goBadge("gobdg-phone", phone?.hasNumber ? (phone.metrics?.missedToday ?? 0) : 0);
+  // Phone tab badge = the "needs you" count, the same number the iPhone tab wears.
+  if (phone) tabBadge("phone", (phone.needsYou || []).length);
 }
 
 /* ---------------- cost review queue ----------------
@@ -1073,73 +1196,91 @@ async function openCostReview() {
   } catch (e) { toast(e.message, "err"); }
 }
 
-// Mirrors the iOS "NEEDS ATTENTION" queue: cost review, profit exceptions, receipt review, schedule.
+// Mirrors the iOS attention center: the list is built live from phone, books,
+// cost review and calendar, with a count pill on the rail. An empty list is
+// "all clear" only when every source actually answered.
 async function loadHomeAttention() {
   const slot = $("homeattn"); if (!slot) return;
-  let costs = 0;
-  try {
-    if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
-    costs = Number(S.qbo?.qbo?.kpis?.missing_cost_count) || 0;
-  } catch { /* Books not connected yet — the row still reads 0, exactly like iOS. */ }
-  let review = S.review;
-  try { if (!review) { review = await get("/profit/review"); S.review = review; } }
-  catch { review = null; /* Signed out or offline — the row simply stays hidden. */ }
-  let receipts = 0, appts = 0;
-  try {
-    if (!S.receipts) { const d = await get("/gmail/receipts"); S.receipts = d.receipts || []; }
-    receipts = S.receipts.filter((r) => !r.qbo_purchase_id && r.category !== "Personal").length;
-  } catch { /* Gmail not connected — the row still reads 0, exactly like iOS. */ }
-  try {
-    if (!S.cal) S.cal = await get("/google-calendar/events");
-    appts = (S.cal?.calendar?.upcoming || []).length;
-  } catch { /* Calendar not connected. */ }
-  const row = (tint, tab, icon, title, detail) => `<button class="attnrow ${tint}" data-attn="${tab}">
-      <span class="ic">${icon}</span>
-      <span class="m"><b>${esc(title)}</b><span>${esc(detail)}</span></span>
-      <span class="chev">&#8250;</span></button>`;
-  // Only shown when there is something to answer: an empty queue is not a chore.
-  const reviewRow = review?.open_count
-    ? `<button class="attnrow amber" data-costreview="1">
-         <span class="ic">&#127991;</span>
-         <span class="m"><b>Cost review</b><span>${review.vendor_count} vendor${review.vendor_count === 1 ? "" : "s"} to classify${review.exception_count ? ` · ${review.exception_count} invoice${review.exception_count === 1 ? "" : "s"} flagged` : ""}</span></span>
-         <span class="chev">&#8250;</span></button>`
-    : "";
-  slot.innerHTML = `<div class="attn"><div class="eyebrow">Needs attention</div>
-    ${reviewRow}
-    ${row("orange", "finance", "&#128269;", "Profit exceptions", `${costs} cost${costs === 1 ? "" : "s"} require verification`)}
-    ${row("cyan", "receipts", "&#128247;", "Receipt review", `${receipts} receipt draft${receipts === 1 ? "" : "s"} waiting`)}
-    ${row("purple", "calendar", "&#128197;", "Schedule", `${appts} upcoming appointment${appts === 1 ? "" : "s"}`)}
-  </div>`;
-  on("[data-attn]", "click", (e) => {
-    const t = e.currentTarget.dataset.attn;
-    if (t === "receipts") { S.financeLane = "receipts"; setTab("finance"); } else setTab(t);
-  }, slot);
-  on("[data-costreview]", "click", () => openCostReview(), slot);
+  const src = homeSources();
+  let reviewFailed = false;
+  const [books, phone, review, cal] = await Promise.all([
+    src.books().catch(() => null),
+    src.phone().catch(() => null),
+    src.review().catch(() => { reviewFailed = true; return null; }),
+    src.cal().catch(() => null),
+  ]);
+  if (!$("homeattn")) return;
+  const n = (v, w) => `${v} ${w}${v === 1 ? "" : "s"}`;
+  const items = [];
+  const m = phone?.metrics || {};
+  if (m.missedToday > 0) items.push({ tint: "orange", icon: "phonearrow", title: n(m.missedToday, "missed call"), detail: "Today — not yet returned", go: () => setTab("phone") });
+  if (m.voicemailsUnheard > 0) items.push({ tint: "orange", icon: "mic", title: `${n(m.voicemailsUnheard, "voicemail")} unheard`, detail: "Waiting on you", go: () => setTab("phone") });
+  if (m.awaitingReply > 0) items.push({ tint: "orange", icon: "bubble", title: `${n(m.awaitingReply, "conversation")} awaiting reply`, detail: "Customer is waiting", go: () => setTab("phone") });
+  const openCount = Number(books?.open_count) || 0;
+  if (openCount > 0) items.push({ tint: "yellow", icon: "card", title: n(openCount, "unpaid invoice"), detail: `${money(books.outstanding)} outstanding`, go: () => { S.financeLane = "invoices"; setTab("finance"); } });
+  if (review?.open_count) {
+    items.push({ tint: "yellow", icon: "tag", title: "Cost review",
+      detail: `${n(review.vendor_count, "vendor")} to classify${review.exception_count ? ` · ${review.exception_count} flagged` : ""}`,
+      go: () => openCostReview() });
+  } else if (reviewFailed) {
+    items.push({ tint: "orange", icon: "warn", title: "Cost review", detail: "Couldn't check — tap to retry",
+      go: () => { S.review = null; homeSrc = null; loadHomeAttention(); } });
+  }
+  const missing = Number(books?.missing_cost_count) || 0;
+  if (missing > 0) items.push({ tint: "yellow", icon: "search", title: `${n(missing, "cost")} to verify`, detail: "Profit can't be trusted until these are matched", go: () => { S.financeLane = "profit"; setTab("finance"); } });
+  const next = (cal?.calendar?.upcoming || [])[0];
+  if (next) {
+    const dt = (Date.parse(next.start) - Date.now()) / 1000;
+    if (dt < 3600 && dt > -900) items.push({ tint: "purple", icon: "calclock", title: "Appointment starting soon",
+      detail: `${next.title || "Untitled appointment"} · ${timeLabel(next.start)}`, go: () => setTab("calendar") });
+  }
+  const sourcesDown = (!books && S.booksProvider !== "native") || !phone;
+  const clear = !items.length && !sourcesDown;
+  const tone = clear ? "em" : "or";
+  let body;
+  if (clear) {
+    body = `<div class="attnclear"><span class="ok">&#10003;</span><span class="m"><b>You're all clear</b><small>Nothing is waiting on you right now.</small></span></div>`;
+  } else if (!items.length) {
+    body = `<div class="attnclear warn"><span class="ok">&#9888;</span><span class="m"><b>Can't confirm you're clear</b><small>One or more sources didn't answer.</small></span><button class="retry" data-retry>Retry</button></div>`;
+  } else {
+    body = `<div class="attnrows">${items.map((it, i) => `<button class="attnrow ${it.tint}" data-attn="${i}">
+      <span class="ic">${segIc(it.icon)}</span>
+      <span class="m"><b>${esc(it.title)}</b><span>${esc(it.detail)}</span></span>
+      <span class="chev">&#8250;</span></button>`).join("")}</div>`;
+  }
+  slot.innerHTML = `<div class="panel pvcard ${tone}">
+    ${srail("bell", "Needs your attention", tone, items.length ? `<span class="attncnt">${items.length}</span>` : "")}
+    ${body}</div>`;
+  on("[data-attn]", "click", (e) => items[Number(e.currentTarget.dataset.attn)].go(), slot);
+  wireRetry(slot, () => { S.qboStale = true; S.phone = null; S.review = null; homeSrc = null; loadHomeAttention(); });
 }
 
+// iOS inboxPreview: the card is always there — a connect prompt when Gmail
+// isn't linked, the newest three otherwise, unread tag + refresh on the rail.
 async function loadHomeMail() {
   const slot = $("homemail"); if (!slot) return;
+  const connectCopy = `<p class="pvempty">Connect Gmail and your latest emails appear here with Ask Ledger built in.</p>`;
+  let body, unread = 0;
   try {
     const d = await get("/gmail/inbox?limit=10");
     S.emails = d.emails || [];
-    if (!S.emails.length) { slot.innerHTML = ""; return; }
-    const unread = S.emails.filter((m) => m.unread).length;
-    const shown = S.mailExpanded ? S.emails : S.emails.slice(0, 3);
-    slot.innerHTML = `<div class="maillane">
-      <div class="mhead"><b>Inbox</b>${unread ? `<span class="mchip">${unread} unread</span>` : `<span class="mchip zero">clear</span>`}<button id="mailrefresh" title="Refresh">&#8635;</button></div>
-      ${shown.map((m, i) => `
-      <button class="mailrow" data-mail="${i}">
-        <span class="dot ${m.unread ? "" : "read"}"></span>
-        <span class="m"><b>${esc(m.from_name || m.from || "(unknown sender)")}</b>
-          <span>${esc(m.subject || "(no subject)")}</span></span>
-        <span class="chev">&#8250;</span>
-      </button>`).join("")}
-      ${S.emails.length > 3 ? `<button class="mmore" id="mailmore">${S.mailExpanded ? "Show less &#9650;" : `All mail (${S.emails.length}) &#9660;`}</button>` : ""}</div>`;
-    on("[data-mail]", "click", (e) => emailSheet(S.emails[Number(e.currentTarget.dataset.mail)]), slot);
-    slot.querySelector("#mailrefresh").onclick = (e) => { e.stopPropagation(); loadHomeMail(); };
-    const more = slot.querySelector("#mailmore");
-    if (more) more.onclick = () => { S.mailExpanded = !S.mailExpanded; loadHomeMail(); };
-  } catch { slot.innerHTML = ""; }
+    unread = S.emails.filter((x) => x.unread).length;
+    body = S.emails.length
+      ? S.emails.slice(0, 3).map((x, i) => `<button class="mailrow" data-mail="${i}">
+          <span class="dot ${x.unread ? "" : "read"}"></span>
+          <span class="m"><b class="${x.unread ? "un" : ""}">${esc(x.from_name || x.from || x.from_email || "(unknown sender)")}</b><span>${esc(x.subject || "(no subject)")}</span></span>
+          <span class="chev">&#8250;</span></button>`).join("")
+      : connectCopy;
+  } catch (e) {
+    body = /not connected/i.test(e.message) ? connectCopy : pvretry("Couldn't load your latest emails.");
+  }
+  if (!$("homemail")) return;
+  slot.innerHTML = `<div class="panel pvcard rd inboxcard">
+    ${srail("inbox", "Inbox", "rd", `<span class="bdg" style="--gt:${unread ? "255,107,107" : "194,209,230"}">${unread ? `${unread} unread` : "Clear"}</span><button class="rfbtn" id="mailrefresh" title="Refresh inbox">&#8635;</button>`)}
+    <div class="pvbody">${body}</div></div>`;
+  on("[data-mail]", "click", (e) => emailSheet(S.emails[Number(e.currentTarget.dataset.mail)]), slot);
+  $("mailrefresh").onclick = (e) => { e.stopPropagation(); loadHomeMail(); };
+  wireRetry(slot, () => loadHomeMail());
 }
 
 async function emailSheet(m) {
@@ -3910,6 +4051,7 @@ async function renderPhone() {
   try {
     const d = await api("/phone", { action: "board" });
     S.phone = d;
+    tabBadge("phone", (d.needsYou || []).length);
     view().innerHTML = `<div class="sect">
       ${pageHead("Phone")}
       ${d.hasNumber ? "" : requestNumberCard(d.pendingRequest, d.numberLocked)}
@@ -5790,7 +5932,7 @@ async function reviewSheet(c, already) {
       ${btn("rvopen", "&#8599;", "Preview review page", "Opens Google Reviews", "gold")}
     </div>
     <p class="note">Nothing is sent automatically. You review the exact message in Messages or Mail before sending.</p>`, (sh) => {
-    const done = () => { markReviewAsked(c.id); closeSheet(); loadDirectory(); };
+    const done = () => { markReviewAsked(c.id); closeSheet(); loadDirectory(); if (S.tab === "home") loadHomeCustomers(); };
     const sms = sh.querySelector("#rvsms");
     if (sms) sms.onclick = () => { window.location.href = `sms:${c.phone}?&body=${encodeURIComponent(msg)}`; done(); };
     const mail = sh.querySelector("#rvmail");
