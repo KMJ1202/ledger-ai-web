@@ -6176,7 +6176,7 @@ async function renderCustomers() {
   view().innerHTML = `<div class="sect">
     ${pageHead(S.lane === "todos" ? "To-Do" : S.lane === "reviews" ? "Reviews" : "Customers")}
     <div class="seg">
-      ${[["directory", "Directory", 0], ["reviews", "Reviews", 0], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
+      ${[["directory", "Directory", 0], ["reviews", "Reviews", S.revUnanswered || 0], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
         `<button class="${S.lane === k ? "on" : ""}" data-lane="${k}">${segIc(k)}${l}${n ? `<i class="badge">${n}</i>` : ""}</button>`).join("")}
     </div>
     <div id="lanebody"><div class="skel"></div><div class="skel"></div></div>
@@ -6186,6 +6186,14 @@ async function renderCustomers() {
     loadDirectory();
     // iOS keeps the To-Do badge live from the same board; fetch it once so Directory shows it too.
     if (!S.board) api("/leads", { action: "board" }).then((b) => { S.board = b; if (S.tab === "customers") renderCustomers(); }).catch(() => {});
+    // The iPhone shows the waiting-review count on the Reviews pill without
+    // opening the lane, so fetch the count once per session.
+    if (S.revUnanswered === undefined) {
+      S.revUnanswered = 0;
+      get("/google-business-profile/reviews?limit=10")
+        .then((d) => { S.revUnanswered = d.reviews?.unanswered_count || 0; if (S.tab === "customers" && S.revUnanswered) renderCustomers(); })
+        .catch(() => {});
+    }
   } else if (S.lane === "reviews") loadReviewsLane();
   else loadBoard();
 }
@@ -6197,7 +6205,7 @@ async function loadReviewsLane() {
   const gold = "var(--gold, #fbbf24)";
   let board;
   try {
-    board = (await get("/google-business-profile/reviews?limit=10")).reviews;
+    board = (await get("/google-business-profile/reviews?limit=30")).reviews;
   } catch (e) {
     const connect = e.status === 409, pending = e.status === 403;
     slot.innerHTML = `<div class="revlane-err">
@@ -6209,7 +6217,10 @@ async function loadReviewsLane() {
     $("rvretry").onclick = () => { slot.innerHTML = `<div class="skel"></div>`; loadReviewsLane(); };
     return;
   }
-  const items = board.items || [];
+  // Reviews waiting on a reply come first \u2014 they are the ones that need Kyle.
+  const items = (board.items || []).slice().sort((a, b) => (a.replied === b.replied ? 0 : a.replied ? 1 : -1));
+  const revOpen = S.revExpanded || (S.revExpanded = new Set());
+  const shownReviews = S.revShowAll ? items : items.slice(0, 10);
   const five = items.filter((r) => r.star_rating === 5).length;
   const low = items.filter((r) => r.star_rating <= 3).length;
   const stars = (n) => "&#9733;".repeat(Math.max(0, Math.min(5, n))) + "&#9734;".repeat(5 - Math.max(0, Math.min(5, n)));
@@ -6251,13 +6262,16 @@ async function loadReviewsLane() {
     <div class="revlist">
       <div class="t"><span class="eyebrow" style="color:${gold}">&#128225; Last ${board.count} from Google</span>
         <button class="pillbtn sm" id="rvreload">&#8635;</button></div>
-      ${items.length ? items.map((r) => `<div class="gcard">
+      ${items.length ? shownReviews.map((r) => `<div class="gcard">
         <div class="t"><b>${esc(r.reviewer_anonymous ? "Google user" : r.reviewer_name)}</b>
           <span class="starrow sm">${stars(r.star_rating)}</span><small>${esc(rel(r.updated_at))}</small></div>
-        ${r.comment ? `<p>${esc(r.comment)}</p>` : ""}
-        ${r.replied ? `<div class="reply"><small>&#8617; OWNER REPLY</small>${esc(r.reply_comment || "")}</div>`
-          : `<div class="noreply">&#9888; No owner reply yet</div>`}
-      </div>`).join("") : `<p class="note">No reviews yet — the moment your first Google review lands it appears here.</p>`}
+        <div class="rvchip ${r.replied ? "ok" : "warn"}">${r.replied ? "&#10003; Replied" : "&#9888; Needs a reply"}</div>
+        ${r.comment ? `<p class="rvtext${(r.comment.length > 180 && !revOpen.has(r.review_id || r.name)) ? " clip" : ""}">${esc(r.comment)}</p>
+          ${r.comment.length > 180 ? `<button class="rvmore" data-rexp="${esc(r.review_id || r.name)}">${revOpen.has(r.review_id || r.name) ? "Show less" : "Read the rest"}</button>` : ""}` : ""}
+        ${r.replied ? `<div class="reply"><small>&#8617; OWNER REPLY</small>${esc(r.reply_comment || "")}</div>` : ""}
+      </div>`).join("") + (items.length > shownReviews.length
+        ? `<button class="btn ghost wide" style="margin-top:10px" id="rvall">Show all ${items.length} reviews</button>` : "")
+        : `<p class="note">No reviews yet \u2014 the moment your first Google review lands it appears here.</p>`}
     </div>
     <div class="revgrow">
       <div class="cihead" style="color:var(--emerald)">&#128200; GROW YOUR REVIEWS WITH LEDGER</div>
@@ -6269,11 +6283,84 @@ async function loadReviewsLane() {
         <span><b>Ask a customer for a review</b><span>Opens the Directory review queue</span></span></button>
     </div>`;
   $("rvreload").onclick = () => { slot.innerHTML = `<div class="skel"></div>`; loadReviewsLane(); };
+  if ($("rvall")) $("rvall").onclick = () => { S.revShowAll = true; loadReviewsLane(); };
+  on("[data-rexp]", "click", (e) => {
+    const id = e.currentTarget.dataset.rexp;
+    if (revOpen.has(id)) revOpen.delete(id); else revOpen.add(id);
+    loadReviewsLane();
+  }, slot);
   $("rvask").onclick = () => { S.lane = "directory"; renderCustomers(); };
 }
 
 const reviewAsked = () => new Set((localStorage.getItem("kmj.reviewRequestedCustomerIDs") || "").split(",").filter(Boolean));
 const markReviewAsked = (id) => { const s = reviewAsked(); s.add(id); localStorage.setItem("kmj.reviewRequestedCustomerIDs", [...s].sort().join(",")); };
+
+/* ---- Customers tab shared pieces (iPhone parity, 2026-09-07) ---- */
+
+// Web twin of iOS CustomerIntelligenceHero: the money number big, then four
+// tiles that say in words what each number means.
+function custHero(o) {
+  const reachDetail = !o.total ? "add your first one below"
+    : o.reachable === o.total ? "all reachable by phone or email"
+    : `${o.reachable} reachable by phone or email`;
+  const owingDetail = !o.owingCount ? "nobody owes you"
+    : `${o.owingCount} customer${o.owingCount === 1 ? "" : "s"}${o.overdueCount ? ` · ${o.overdueCount} overdue` : ""}`;
+  const tile = (label, value, detail, tint) =>
+    `<div class="ctile ${tint}"><small>${esc(label)}</small><b>${value}</b><i>${esc(detail)}</i></div>`;
+  return `<div class="cihero">
+        <div class="t"><span class="eyebrow">&#128101; Customers</span>
+          <span class="livechip">${o.native ? "LIVE · YOUR BOOKS" : "LIVE · QUICKBOOKS"}</span></div>
+        <div class="bignum"><small>Customer revenue</small><b>${money0(o.lifetime)}</b></div>
+        <div class="ctiles">
+          ${tile("On file", o.total, reachDetail, "cyan")}
+          ${tile("Buyers", o.buyers, o.buyers === 1 ? "has an invoice on record" : "have an invoice on record", "purple")}
+          ${tile("Owing", money0(o.owingTotal), owingDetail, o.overdueCount ? "red" : o.owingCount ? "orange" : "em")}
+          ${tile("Reviews asked", o.asked, o.asked ? "sent from this device" : "start with the card below", "gold")}
+        </div>
+      </div>`;
+}
+
+// One directory row — iOS CustomerDirectoryCard. The whole top opens the
+// profile; Call and Text sit on the card so the phone is one tap away.
+function custCard(c, o) {
+  const contact = [c.phone, c.email].filter(Boolean).join(" · ");
+  const tel = String(c.mobile || c.phone || "").replace(/[^0-9+]/g, "");
+  const reach = tel
+    ? `<a class="actbtn em" href="tel:${esc(tel)}">&#128222;&nbsp; Call</a>
+             <a class="actbtn c" href="sms:${esc(tel)}">&#128172;&nbsp; Text</a>`
+    : c.email ? `<a class="actbtn v" href="mailto:${esc(c.email)}">&#9993;&nbsp; Email</a>`
+      : `<button class="actbtn" ${o.openAttr}="${esc(c.id)}">&#128100;&nbsp; Full profile</button>`;
+  return `<div class="ccard">
+          <button class="top" ${o.openAttr}="${esc(c.id)}">
+            <div class="avaw"><div class="ava ${o.overdue ? "od" : c.balance > 0 ? "ow" : ""}">${sigilMark(c.name)}<i class="rail"></i></div>
+              <i class="tick ${c.active === false ? "off" : ""}"></i></div>
+            <div class="who"><b>${esc(c.name)}</b>
+              <span>${contact ? esc(contact) : "No phone or email on file"}</span>
+              <i>${esc(o.recordLine)}</i></div>
+            ${c.balance > 0 ? `<span class="balchip ${o.overdue ? "od" : ""}">${money(c.balance)}${o.overdue ? " overdue" : ""}</span>` : ""}
+            <span class="chev">&#8250;</span>
+          </button>
+          <div class="acts">${reach}
+            <button class="actbtn p" data-review="${esc(c.id)}">${o.asked ? "&#10003;&nbsp; Asked" : "&#11088;&nbsp; Review"}</button>
+          </div>
+        </div>`;
+}
+
+// "Ranger Tire · 6 invoices · last Aug 22" — the quiet third line on a card.
+function custRecordLine(c, count, lastDate) {
+  const parts = [];
+  if (c.company && String(c.company).toLowerCase() !== String(c.name || "").toLowerCase()) parts.push(c.company);
+  parts.push(!count ? "No invoices yet" : count === 1 ? "1 invoice" : `${count} invoices`);
+  if (lastDate) parts.push("last " + dateShort(lastDate));
+  return parts.join(" · ");
+}
+
+// The "24 of 312" line above the list, so a filtered view never looks empty.
+function custCountText(shown, total) {
+  if (!total) return "No customers yet";
+  if (shown === total) return total === 1 ? "1 customer" : `${total} customers`;
+  return `${shown} of ${total}`;
+}
 
 async function loadDirectory() {
   const slot = $("lanebody"); if (!slot) return;
@@ -6292,7 +6379,11 @@ async function loadDirectory() {
     const q = (S.custSearch || "").toLowerCase();
     const sort = S.custSort || "name";
     const lastInvoice = {};
-    invoices.forEach((i) => { if (!lastInvoice[i.customer_id] || i.date > lastInvoice[i.customer_id]) lastInvoice[i.customer_id] = i.date; });
+    const invCount = {};
+    invoices.forEach((i) => {
+      invCount[i.customer_id] = (invCount[i.customer_id] || 0) + 1;
+      if (!lastInvoice[i.customer_id] || i.date > lastInvoice[i.customer_id]) lastInvoice[i.customer_id] = i.date;
+    });
     const lastPaid = {};
     invoices.filter((i) => Number(i.balance) === 0).forEach((i) => {
       if (!lastPaid[i.customer_id] || i.date > lastPaid[i.customer_id]) lastPaid[i.customer_id] = i.date;
@@ -6322,17 +6413,10 @@ async function loadDirectory() {
       : a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
     slot.innerHTML = `
-      <div class="cihero">
-        <div class="t"><div><span class="eyebrow">Customer intelligence</span>
-          <b>Relationships, revenue &amp; reputation</b></div><span class="ic">&#128101;</span></div>
-        <div class="pulse">
-          <div class="pm cyan"><small>QBO</small><b>${all.length}</b></div>
-          <div class="pm em"><small>Reachable</small><b>${reachable}</b></div>
-          <div class="pm purple"><small>Buyers</small><b>${buyers}</b></div>
-        </div>
-        <div class="split"><div><small>Customer revenue</small><b>${money0(lifetime)}</b></div>
-          <div class="r"><small>Reviews asked</small><b class="em">${asked.size}</b></div></div>
-      </div>
+      ${custHero({ total: all.length, reachable, buyers, lifetime, asked: asked.size,
+        owingTotal: all.reduce((t, c) => t + (Number(c.balance) > 0 ? Number(c.balance) : 0), 0),
+        owingCount: all.filter((c) => Number(c.balance) > 0).length,
+        overdueCount: all.filter((c) => overdueIds.has(c.id)).length })}
       <div class="revpanel">
         <div class="t"><div><span class="eyebrow" style="color:var(--magenta)">Review opportunities</span>
           <b>${qHead.length ? "Recent customers ready to ask" : "You\u2019re caught up"}</b></div>
@@ -6347,9 +6431,10 @@ async function loadDirectory() {
           : `<p class="note">No eligible recent customers waiting for a review request.</p>`}
       </div>
       <div class="searchwrap"><span class="mag">${MAG}</span>
-        <input id="csearch" placeholder="Customer, invoice, email or phone" value="${esc(S.custSearch || "")}"></div>
+        <input id="csearch" placeholder="Customer, invoice, email or phone" value="${esc(S.custSearch || "")}">${S.custSearch ? `<button class="clr" id="cclr" title="Clear search">&#10005;</button>` : ""}</div>
       <div class="dirbar">
         <span class="eyebrow">Customer directory</span>
+        <span class="dircount">${custCountText(list.length, all.length)}</span>
         <button class="pillbtn em" id="cadd">+ Add</button>
         <select class="pillbtn" id="csort">
           ${[["name", "A–Z"], ["owing", "Owing"], ["recent", "Recent"]].map(([k, l]) =>
@@ -6358,22 +6443,8 @@ async function loadDirectory() {
         <button class="pillbtn ${S.custBalancesOnly ? "hot" : ""}" id="cbal">${S.custBalancesOnly ? "Balances" : "All"}</button>
       </div>
       ${list.length ? list.slice(0, S.custShowAll ? list.length : 120).map((c) => {
-        const contact = [c.email, c.phone].filter(Boolean).join(" · ");
-        const od = overdueIds.has(c.id);
-        return `<div class="ccard">
-          <div class="top">
-            <div class="avaw"><div class="ava ${od ? "od" : c.balance > 0 ? "ow" : ""}">${sigilMark(c.name)}<i class="rail"></i></div><i class="tick ${c.active === false ? "off" : ""}"></i></div>
-            <div class="who"><b>${esc(c.name)}</b>
-              ${contact ? `<span>${esc(contact)}</span>` : ""}
-              <i>QBO #${esc(c.id)} · ${c.balance > 0
-                ? `<span style="color:${od ? "var(--red)" : "var(--orange)"}">${money(c.balance)} ${od ? "overdue" : "owing"}</span>`
-                : (c.active === false ? "Inactive" : "Active")}</i></div>
-          </div>
-          <div class="acts">
-            <button class="actbtn" data-cust="${esc(c.id)}">&#128100;&nbsp; Full Profile</button>
-            <button class="actbtn p" data-review="${esc(c.id)}">${asked.has(c.id) ? "&#10003;&nbsp; Review Asked" : "&#11088;&nbsp; Ask for Review"}</button>
-          </div>
-        </div>`;
+        return custCard(c, { openAttr: "data-cust", overdue: overdueIds.has(c.id), asked: asked.has(c.id),
+          recordLine: custRecordLine(c, invCount[c.id] || 0, lastInvoice[c.id]) });
       }).join("") + (!S.custShowAll && list.length > 120
         ? `<button class="btn ghost wide" style="margin-top:10px" id="cmore">Show all ${list.length} customers (${list.length - 120} more)</button>`
         : "")
@@ -6383,6 +6454,7 @@ async function loadDirectory() {
     sb.addEventListener("input", () => { S.custSearch = sb.value; clearTimeout(S._c); S._c = setTimeout(loadDirectory, 220); });
     $("csort").onchange = (e) => { S.custSort = e.target.value; loadDirectory(); };
     $("cbal").onclick = () => { S.custBalancesOnly = !S.custBalancesOnly; loadDirectory(); };
+    if ($("cclr")) $("cclr").onclick = () => { S.custSearch = ""; loadDirectory(); };
     $("cadd").onclick = () => newCustomerSheet();
     on("[data-cust]", "click", (e) => customerSheet(all.find((c) => c.id === e.currentTarget.dataset.cust)), slot);
     on("[data-review]", "click", (e) => {
@@ -6464,12 +6536,13 @@ async function loadNativeDirectory() {
       booksApi({ action: "invoices" }).catch(() => ({ invoices: [] })),
     ]);
     const invoices = inv.invoices || [];
-    const balanceBy = {}, lastPaid = {}, lastInvoice = {};
+    const balanceBy = {}, lastPaid = {}, lastInvoice = {}, invCount = {};
     const todayISO = localDay();
     const overdueIds = new Set();
     for (const i of invoices) {
       if (!i.customer_id) continue;
       balanceBy[i.customer_id] = (balanceBy[i.customer_id] || 0) + Number(i.balance || 0);
+      invCount[i.customer_id] = (invCount[i.customer_id] || 0) + 1;
       if (!lastInvoice[i.customer_id] || (i.issue_date || "") > lastInvoice[i.customer_id]) lastInvoice[i.customer_id] = i.issue_date || "";
       if (Number(i.balance) === 0 && (!lastPaid[i.customer_id] || (i.issue_date || "") > lastPaid[i.customer_id])) lastPaid[i.customer_id] = i.issue_date || "";
       if (Number(i.balance) > 0 && i.due_date && i.due_date < todayISO) overdueIds.add(i.customer_id);
@@ -6497,17 +6570,10 @@ async function loadNativeDirectory() {
       : a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
     slot.innerHTML = `
-      <div class="cihero">
-        <div class="t"><div><span class="eyebrow">Customer intelligence</span>
-          <b>Relationships, revenue &amp; reputation</b></div><span class="ic">&#128101;</span></div>
-        <div class="pulse">
-          <div class="pm cyan"><small>On file</small><b>${all.length}</b></div>
-          <div class="pm em"><small>Reachable</small><b>${reachable}</b></div>
-          <div class="pm purple"><small>Buyers</small><b>${buyers}</b></div>
-        </div>
-        <div class="split"><div><small>Customer revenue</small><b>${money0(lifetime)}</b></div>
-          <div class="r"><small>Reviews asked</small><b class="em">${asked.size}</b></div></div>
-      </div>
+      ${custHero({ native: true, total: all.length, reachable, buyers, lifetime, asked: asked.size,
+        owingTotal: all.reduce((t, c) => t + (c.balance > 0 ? c.balance : 0), 0),
+        owingCount: all.filter((c) => c.balance > 0).length,
+        overdueCount: all.filter((c) => overdueIds.has(c.id)).length })}
       <div class="revpanel">
         <div class="t"><div><span class="eyebrow" style="color:var(--magenta)">Review opportunities</span>
           <b>${qHead.length ? "Recent customers ready to ask" : "You’re caught up"}</b></div>
@@ -6522,9 +6588,10 @@ async function loadNativeDirectory() {
           : `<p class="note">No eligible recent customers waiting for a review request.</p>`}
       </div>
       <div class="searchwrap"><span class="mag">${MAG}</span>
-        <input id="csearch" placeholder="Customer, email or phone" value="${esc(S.custSearch || "")}"></div>
+        <input id="csearch" placeholder="Customer, email or phone" value="${esc(S.custSearch || "")}">${S.custSearch ? `<button class="clr" id="cclr" title="Clear search">&#10005;</button>` : ""}</div>
       <div class="dirbar">
         <span class="eyebrow">Customer directory</span>
+        <span class="dircount">${custCountText(list.length, all.length)}</span>
         <button class="pillbtn em" id="cadd">+ Add</button>
         <select class="pillbtn" id="csort">
           ${[["name", "A\u2013Z"], ["owing", "Owing"], ["recent", "Recent"]].map(([k, l]) =>
@@ -6533,30 +6600,18 @@ async function loadNativeDirectory() {
         <button class="pillbtn ${S.custBalancesOnly ? "hot" : ""}" id="cbal">${S.custBalancesOnly ? "Balances" : "All"}</button>
       </div>
       ${list.length ? list.slice(0, S.custShowAll ? list.length : 120).map((c) => {
-        const contact = [c.email, c.phone].filter(Boolean).join(" \u00b7 ");
-        const od = overdueIds.has(c.id);
-        return `<div class="ccard">
-          <div class="top">
-            <div class="avaw"><div class="ava ${od ? "od" : c.balance > 0 ? "ow" : ""}">${sigilMark(c.name)}<i class="rail"></i></div></div>
-            <div class="who"><b>${esc(c.name)}</b>
-              ${contact ? `<span>${esc(contact)}</span>` : ""}
-              <i>${c.balance > 0
-                ? `<span style="color:${od ? "var(--red)" : "var(--orange)"}">${money(c.balance)} ${od ? "overdue" : "owing"}</span>`
-                : "Active"}</i></div>
-          </div>
-          <div class="acts">
-            <button class="actbtn" data-ncust="${esc(c.id)}">&#128100;&nbsp; Edit Details</button>
-            <button class="actbtn p" data-review="${esc(c.id)}">${asked.has(c.id) ? "&#10003;&nbsp; Review Asked" : "&#11088;&nbsp; Ask for Review"}</button>
-          </div>
-        </div>`;
+        return custCard(c, { openAttr: "data-nprof", overdue: overdueIds.has(c.id), asked: asked.has(c.id),
+          recordLine: custRecordLine(c, invCount[c.id] || 0, lastInvoice[c.id]) });
       }).join("")
       : `<div class="panel" style="text-align:center"><p class="sub" style="margin:0">No customers yet \u2014 add your first one, or create an invoice and Ledger saves the customer with it.</p></div>`}`;
     const sb = $("csearch");
     sb.addEventListener("input", () => { S.custSearch = sb.value; clearTimeout(S._c); S._c = setTimeout(loadDirectory, 220); });
     $("csort").onchange = (e) => { S.custSort = e.target.value; loadDirectory(); };
     $("cbal").onclick = () => { S.custBalancesOnly = !S.custBalancesOnly; loadDirectory(); };
+    if ($("cclr")) $("cclr").onclick = () => { S.custSearch = ""; loadDirectory(); };
     $("cadd").onclick = () => nativeCustomerSheet(null);
-    on("[data-ncust]", "click", (e) => nativeCustomerSheet(all.find((c) => c.id === e.currentTarget.dataset.ncust)?.raw), slot);
+    S.nativeCustomers = all; S.nativeInvoices = invoices;
+    on("[data-nprof]", "click", (e) => nativeProfileSheet(all.find((c) => c.id === e.currentTarget.dataset.nprof)), slot);
     on("[data-review]", "click", (e) => {
       const c = all.find((x) => x.id === e.currentTarget.dataset.review);
       if (c) reviewSheet(c, asked.has(c.id));
@@ -6568,6 +6623,126 @@ async function loadNativeDirectory() {
 
 // Add or edit a built-in-books customer — same fields as the iOS
 // NewCustomerSheet's native mode, saved through books customer-save.
+// Full profile for a built-in-books customer — the web twin of iOS
+// NativeCustomerDetailView. Same shape as the QuickBooks profile: money tiles,
+// duplicate warning, contact record, account, invoices and appointments.
+// Edit opens the customer form; an invoice row opens the native invoice sheet.
+function nativeProfileSheet(c) {
+  if (!c) return;
+  const inv = (S.nativeInvoices || [])
+    .filter((i) => i.customer_id === c.id && i.status !== "void")
+    .sort((a, b) => String(b.issue_date || "").localeCompare(String(a.issue_date || "")));
+  const today = localDay();
+  const open = inv.filter((i) => Number(i.balance) > 0);
+  const paid = inv.filter((i) => Number(i.balance) <= 0);
+  const overdue = open.filter((i) => i.due_date && i.due_date < today);
+  const overdueAmt = overdue.reduce((t, i) => t + (Number(i.balance) || 0), 0);
+  const outstanding = open.reduce((t, i) => t + (Number(i.balance) || 0), 0);
+  const lifetime = inv.reduce((t, i) => t + (Number(i.total) || 0), 0);
+  const avg = inv.length ? lifetime / inv.length : 0;
+  const last = inv[0];
+  const nkey = (v) => (v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const pkey = (v) => (v || "").replace(/\D/g, "").slice(-10);
+  const dupes = (S.nativeCustomers || []).filter((o) => o.id !== c.id && (
+    (c.email && (o.email || "").toLowerCase() === String(c.email).toLowerCase()) ||
+    (c.phone && pkey(o.phone) && pkey(o.phone) === pkey(c.phone)) ||
+    nkey(o.name) === nkey(c.name)));
+  const terms = (c.name || "").toLowerCase().split(/\s+/).filter((t) => t.length > 2);
+  const events = !terms.length ? [] : calEvents().filter((e) => {
+    const hay = ((e.title || "") + " " + (e.description || "")).toLowerCase();
+    return terms.every((t) => hay.includes(t));
+  }).sort((a, b) => String(b.start).localeCompare(String(a.start)));
+  const tel = String(c.phone || "").replace(/[^0-9+]/g, "");
+  const since = c.raw?.created_at
+    ? new Date(c.raw.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "";
+  const invRows = (rows) => rows.map((i) => `<button class="item" data-pinv="${esc(i.id)}">
+    <div class="main"><div class="ttl">${esc(i.number || "Invoice")}</div><div class="sub">${esc(dateShort(i.issue_date))}</div></div>
+    <div class="amt">${money(i.total)}<small><span class="tag ${esc(i.status || "")}">${esc(i.status || "")}</span></small></div></button>`).join("");
+  const kv = (label, value) => value ? `<div class="kv"><span>${esc(label)}</span><span>${esc(value)}</span></div>` : "";
+
+  sheet(`<h2>${esc(c.name)}</h2>
+    <p class="sh-sub">${esc(c.company || "In your books")}</p>
+    ${tel || c.email ? `<div class="rowbtns" style="margin-top:4px">
+      ${tel ? `<a class="btn ghost" href="tel:${esc(tel)}">&#128222; Call</a>
+               <a class="btn ghost" href="sms:${esc(tel)}">&#128172; Text</a>` : ""}
+      ${c.email ? `<a class="btn ghost" href="mailto:${esc(c.email)}">&#9993; Email</a>` : ""}
+    </div>` : ""}
+    <button class="btn primary wide" style="margin-top:9px" id="cask">&#10022; Ask Ledger about ${esc((c.name || "").split(" ")[0] || c.name)}</button>
+
+    <div class="kpis" style="margin-top:14px">
+      <div class="kpi cyan"><small>Lifetime sales</small><b>${money0(lifetime)}</b></div>
+      <div class="kpi em"><small>Average sale</small><b>${money0(avg)}</b></div>
+      <div class="kpi ${outstanding > 0 ? "orange" : "gold"}"><small>Outstanding</small><b>${money0(outstanding)}</b></div>
+      <div class="kpi ${overdueAmt > 0 ? "red" : "purple"}"><small>Overdue</small><b>${money0(overdueAmt)}</b></div>
+    </div>
+
+    ${dupes.length ? `<div class="eyebrow" style="margin-top:16px;color:var(--orange)">Duplicate warning</div>
+      <div class="note err" style="margin-top:6px">&#9888; ${dupes.length} other profile${dupes.length === 1 ? "" : "s"} share${dupes.length === 1 ? "s" : ""} this name, phone or email. Keep invoices on one record so balances stay right.</div>
+      ${dupes.map((d) => `<div class="kv"><span>${esc(d.phone || d.email || "—")}</span><span>${esc(d.name)}</span></div>`).join("")}` : ""}
+
+    <div class="eyebrow" style="margin-top:16px">Contact &amp; record</div>
+    ${kv("Customer", c.name)}
+    ${kv("Company", c.company)}
+    <div class="kv"><span>Email</span><span>${c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : "Not on file"}</span></div>
+    <div class="kv"><span>Phone</span><span>${c.phone ? `<a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>` : "Not on file"}</span></div>
+    ${kv("Customer since", since)}
+
+    <div class="eyebrow" style="margin-top:16px">Account status</div>
+    <div class="kv"><span>Paid invoices</span><span>${paid.length}</span></div>
+    <div class="kv"><span>Open invoices</span><span>${open.length}</span></div>
+    <div class="kv"><span>Overdue invoices</span><span style="${overdue.length ? "color:var(--red)" : ""}">${overdue.length}</span></div>
+    <div class="kv"><span>Overdue amount</span><span style="${overdueAmt > 0 ? "color:var(--red)" : ""}">${money(overdueAmt)}</span></div>
+    <div class="kv tot"><span>Current balance</span><span style="${outstanding > 0 ? "color:var(--orange)" : ""}">${money(outstanding)}</span></div>
+    ${last ? `<div class="kv"><span>Last purchase</span><span>${esc(dateShort(last.issue_date))}</span></div>
+      <div class="kv"><span>Last invoice</span><span>${esc(last.number || "Invoice")} · ${money(last.total)}</span></div>` : ""}
+
+    ${open.length ? `<div class="lanehead" style="margin-top:16px">
+        <span class="eyebrow" style="color:var(--orange)">Open &amp; overdue</span>
+        <span class="note">${open.length}</span></div>
+      <div class="list" style="margin-top:8px">${invRows(open)}</div>` : ""}
+
+    <div class="lanehead" style="margin-top:16px">
+      <span class="eyebrow" style="color:var(--dim)">Invoice history</span>
+      <span class="note">${inv.length}</span></div>
+    ${inv.length ? `<div class="list" style="margin-top:8px">${invRows(inv)}</div>`
+      : `<div class="note">No invoices yet.</div>`}
+
+    <div class="lanehead" style="margin-top:16px">
+      <span class="eyebrow" style="color:var(--dim)">Vehicles, services &amp; appointments</span>
+      <span class="note">${events.length}</span></div>
+    ${events.length ? `<div class="list" style="margin-top:8px">${events.slice(0, 40).map((e) => `
+      <button class="item" data-cev="${esc(e.id)}">
+        <div class="main"><div class="ttl">${esc(e.title)}</div>
+          <div class="sub">${esc(dayLabel(e.start))}${e.location ? " · " + esc(e.location) : ""}</div></div>
+        <div class="amt"><small>${esc((e.status || "").toUpperCase())}</small></div></button>`).join("")}</div>`
+      : `<div class="note">No matching calendar history found.</div>`}
+
+    <div class="rowbtns" style="margin-top:16px">
+      <button class="btn ghost" id="cedit">&#9998; Edit details</button>
+      <button class="btn ghost" id="crev">&#11088; Ask for review</button>
+      <button class="btn primary" id="cinv">New invoice</button>
+    </div>`, (sh) => {
+    sh.querySelector("#cask").onclick = () => {
+      closeSheet(); openChat();
+      $("box").value = `Full briefing on ${c.name}: current balance, open and overdue invoices, purchase history, and anything I should know before I contact them.`;
+      send();
+    };
+    sh.querySelector("#cinv").onclick = () => { closeSheet(); openChat(); $("box").value = `Create an invoice for ${c.name}`; send(); };
+    sh.querySelector("#crev").onclick = () => reviewSheet(c, reviewAsked().has(c.id));
+    sh.querySelector("#cedit").onclick = () => nativeCustomerSheet(c.raw);
+    on("[data-pinv]", "click", (e) => nativeInvoiceSheet(e.currentTarget.dataset.pinv), sh);
+    on("[data-cev]", "click", (e) => {
+      const ev = events.find((x) => String(x.id) === e.currentTarget.dataset.cev);
+      if (ev) eventSheet(ev, () => nativeProfileSheet(c));
+    }, sh);
+    if (!S.cal && terms.length) {
+      get("/google-calendar/events")
+        .then((d) => { S.cal = d; if ($("sheetwrap")) nativeProfileSheet(c); })
+        .catch(() => {});
+    }
+  });
+}
+
 function nativeCustomerSheet(existing) {
   const c = existing || {};
   sheet(`<h2>${existing ? "Edit Customer" : "New Customer"}</h2>
@@ -6829,7 +7004,7 @@ function customerSheet(c) {
 
     <div class="kpis" style="margin-top:14px">
       <div class="kpi cyan"><small>Lifetime sales</small><b>${money0(lifetime)}</b></div>
-      <div class="kpi purple"><small>Invoices</small><b>${all.length}</b></div>
+      <div class="kpi ${overdueAmt > 0 ? "red" : "purple"}"><small>Overdue</small><b>${money0(overdueAmt)}</b></div>
       <div class="kpi em"><small>Average sale</small><b>${money0(avg)}</b></div>
       <div class="kpi ${Number(c.balance) > 0 ? "orange" : "gold"}"><small>Outstanding</small><b>${money0(c.balance)}</b></div>
     </div>
@@ -7089,34 +7264,63 @@ function leadSheet(l) {
 
 function drawTodos() {
   const slot = $("lanebody"); if (!slot) return;
-  const todos = (S.board?.todos || []).filter((t) => t.status === "open");
-  const done = (S.board?.todos || []).filter((t) => t.status === "done").slice(0, 10);
-  const now = new Date(); const endToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-  const groups = [
-    ["OVERDUE", todos.filter((t) => t.dueAt && new Date(t.dueAt) < now)],
-    ["TODAY", todos.filter((t) => t.dueAt && new Date(t.dueAt) >= now && new Date(t.dueAt) <= endToday)],
-    ["UPCOMING", todos.filter((t) => t.dueAt && new Date(t.dueAt) > endToday)],
-    ["ANYTIME", todos.filter((t) => !t.dueAt)],
-  ].filter(([, items]) => items.length);
+  const all = S.board?.todos || [];
+  const todos = all.filter((t) => t.status === "open");
+  const done = all.filter((t) => t.status === "done");
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  const overdue = todos.filter((t) => t.dueAt && new Date(t.dueAt) < startToday);
+  const today = todos.filter((t) => t.dueAt && new Date(t.dueAt) >= startToday && new Date(t.dueAt) <= endToday);
+  const upcoming = todos.filter((t) => t.dueAt && new Date(t.dueAt) > endToday);
+  const anytime = todos.filter((t) => !t.dueAt);
+  // iOS TodoMissionHero: the headline follows the worst thing on the board.
+  const headline = !todos.length ? "Board is clear"
+    : overdue.length ? (overdue.length === 1 ? "1 item is overdue" : `${overdue.length} items are overdue`)
+    : today.length ? (today.length === 1 ? "1 item due today" : `${today.length} items due today`)
+    : todos.length === 1 ? "1 open item" : `${todos.length} open items`;
+  const subline = !todos.length
+    ? (done.length ? "Everything is done \u2014 nice week." : "Add one below, or ask Ledger to remind you.")
+    : todos.length === 1 ? "1 open on the board" : `${todos.length} open on the board`;
+  const row = (t, isDone) => `<div class="item">
+      <button class="tdot ${isDone ? "on" : ""}" data-toggle="${esc(t.id)}" title="${esc((t.priority || "normal").toUpperCase())} priority"
+        style="border-color:${todoPriorityTint(t.priority)}">${isDone ? "&#10003;" : ""}</button>
+      <div class="main" data-todo="${esc(t.id)}"><div class="ttl"${isDone ? ` style="text-decoration:line-through"` : ""}>${esc(t.title)}</div>
+        <div class="sub">${t.dueAt ? esc(dayLabel(t.dueAt) + " \u00b7 " + timeLabel(t.dueAt)) : "No date"}${t.customerName ? " \u00b7 " + esc(t.customerName) : ""}</div></div>
+    </div>`;
+  const group = (label, items, tint) => items.length ? `<div><div class="eyebrow" style="color:${tint}">${label}</div>
+      <div class="list" style="margin-top:8px">${items.map((t) => row(t, false)).join("")}</div></div>` : "";
   slot.innerHTML = `
-    <button class="btn primary wide" id="addtodo">+ New to-do</button>
-    ${groups.length ? groups.map(([label, items]) => `<div><div class="eyebrow" style="color:${label === "OVERDUE" ? "var(--red)" : "var(--cyan)"}">${label}</div>
-      <div class="list" style="margin-top:8px">${items.map((t) => `<div class="item">
-        <button data-done="${esc(t.id)}" title="${esc((t.priority || "normal").toUpperCase())} priority" style="background:none;border:1.7px solid ${todoPriorityTint(t.priority)};border-radius:50%;width:24px;height:24px;color:var(--dim);cursor:pointer;flex-shrink:0"></button>
-        <div class="main" data-todo="${esc(t.id)}"><div class="ttl">${esc(t.title)}</div>
-          <div class="sub">${t.dueAt ? esc(dayLabel(t.dueAt) + " · " + timeLabel(t.dueAt)) : "No date"}${t.customerName ? " · " + esc(t.customerName) : ""}</div></div>
-      </div>`).join("")}</div></div>`).join("")
-      : `<div class="empty">Nothing on the list.<br>Ask Ledger to remind you about something.</div>`}
-    ${done.length ? `<div><div class="eyebrow" style="color:var(--dim)">DONE</div>
-      <div class="list" style="margin-top:8px;opacity:.55">${done.map((t) => `<div class="item" style="cursor:default">
-        <div class="main"><div class="ttl" style="text-decoration:line-through">${esc(t.title)}</div></div></div>`).join("")}</div></div>` : ""}`;
+    <div class="todohero ${overdue.length ? "late" : today.length ? "warm" : ""}">
+      <div class="t"><span class="eyebrow">&#9989; To-do</span><span class="livechip">LIVE</span></div>
+      <b>${esc(headline)}</b><span>${esc(subline)}</span>
+    </div>
+    <div class="dirbar">
+      <span class="dircount">${todos.length ? (todos.length === 1 ? "1 open" : todos.length + " open") : "Nothing open"}</span>
+      <button class="pillbtn" id="tdrefresh" title="Refresh">&#8635;</button>
+      <button class="pillbtn em" id="addtodo">+ Add</button>
+    </div>
+    ${!todos.length && !done.length ? `<div class="empty">Nothing on the board.<br>Tap Add \u2014 or tell Ledger &quot;remind me to order the Michelin set Tuesday&quot; in chat and it lands here.</div>` : ""}
+    ${group("OVERDUE", overdue, "var(--red)")}
+    ${group("TODAY", today, "var(--orange)")}
+    ${group("UPCOMING", upcoming, "var(--cyan)")}
+    ${group("ANYTIME", anytime, "var(--purple)")}
+    ${!todos.length && done.length ? `<div class="empty em">All caught up.<br>${done.length === 1 ? "1 done item is below." : done.length + " done items are below."}</div>` : ""}
+    ${done.length ? `<button class="donehead" id="tdone">
+        <span class="eyebrow em">&#9679; DONE ${done.length}</span>
+        <span class="note">${S.showDoneTodos ? "Hide" : "Show"}</span></button>
+      ${S.showDoneTodos ? `<div class="list" style="margin-top:8px;opacity:.6">${done.map((t) => row(t, true)).join("")}</div>` : ""}` : ""}`;
   $("addtodo").onclick = () => todoSheet({});
-  on("[data-done]", "click", async (e) => {
-    const id = e.currentTarget.dataset.done;
-    try { S.board = await api("/leads", { action: "todo-save", todo: { id, status: "done" } }); drawTodos(); }
+  $("tdrefresh").onclick = () => { slot.innerHTML = `<div class="skel"></div>`; loadBoard(); };
+  if ($("tdone")) $("tdone").onclick = () => { S.showDoneTodos = !S.showDoneTodos; drawTodos(); };
+  // The board only understands a done flag \u2014 sending {status} silently saved nothing.
+  // Tapping a done item puts it back on the board, the way the iPhone does.
+  on("[data-toggle]", "click", async (e) => {
+    const t = all.find((x) => x.id === e.currentTarget.dataset.toggle); if (!t) return;
+    try { S.board = await api("/leads", { action: "todo-save", todo: { id: t.id, done: t.status === "open" } }); drawTodos(); }
     catch (err) { toast(err.message, "err"); }
   }, slot);
-  on("[data-todo]", "click", (e) => todoSheet(todos.find((t) => t.id === e.currentTarget.dataset.todo)), slot);
+  on("[data-todo]", "click", (e) => todoSheet(all.find((t) => t.id === e.currentTarget.dataset.todo)), slot);
 }
 
 const todoPriorityTint = (p) => p === "urgent" ? "var(--red)" : p === "high" ? "var(--orange)"
