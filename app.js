@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 100;
+const APP_BUILD = 101;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -2105,7 +2105,10 @@ async function loadInvoices() {
   {
     const all = S.qbo?.qbo?.invoices || [];
     const k = S.qbo?.qbo?.kpis || {};
-    const filtered = all.filter((i) => S.invoiceFilter === "all" || i.status === S.invoiceFilter)
+    const over30Cut = localDay(new Date(Date.now() - 30 * 86400000));
+    const filtered = all.filter((i) => S.invoiceFilter === "all" ? true
+        : S.invoiceFilter === "over30" ? (Number(i.balance) > 0 && i.due_date && i.due_date < over30Cut)
+        : i.status === S.invoiceFilter)
       .filter((i) => !S.invoiceSearch || (i.customer + " " + i.doc + " " + (i.email || "")).toLowerCase().includes(S.invoiceSearch));
     // iOS searches customers alongside invoices and lists the matches above them.
     const custHits = !S.invoiceSearch ? [] : (S.qbo?.qbo?.customers || []).filter((c) =>
@@ -2129,10 +2132,10 @@ async function loadInvoices() {
         <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#35;</span>
           <span class="nextchip">Next #${esc(String(k.next_invoice ?? "—"))}</span><small>Open invoices</small><b>${k.open_count ?? 0}</b></div>
       </div>
-      <div class="searchwrap"><span class="mag">${MAG}</span>
+      <div class="searchwrap" style="margin-top:15px"><span class="mag">${MAG}</span>
         <input id="invsearch" placeholder="Customer, invoice, email or phone" value="${esc(S.invoiceSearch || "")}"></div>
-      <div class="chips">
-        ${[["all", "All"], ["open", "Open"], ["paid", "Paid"]].map(([k2, l]) =>
+      <div class="chips" style="margin:13px 0 4px">
+        ${[["all", "All"], ["open", "Open"], ["over30", "Over 30"], ["paid", "Paid"]].map(([k2, l]) =>
           `<button class="chip ${S.invoiceFilter === k2 ? "on" : ""}" data-if="${k2}">${l}</button>`).join("")}
       </div>
       ${S.invoiceSearch ? `<div class="lanehead"><span class="eyebrow">Search results</span>
@@ -2148,7 +2151,7 @@ async function loadInvoices() {
         </button>`).join("")}</div>` : ""}
       ${S.invoiceSearch && !custHits.length && !filtered.length
         ? `<div class="empty">No Finance matches.<br>Try a customer, invoice number, email or phone.</div>` : ""}
-      <div class="lanehead"><span class="eyebrow" style="color:var(--dim)">${S.invoiceSearch ? "Matching invoices" : "Recent invoices"}</span>
+      <div class="lanehead" style="margin:16px 0 9px"><span class="eyebrow" style="color:var(--dim)">${S.invoiceSearch ? "Matching invoices" : "Recent invoices"}</span>
         <span class="note">${S.invoiceSearch ? filtered.length : Math.min(filtered.length, 120)}</span></div>
       ${filtered.length ? `<div class="list">${filtered.slice(0, 120).map((i, idx) => `
         <button class="item" data-inv="${esc(i.id)}">
