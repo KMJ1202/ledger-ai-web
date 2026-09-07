@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 105;
+const APP_BUILD = 106;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -874,7 +874,7 @@ async function loadHomeCustomers() {
   } catch { inner = pvretry(S.booksProvider === "native" ? "Couldn't load your customer list." : "Couldn't reach QuickBooks."); }
   slot.innerHTML = pvcard("pvcust", "people", "Recent customers", "pk", "View All Customers", inner);
   wirePv("pvcust", () => { S.lane = "directory"; setTab("customers"); });
-  wireRetry(slot, () => { S.qboStale = true; S.nativeCustomers = null; homeSrc = null; loadHomeCustomers(); });
+  wireRetry(slot, () => { S.qboStale = true; S.nativeCustomers = null; S.nativeInvoiceList = null; homeSrc = null; loadHomeCustomers(); });
   on("[data-viewcust]", "click", () => { S.lane = "directory"; setTab("customers"); }, slot);
   on("[data-askreview]", "click", async (e) => {
     const id = e.currentTarget.dataset.askreview;
@@ -892,15 +892,22 @@ async function homeBooksKpis() {
   if (S.booksProvider === "native") {
     if (!S.nativeSummary) S.nativeSummary = await booksApi({ action: "summary" });
     const n = S.nativeSummary?.summary || S.nativeSummary || {};
+    if (!S.nativeInvoiceList) S.nativeInvoiceList = (await booksApi({ action: "invoices" })).invoices || [];
+    const live = S.nativeInvoiceList.filter((i) => i.status !== "void");
+    const day = localDay();
+    const sum = (rows) => rows.reduce((t, i) => t + (Number(i.total) || 0), 0);
     return {
-      today_sales: n.today_sales ?? n.todaySales ?? 0,
-      month_sales: n.month_sales ?? n.monthSales ?? 0,
-      ytd_sales: n.ytd_sales ?? n.ytdSales ?? 0,
-      outstanding: n.outstanding ?? 0,
-      open_count: n.open_count ?? n.openCount ?? 0,
-      today_profit: n.today_profit ?? n.todayProfit ?? null,
-      profit_margin: n.profit_margin ?? n.profitMargin ?? null,
-      missing_cost_count: n.missing_cost_count ?? n.missingCostCount ?? 0,
+      today_sales: n.today_sales ?? sum(live.filter((i) => (i.issue_date || "").slice(0, 10) === day)),
+      month_sales: n.month_sales ?? sum(live.filter((i) => (i.issue_date || "").slice(0, 7) === day.slice(0, 7))),
+      ytd_sales: n.ytd_sales ?? sum(live.filter((i) => (i.issue_date || "").slice(0, 4) === day.slice(0, 4))),
+      outstanding: n.outstanding ?? n.open_balance ?? 0,
+      open_count: n.open_count ?? n.open_invoices ?? 0,
+      next_invoice: n.next_invoice ?? null,
+      // The books P&L is monthly, so there is no honest "today's profit" yet —
+      // Home shows a dash rather than a made-up number.
+      today_profit: n.today_profit ?? null,
+      profit_margin: n.profit_margin ?? null,
+      missing_cost_count: n.missing_cost_count ?? 0,
     };
   }
   if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
