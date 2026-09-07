@@ -1425,9 +1425,9 @@ async function loadNativeInvoices() {
     </button>
     <button class="cta ghost" id="newest">
       <span class="ic">&#128221;</span>
-      <span><b>Create Estimate</b><span>EST-numbered quote with a share page — posts nothing</span></span>
+      <span><b>Create Estimate</b><span>A priced quote — posts nothing until you convert it</span></span>
     </button>
-    ${liveEst.length ? `<div class="lanehead"><span class="eyebrow" style="color:var(--dim)">Open estimates</span>
+    ${liveEst.length ? `<div class="lanehead"><span class="eyebrow" style="color:var(--dim)">Estimates</span>
       <span class="note">${liveEst.length}</span></div>
     <div class="list">${liveEst.slice(0, 40).map((x) => `
       <button class="item" data-best="${esc(x.id)}">
@@ -1443,9 +1443,7 @@ async function loadNativeInvoices() {
         <b>Card payments</b><span>${chargesOn ? "ON — customers can pay online" : "Set up Stripe to get paid online"}</span>
         <em>${chargesOn ? "MANAGE" : "SET UP"} &#8599;</em></button>
       <button class="opcard" data-op="bsettings"><span class="ic">&#9881;</span><b>Books settings</b>
-        <span>Tax, numbering, payment info</span><em>OPEN &#8599;</em></button>
-      <button class="opcard em" data-op="receipts"><span class="ic">&#128229;</span><b>Receipt Queue</b>
-        <span>Review &amp; batch</span><em>OPEN &#8599;</em></button>
+        <span>Tax, invoice numbering, payment info</span><em>OPEN &#8599;</em></button>
       <button class="opcard" data-op="bexport"><span class="ic">&#128228;</span><b>Export CSV</b>
         <span>Invoices, payments, customers</span><em>EXPORT &#8599;</em></button>
     </div>
@@ -2080,11 +2078,11 @@ async function loadInvoices() {
       ${salesIntel(all, k)}
       <button class="cta" id="newinv">
         <span class="ic">&#43;</span>
-        <span><b>Create Invoice</b><span>Draft, review, post to QuickBooks</span></span>
+        <span><b>New invoice</b><span>Draft, review, post</span></span>
       </button>
       <button class="cta ghost" id="newest">
         <span class="ic">&#128221;</span>
-        <span><b>Create Estimate</b><span>A quote on QuickBooks' EST numbering — posts nothing</span></span>
+        <span><b>New estimate</b><span>Quote — posts nothing</span></span>
       </button>
       <div class="searchwrap"><span class="mag">${MAG}</span>
         <input id="invsearch" placeholder="Customer, invoice, email or phone" value="${esc(S.invoiceSearch || "")}"></div>
@@ -2092,14 +2090,8 @@ async function loadInvoices() {
         ${[["all", "All"], ["open", "Open"], ["paid", "Paid"]].map(([k2, l]) =>
           `<button class="chip ${S.invoiceFilter === k2 ? "on" : ""}" data-if="${k2}">${l}</button>`).join("")}
       </div>
-      <div class="lanehead"><span class="eyebrow">${S.invoiceSearch ? "Search results" : "Operations"}</span>
-        ${S.invoiceSearch ? `<button class="linkbtn" id="clrsearch">Clear</button>` : ""}</div>
-      ${!S.invoiceSearch ? `<div class="opsgrid">
-        <button class="opcard purple" data-op="profit"><span class="ic">&#9650;</span><b>Profit &amp; Loss</b>
-          <span>Daily sweep &amp; trends</span><em>OPEN &#8599;</em></button>
-        <button class="opcard em" data-op="receipts"><span class="ic">&#128229;</span><b>Receipt Queue</b>
-          <span>Review &amp; batch</span><em>OPEN &#8599;</em></button>
-      </div>` : ""}
+      ${S.invoiceSearch ? `<div class="lanehead"><span class="eyebrow">Search results</span>
+        <button class="linkbtn" id="clrsearch">Clear</button></div>` : ""}
       ${custHits.length ? `<div class="lanehead"><span class="eyebrow" style="color:var(--dim)">Customers</span>
         <span class="note">${custHits.length} shown</span></div>
         <div class="list">${custHits.map((c) => `
@@ -2157,6 +2149,19 @@ function salesIntel(invoices, k) {
   const inMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const forecastReady = elapsed >= 7 || month.length >= 5;
   const forecast = elapsed ? monthTotal / elapsed * inMonth : 0;
+  // Growth the way the iPhone's QBORevenueHero reads it: month-to-date against
+  // the same number of elapsed days last month and in the same month last year.
+  const dayOf = (i) => Number((i.date || "").slice(8, 10)) || 0;
+  const sumRows = (rows) => rows.reduce((t, i) => t + (Number(i.total) || 0), 0);
+  const throughToday = (y, m) => invoices.filter((i) =>
+    (i.date || "").slice(0, 7) === `${y}-${String(m).padStart(2, "0")}` && dayOf(i) <= elapsed);
+  const pm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const mtd = sumRows(throughToday(now.getFullYear(), now.getMonth() + 1));
+  const momBase = sumRows(throughToday(pm.getFullYear(), pm.getMonth() + 1));
+  const yoyBase = sumRows(throughToday(now.getFullYear() - 1, now.getMonth() + 1));
+  const growthPct = (cur, base) => base > 0 ? (cur - base) / base * 100 : null;
+  const mom = growthPct(mtd, momBase), yoy = growthPct(mtd, yoyBase);
+  const pctText = (v) => v == null ? "—" : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}%`;
 
   const days = [];
   for (let d = 13; d >= 0; d--) {
@@ -2176,14 +2181,14 @@ function salesIntel(invoices, k) {
       `<div class="b ${i === days.length - 1 ? "hot" : ""}" style="height:${Math.max(Math.round(d.total / max * 100), 3)}%" title="${d.key}: ${money0(d.total)}"></div>`).join("")}</div>
     <div class="sparkends"><span>14 days ago</span><span>Today</span></div>
     <div class="kpis" style="margin-top:15px">
-      <div class="kpi cyan"><small>Today</small><b>${money0(k.today_sales)}</b></div>
-      <div class="kpi em"><small>Year to date</small><b>${money0(k.ytd_sales)}</b></div>
-      <div class="kpi gold"><small>Outstanding</small><b>${money0(k.outstanding)}</b><i>${k.open_count ?? 0} open</i></div>
-      <div class="kpi purple"><small>Open invoices</small><b>${k.open_count ?? 0}</b><i>Next #${esc(k.next_invoice ?? "—")}</i></div>
-      <div class="kpi cyan"><small>Avg sale</small><b>${money(avg)}</b><i>${month.length} invoice${month.length === 1 ? "" : "s"} this month</i></div>
+      <div class="kpi cyan"><small>Month over month</small><b>${pctText(mom)}</b><i>vs same point last month</i></div>
+      <div class="kpi purple"><small>Year over year</small><b>${pctText(yoy)}</b><i>vs same point last year</i></div>
+      <div class="kpi em"><small>Average sale</small><b>${money(avg)}</b><i>${month.length} invoice${month.length === 1 ? "" : "s"} this month</i></div>
       <div class="kpi orange"><small>Forecast</small><b>${forecastReady ? money(forecast) : "—"}</b><i>${forecastReady ? "month-end run rate" : "after a week of sales"}</i></div>
+      <div class="kpi gold"><small>Outstanding</small><b>${money0(k.outstanding)}</b><i>${k.open_count ?? 0} open</i></div>
+      <div class="kpi cyan"><small>Open invoices</small><b>${k.open_count ?? 0}</b><i>Next #${esc(k.next_invoice ?? "—")}</i></div>
     </div>
-    <p class="infoline"><em>&#9432;</em>Run rate projects this month's pace across the full month — it is not a promise.</p>
+    <p class="infoline"><em>&#9432;</em>Growth compares the same number of days in each period, never a partial month against a full one.</p>
   </div>`;
 }
 
@@ -2372,6 +2377,8 @@ function invoiceSheet(inv, back) {
     <div class="kv tot"><span>Total</span><span>${money(inv.total)}</span></div>
     ${inv.balance > 0 ? `<div class="kv"><span>Balance owing</span><span style="color:var(--orange)">${money(inv.balance)}</span></div>` : ""}
     ${inv.email ? `<p class="note" style="margin-top:10px">Bill to ${esc(inv.email)}</p>` : ""}
+    ${inv.balance > 0 ? `<button class="btn em wide" id="markpaid" style="margin-top:12px">&#10003;&nbsp; Mark as paid</button>
+    <p class="note" style="margin-top:6px">Records a payment in QuickBooks for the full open balance, applied to this invoice. Use when the customer paid by e-transfer, cash or cheque.</p>` : ""}
     <div class="rowbtns" style="margin-top:14px">
       <button class="btn ghost" id="sharepdf">Share PDF</button>
       <button class="btn primary" id="printpdf">Print</button>
@@ -2379,6 +2386,15 @@ function invoiceSheet(inv, back) {
     ${back ? `<button class="btn ghost" id="invback" style="margin-top:9px;width:100%">&#8592; Back to ${esc(inv.customer || "customer")}</button>` : ""}
     <div class="note" id="pdfnote" style="margin-top:9px"></div>`, (sh) => {
     if (back) sh.querySelector("#invback").onclick = () => back();
+    const mp = sh.querySelector("#markpaid");
+    if (mp) mp.onclick = async () => {
+      if (!confirm(`Mark paid — ${money(inv.balance)}? This posts a real payment to your books. Reversing it later is a QuickBooks-side action.`)) return;
+      mp.disabled = true; mp.textContent = "Recording payment…";
+      try {
+        await api("/quickbooks-invoice/mark-paid", { id: inv.id });
+        closeSheet(); toast(`Invoice #${inv.doc} marked paid`); S.qboStale = true; loadInvoices();
+      } catch (e) { mp.disabled = false; mp.innerHTML = "&#10003;&nbsp; Mark as paid"; toast(e.message, "err"); }
+    };
     sh.querySelector("#printpdf").onclick = () => withPdf(inv, sh, (url) => {
       const frame = document.createElement("iframe");
       frame.style.cssText = "position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0";
@@ -2457,6 +2473,8 @@ async function loadProfit() {
     refreshError = e.message; // keep showing the last profit board Ledger loaded
   }
   if (!S.receipts) { try { S.receipts = (await get("/gmail/receipts")).receipts || []; } catch { S.receipts = []; } }
+  // Fixed overhead per open day — the iPhone's "After overhead" line under today's profit.
+  if (S.overhead === undefined) { try { S.overhead = (await get("/profit/overhead")).overhead || null; } catch { S.overhead = null; } }
   drawProfit(refreshError);
 }
 
@@ -2466,6 +2484,8 @@ function drawProfit(refreshError) {
   const series = (p[S.profitRange] || []).slice(-14);
   const today = p.today || {};
   const swept = today.date === localDay();
+  const perDayOpen = Number(S.overhead?.math?.perDayOpen) || 0;
+  const afterOverhead = swept && S.overhead ? (today.net_profit || 0) - perDayOpen : null;
   const unposted = (S.receipts || []).filter((r) => !r.qbo_purchase_id && r.category !== "Personal").length;
   const max = Math.max(1, ...series.map((s) => Math.abs(s.net_profit || 0)));
   const income = today.total_income || 0, costs = today.total_expenses || 0;
@@ -2482,8 +2502,9 @@ function drawProfit(refreshError) {
         <div><small>Income</small><b style="color:var(--cyan)">${money0(income)}</b></div>
         <div><small>Expenses</small><b style="color:var(--orange)">${money0(costs)}</b></div>
         <div><small>Margin</small><b style="color:var(--magenta)">${margin}%</b></div>
-      </div>` : `<div class="big" style="color:var(--dim)">Not yet swept</div>
-      <p class="note" style="margin-top:6px">Today isn't counted yet — that's not a $0 day, it lands after the ${String(p.sweep_hour ?? 18).padStart(2, "0")}:30 sweep.</p>`}
+      </div>
+      ${afterOverhead != null ? `<div class="afterov"><small>After overhead</small><b style="color:${afterOverhead >= 0 ? "var(--emerald)" : "var(--orange)"}">${money(afterOverhead)}</b><span>less ${money(perDayOpen)} of fixed cost for the day</span></div>` : ""}` : `<div class="big" style="color:var(--dim)">Not yet swept</div>
+      <p class="note" style="margin-top:6px">No sweep has locked today yet — run one below or let the evening sweep catch it.</p>`}
     </div>
     ${unposted ? `<div class="warnstrip"><em>&#9888;</em><span>${unposted} receipt${unposted === 1 ? " isn't" : "s aren't"} posted to QuickBooks yet — ${unposted === 1 ? "it won't" : "they won't"} count in tonight's sweep.</span></div>` : ""}
     <div class="panel">
@@ -2496,7 +2517,7 @@ function drawProfit(refreshError) {
       }).join("")}</div>
       <div class="barlabels">${series.map((s, i) => `<span>${i % 2 === 0 ? esc((s.label || s.date || "").slice(-5)) : ""}</span>`).join("")}</div>
       <p class="note" style="margin-top:11px">Total ${money(total)}${best ? " · best " + esc((best.label || best.date || "").slice(-5)) + ": " + money(best.net_profit) : ""}</p>`
-      : `<div class="empty">No snapshots yet — run a sweep to fill the board.</div>`}
+      : `<div class="empty">No history yet — the first sweep backfills a month of profit automatically.</div>`}
     </div>
     ${costPanel(p.cost_of_operations || {})}
     <div class="panel">
@@ -2700,7 +2721,7 @@ function psMatchScreen(review, tally, after) {
           ${msLines(a.lines)}
           <div class="to">→ ${msSaleLine(a.sale, a.job_profit)}</div>
           ${msSaleLines(a.sale)}
-          <button class="linkbtn" data-msunlink="${a.id}">Not this one</button>
+          <button class="linkbtn" data-msunlink="${a.id}">Wrong invoice</button>
         </div>`).join("")}
       </details>
     </div>` : "";
@@ -2715,7 +2736,7 @@ function psMatchScreen(review, tally, after) {
           : `<div class="ms-guess none">No matching sale on file yet${c.lines_read ? "" : " — still reading this invoice"}.</div>`}
       ${s && c.count_split ? `<button class="btn em wide" data-mscountone="${c.id}" data-sale="${s.id}" data-qty="${c.count_split.sale_qty}">&#10003;&nbsp; Yes — ${c.count_split.sale_qty} of ${c.count_split.order_qty} went here</button>`
         : s ? `<button class="btn em wide" data-msconfirm="${c.id}" data-sale="${s.id}">&#10003;&nbsp; That's the one</button>` : ""}
-      <button class="btn ghost wide" data-mspick="${c.id}" data-rej="${s ? s.id : ""}">${s ? "Different invoice" : "Pick the invoice"}</button>
+      <button class="btn ghost wide" data-mspick="${c.id}" data-rej="${s ? s.id : ""}">${s ? "Wrong invoice" : "Pick the invoice"}</button>
       ${msUnits(c) > 1 ? `<button class="btn ghost wide" data-mscount="${c.id}">&#9776;&nbsp; Split by count — ${msUnits(c)} tires, several invoices</button>` : ""}
       <button class="btn ghost wide" data-mswait="${c.id}" data-rej="${s ? s.id : ""}">Not sold yet</button>
       <button class="btn ghost wide" data-msreturned="${c.id}">&#8630;&nbsp; Returned to supplier</button>
@@ -3760,7 +3781,7 @@ async function loadReceipts() {
         </div>
         <label class="preclass" style="margin-top:12px;display:flex;align-items:center;gap:9px;padding:11px 13px;border-radius:13px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09)">
           <span style="color:var(--gold)">&#127991;</span>
-          <span style="font-size:10px;font-weight:800;letter-spacing:1.3px;color:var(--dim)">PRE-CLASSIFY</span>
+          <span style="font-size:10px;font-weight:800;letter-spacing:1.3px;color:var(--dim)">CATEGORY</span>
           <select id="preclassify" style="margin-left:auto;background:none;border:0;color:var(--gold);font-weight:700;font-family:inherit;text-align:right">
             <option value="">Let Ledger read it</option>
             ${Object.entries(CATEGORIES).map(([g, cats]) => `<optgroup label="${esc(g)}">${cats.map((c) =>
@@ -3802,9 +3823,11 @@ async function loadReceipts() {
             <div class="sub">${esc(r.subject || "")}</div>
           </div>
           <div class="amt">${r.total ? money(r.total) : "—"}
-            <small>${r.qbo_purchase_id ? '<span class="tag paid">posted</span>'
-              : r.category === "Personal" ? '<span class="tag grey">personal</span>'
-              : r.category ? '<span class="tag new">ready</span>' : '<span class="tag open">needs category</span>'}</small></div>
+            <small>${r.image_path ? '<span class="tag grey">Photo</span> ' : ""}${r.qbo_purchase_id ? '<span class="tag paid">In QuickBooks</span>'
+              : r.category === "Personal" ? '<span class="tag grey">Personal</span>'
+              : !r.total ? '<span class="tag open">Add amount</span>'
+              : r.category ? (S.booksProvider === "native" ? '<span class="tag new">Counted</span>' : '<span class="tag new">Post to QuickBooks</span>')
+              : '<span class="tag open">Needs category</span>'}</small></div>
         </button>`).join("")}</div>`
         : `<div class="empty">${rq ? "No receipts match that search." : "No receipts found yet.<br>Run a scan, or forward one to your inbox."}</div>`}`;
     $("rcptshoot").onclick = () => $("rcptcam").click();
@@ -4023,13 +4046,24 @@ function receiptSheet(r, suggestedCategory) {
         await save();
         const v = await api("/quickbooks-invoice/expense-vendors", { receipt_id: r.id });
         const vendors = v.vendors || [];
-        note.innerHTML = `<label class="fld">VENDOR</label><select id="rvend">${
+        note.innerHTML = `<label class="fld">VENDOR — WHO WAS PAID</label><select id="rvend">${
           vendors.map((x) => `<option value="${esc(x.id)}" ${x.id === v.suggestedId ? "selected" : ""}>${esc(x.name)}</option>`).join("")
-        }</select><button class="btn em wide" style="margin-top:9px" id="rgo">Post expense</button>`;
+        }<option value="__new__">Create a new vendor…</option></select>
+          <input id="rvendnew" class="cmpinput" placeholder="New vendor name" maxlength="100" style="margin-top:8px;display:none">
+          <button class="btn em wide" style="margin-top:9px" id="rgo">Post expense</button>
+          <p class="note" style="margin-top:6px">Creates a real expense in your books — you can edit or delete it in QuickBooks afterward.</p>`;
+        const sel = note.querySelector("#rvend"), nv = note.querySelector("#rvendnew");
+        sel.onchange = () => { nv.style.display = sel.value === "__new__" ? "block" : "none"; if (sel.value === "__new__") nv.focus(); };
         note.querySelector("#rgo").onclick = async (e2) => {
+          const body = { receipt_id: r.id };
+          if (sel.value === "__new__") {
+            const name = nv.value.trim();
+            if (!name) { toast("Type the new vendor's name", "err"); return; }
+            body.vendor_name = name;
+          } else body.vendor_id = sel.value;
           e2.currentTarget.disabled = true;
           try {
-            await api("/quickbooks-invoice/expense-post", { receipt_id: r.id, vendor_id: note.querySelector("#rvend").value });
+            await api("/quickbooks-invoice/expense-post", body);
             closeSheet(); toast("Posted to QuickBooks"); loadReceipts();
           } catch (err) { e2.currentTarget.disabled = false; toast(err.message, "err"); }
         };
