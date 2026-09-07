@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 97;
+const APP_BUILD = 98;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -2113,14 +2113,22 @@ async function loadInvoices() {
     slot.innerHTML = `
       ${refreshError ? `<p class="note err">Couldn't refresh — showing the last invoices Ledger loaded. ${esc(refreshError)}</p>` : ""}
       ${salesIntel(all, k)}
-      <button class="cta" id="newinv">
-        <span class="ic">&#43;</span>
-        <span><b>New invoice</b><span>Draft, review, post</span></span>
-      </button>
-      <button class="cta ghost" id="newest">
-        <span class="ic">&#128221;</span>
-        <span><b>New estimate</b><span>Quote — posts nothing</span></span>
-      </button>
+      <div class="fintiles">
+        <button class="fintile act" id="newinv">
+          <span class="tic" style="background:rgba(58,200,245,.3);color:#fff">&#43;</span>
+          <em>New invoice</em><i>Draft, review, post</i></button>
+        <button class="fintile act" id="newest">
+          <span class="tic" style="background:rgba(47,224,160,.16);color:var(--emerald)">&#128221;</span>
+          <em>New estimate</em><i>Quote &mdash; posts nothing</i></button>
+        <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">&#9728;</span>
+          <span class="dot cyan"></span><small>Today</small><b>${money(k.today_sales || 0)}</b></div>
+        <div class="fintile"><span class="tic" style="background:rgba(168,85,247,.15);color:var(--magenta)">&#128200;</span>
+          <span class="dot em"></span><small>Year to date</small><b>${money(k.ytd_sales || 0)}</b></div>
+        <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#8987;</span>
+          <span class="dot orange"></span><small>Outstanding</small><b>${money(k.outstanding || 0)}</b></div>
+        <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#128196;</span>
+          <span class="nextchip">Next #${esc(String(k.next_invoice ?? "—"))}</span><small>Open invoices</small><b>${k.open_count ?? 0}</b></div>
+      </div>
       <div class="searchwrap"><span class="mag">${MAG}</span>
         <input id="invsearch" placeholder="Customer, invoice, email or phone" value="${esc(S.invoiceSearch || "")}"></div>
       <div class="chips">
@@ -2222,8 +2230,6 @@ function salesIntel(invoices, k) {
       <div class="kpi purple"><small>Year over year</small><b>${pctText(yoy)}</b><i>vs same point last year</i></div>
       <div class="kpi em"><small>Average sale</small><b>${money(avg)}</b><i>${month.length} invoice${month.length === 1 ? "" : "s"} this month</i></div>
       <div class="kpi orange"><small>Forecast</small><b>${forecastReady ? money(forecast) : "—"}</b><i>${forecastReady ? "month-end run rate" : "after a week of sales"}</i></div>
-      <div class="kpi gold"><small>Outstanding</small><b>${money0(k.outstanding)}</b><i>${k.open_count ?? 0} open</i></div>
-      <div class="kpi cyan"><small>Open invoices</small><b>${k.open_count ?? 0}</b><i>Next #${esc(k.next_invoice ?? "—")}</i></div>
     </div>
     <p class="infoline"><em>&#9432;</em>Growth compares the same number of days in each period, never a partial month against a full one.</p>
   </div>`;
