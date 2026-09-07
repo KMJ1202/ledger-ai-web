@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 103;
+const APP_BUILD = 104;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -1392,6 +1392,10 @@ function salesIntelNative(invoices) {
   const ytd = rangeTotal(now.getFullYear() + "-01-01", iso(now));
   const prevY = new Date(now); prevY.setFullYear(now.getFullYear() - 1);
   const yoyBase = rangeTotal((now.getFullYear() - 1) + "-01-01", iso(prevY));
+  // Year over year on this card means the same month a year ago, so it can sit
+  // beside "This month" honestly — same rule as the QuickBooks card.
+  const lastYearMonthStart = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+  const yoyMonthBase = rangeTotal(iso(lastYearMonthStart), iso(prevY));
   const growth = (cur, base) => base > 0
     ? `${cur >= base ? "+" : "−"}${Math.abs(Math.round((cur - base) / base * 100))}%` : "—";
   const days = [];
@@ -1409,9 +1413,9 @@ function salesIntelNative(invoices) {
       `<div class="b ${i === days.length - 1 ? "hot" : ""}" style="height:${Math.max(Math.round(d.total / max * 100), 3)}%" title="${d.key}: ${money0(d.total)}"></div>`).join("")}</div>
     <div class="sparkends"><span>14 days ago</span><span>Today</span></div>
     <div class="kpis" style="margin-top:15px">
-      <div class="kpi cyan"><small>MOM &middot; MTD</small><b>${growth(mtd, momBase)}</b><i>vs same point last month</i></div>
-      <div class="kpi purple"><small>YOY &middot; YTD</small><b>${growth(ytd, yoyBase)}</b><i>vs same point last year</i></div>
-      <div class="kpi em"><small>Avg sale</small><b>${money(avg)}</b><i>${month.length} invoice${month.length === 1 ? "" : "s"} this month</i></div>
+      <div class="kpi cyan"><small>Month over month</small><b>${growth(mtd, momBase)}</b><i>vs same point last month</i></div>
+      <div class="kpi purple"><small>Year over year</small><b>${growth(mtd, yoyMonthBase)}</b><i>vs same point last year</i></div>
+      <div class="kpi em"><small>Average sale</small><b>${money(avg)}</b><i>${month.length} invoice${month.length === 1 ? "" : "s"} this month</i></div>
       <div class="kpi orange"><small>Forecast</small><b>${forecastReady ? money(forecast) : "—"}</b><i>${forecastReady ? "month-end run rate" : "after a week of sales"}</i></div>
     </div>
     <p class="infoline"><em>&#9432;</em>Growth compares matching elapsed periods &mdash; not partial months against full months.</p>
@@ -1434,9 +1438,25 @@ async function loadNativeInvoices() {
   const estimates = estData.estimates || [];
   // Same split as iOS: open/accepted estimates are live work; the rest is history.
   const liveEst = estimates.filter((x) => x.status === "open" || x.status === "accepted");
-  const filtered = invoices.filter((i) => !S.invoiceSearch ||
-    (i.customer + " " + i.number).toLowerCase().includes(S.invoiceSearch));
+  const over30Cut = localDay(new Date(Date.now() - 30 * 86400000));
+  const todayISO = localDay();
+  const filtered = invoices
+    .filter((i) => S.invoiceFilter === "all" || !S.invoiceFilter ? true
+      : S.invoiceFilter === "open" ? (i.status !== "void" && Number(i.balance) > 0)
+      : S.invoiceFilter === "paid" ? (i.status !== "void" && Number(i.balance) <= 0)
+      : S.invoiceFilter === "late" ? (Number(i.balance) > 0 && i.due_date && i.due_date < todayISO)
+      : S.invoiceFilter === "over30" ? (Number(i.balance) > 0 && (i.issue_date || "") < over30Cut)
+      : true)
+    .filter((i) => !S.invoiceSearch ||
+      (i.customer + " " + i.number).toLowerCase().includes(S.invoiceSearch));
   const chargesOn = connect?.charges_enabled === true;
+  const live = invoices.filter((i) => i.status !== "void");
+  const todayKey = localDay();
+  const todaySales = live.filter((i) => (i.issue_date || "").slice(0, 10) === todayKey)
+    .reduce((s, i) => s + (Number(i.total) || 0), 0);
+  const ytdSales = live.filter((i) => (i.issue_date || "").slice(0, 4) === todayKey.slice(0, 4))
+    .reduce((s, i) => s + (Number(i.total) || 0), 0);
+  const openCount = summary.open_invoices ?? live.filter((i) => Number(i.balance) > 0).length;
   // iOS Overview parity: the 2x2 KPI tile grid renders every time — zeros on
   // a fresh workspace beat a blank screen. THIS MONTH / YTD come from the
   // summary's monthly income series (payments received).
@@ -1450,20 +1470,26 @@ async function loadNativeInvoices() {
   const nextNum = seq ? `${seq.prefix ?? ""}${seq.next_number ?? ""}` : "—";
   slot.innerHTML = `
     ${salesIntelNative(invoices)}
-    <div class="fintiles">
-      <div class="fintile"><small>COLLECTED THIS MONTH</small><b>${money(thisMonth)}</b></div>
-      <div class="fintile"><small>COLLECTED THIS YEAR</small><b>${money(ytd)}</b></div>
-      <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#36;</span><small>OUTSTANDING</small><b>${money(summary.open_balance || 0)}</b></div>
-      <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#128196;</span><span class="nextchip">Next ${esc(String(nextNum))}</span><small>OPEN INVOICES</small><b>${summary.open_invoices ?? 0}</b></div>
+<div class="fintiles">
+      <button class="fintile act" id="newinv">
+        <span class="tic" style="background:rgba(58,200,245,.3);color:#fff">&#43;</span>
+        <em>New invoice</em><i>Numbered, taxed, payment link</i></button>
+      <button class="fintile act" id="newest">
+        <span class="tic" style="background:rgba(47,224,160,.16);color:var(--emerald)">&#9998;</span>
+        <em>New estimate</em><i>Quote &mdash; posts nothing</i></button>
+      <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">${segIc("pulse")}</span>
+        <span class="dot cyan"></span><small>Today</small><b>${money(todaySales)}</b></div>
+      <div class="fintile"><span class="tic" style="background:rgba(168,85,247,.15);color:var(--magenta)">${segIc("profit")}</span>
+        <span class="dot em"></span><small>Year to date</small><b>${money(ytdSales)}</b></div>
+      <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#36;</span>
+        <span class="dot orange"></span><small>Outstanding</small><b>${money(summary.open_balance || 0)}</b></div>
+      <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#35;</span>
+        <span class="nextchip">Next ${esc(String(nextNum))}</span><small>Open invoices</small><b>${openCount}</b></div>
     </div>
-    <button class="cta" id="newinv">
-      <span class="ic">&#43;</span>
-      <span><b>Create Invoice</b><span>Numbered, taxed, with a payment link</span></span>
-    </button>
-    <button class="cta ghost" id="newest">
-      <span class="ic">&#128221;</span>
-      <span><b>Create Estimate</b><span>A priced quote — posts nothing until you convert it</span></span>
-    </button>
+    <div class="chips" style="margin:13px 0 4px">
+      ${[["all", "All"], ["open", "Open"], ["late", "Late"], ["over30", "Over 30"], ["paid", "Paid"]].map(([k2, l]) =>
+        `<button class="chip ${S.invoiceFilter === k2 ? "on" : ""}" data-if="${k2}">${l}</button>`).join("")}
+    </div>
     ${liveEst.length ? `<div class="lanehead"><span class="eyebrow" style="color:var(--dim)">Estimates</span>
       <span class="note">${liveEst.length}</span></div>
     <div class="list">${liveEst.slice(0, 40).map((x) => `
@@ -1473,7 +1499,7 @@ async function loadNativeInvoices() {
         <div class="amt">${money(x.total)}
           <small><span class="tag ${x.status === "accepted" ? "paid" : "open"}">${esc(x.status)}</span></small></div>
       </button>`).join("")}</div>` : ""}
-    <div class="searchwrap"><span class="mag">${MAG}</span>
+    <div class="searchwrap" style="margin-top:15px"><span class="mag">${MAG}</span>
       <input id="invsearch" placeholder="Customer or invoice number" value="${esc(S.invoiceSearch || "")}"></div>
     <div class="opsgrid">
       <button class="opcard ${chargesOn ? "em" : "purple"}" data-op="stripe"><span class="ic">&#128179;</span>
@@ -1484,7 +1510,7 @@ async function loadNativeInvoices() {
       <button class="opcard" data-op="bexport"><span class="ic">&#128228;</span><b>Export CSV</b>
         <span>Invoices, payments, customers</span><em>EXPORT &#8599;</em></button>
     </div>
-    <div class="lanehead"><span class="eyebrow" style="color:var(--dim)">${S.invoiceSearch ? "Matching invoices" : "Recent invoices"}</span>
+    <div class="lanehead" style="margin:16px 0 9px"><span class="eyebrow" style="color:var(--dim)">${S.invoiceSearch ? "Matching invoices" : "Recent invoices"}</span>
       <span class="note">${filtered.length}</span></div>
     ${filtered.length ? `<div class="list">${filtered.slice(0, 120).map((i) => `
       <button class="item" data-binv="${esc(i.id)}">
@@ -1498,6 +1524,7 @@ async function loadNativeInvoices() {
   $("newest").onclick = () => nativeComposerSheet("estimate");
   const search = $("invsearch");
   if (search) search.oninput = () => { S.invoiceSearch = search.value.trim().toLowerCase(); loadNativeInvoices(); };
+  on("[data-if]", "click", (e) => { S.invoiceFilter = e.currentTarget.dataset.if; loadNativeInvoices(); }, slot);
   on("[data-binv]", "click", (e) => nativeInvoiceSheet(e.currentTarget.dataset.binv), slot);
   on("[data-best]", "click", (e) => nativeEstimateSheet(e.currentTarget.dataset.best), slot);
   on("[data-op]", "click", async (e) => {
