@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 109;
+const APP_BUILD = 110;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -1491,12 +1491,6 @@ async function loadNativeInvoices() {
   slot.innerHTML = `
     ${salesIntelNative(invoices)}
 <div class="fintiles">
-      <button class="fintile act" id="newinv">
-        <span class="tic" style="background:rgba(58,200,245,.3);color:#fff">&#43;</span>
-        <em>New invoice</em><i>Numbered, taxed, payment link</i></button>
-      <button class="fintile act" id="newest">
-        <span class="tic" style="background:rgba(47,224,160,.16);color:var(--emerald)">&#9998;</span>
-        <em>New estimate</em><i>Quote &mdash; posts nothing</i></button>
       <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">${segIc("pulse")}</span>
         <span class="dot cyan"></span><small>Today</small><b>${money(todaySales)}</b></div>
       <div class="fintile"><span class="tic" style="background:rgba(168,85,247,.15);color:var(--magenta)">${segIc("profit")}</span>
@@ -1519,6 +1513,16 @@ async function loadNativeInvoices() {
         <div class="amt">${money(x.total)}
           <small><span class="tag ${x.status === "accepted" ? "paid" : "open"}">${esc(x.status)}</span></small></div>
       </button>`).join("")}</div>` : ""}
+    <div class="actbars">
+      <button class="actbar cy" id="newinv">
+        <span class="tic">&#43;</span>
+        <span class="m"><b>New invoice</b><span>Numbered, taxed, payment link</span></span>
+        <span class="go">&#8250;</span></button>
+      <button class="actbar em" id="newest">
+        <span class="tic">&#9998;</span>
+        <span class="m"><b>New estimate</b><span>Quote &mdash; posts nothing</span></span>
+        <span class="go">&#8250;</span></button>
+    </div>
     <div class="searchwrap" style="margin-top:15px"><span class="mag">${MAG}</span>
       <input id="invsearch" placeholder="Customer or invoice number" value="${esc(S.invoiceSearch || "")}"></div>
     <div class="opsgrid">
@@ -2166,12 +2170,6 @@ async function loadInvoices() {
       ${refreshError ? `<p class="note err">Couldn't refresh — showing the last invoices Ledger loaded. ${esc(refreshError)}</p>` : ""}
       ${salesIntel(all, k)}
       <div class="fintiles">
-        <button class="fintile act" id="newinv">
-          <span class="tic" style="background:rgba(58,200,245,.3);color:#fff">&#43;</span>
-          <em>New invoice</em><i>Draft, review, post</i></button>
-        <button class="fintile act" id="newest">
-          <span class="tic" style="background:rgba(47,224,160,.16);color:var(--emerald)">&#9998;</span>
-          <em>New estimate</em><i>Quote &mdash; posts nothing</i></button>
         <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">${segIc("pulse")}</span>
           <span class="dot cyan"></span><small>Today</small><b>${money(k.today_sales || 0)}</b></div>
         <div class="fintile"><span class="tic" style="background:rgba(168,85,247,.15);color:var(--magenta)">${segIc("profit")}</span>
@@ -2180,6 +2178,16 @@ async function loadInvoices() {
           <span class="dot orange"></span><small>Outstanding</small><b>${money(k.outstanding || 0)}</b></div>
         <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#35;</span>
           <span class="nextchip">Next #${esc(String(k.next_invoice ?? "—"))}</span><small>Open invoices</small><b>${k.open_count ?? 0}</b></div>
+      </div>
+      <div class="actbars">
+        <button class="actbar cy" id="newinv">
+          <span class="tic">&#43;</span>
+          <span class="m"><b>New invoice</b><span>Draft, review, post</span></span>
+          <span class="go">&#8250;</span></button>
+        <button class="actbar em" id="newest">
+          <span class="tic">&#9998;</span>
+          <span class="m"><b>New estimate</b><span>Quote &mdash; posts nothing</span></span>
+          <span class="go">&#8250;</span></button>
       </div>
       <div class="searchwrap" style="margin-top:15px"><span class="mag">${MAG}</span>
         <input id="invsearch" placeholder="Customer, invoice, email or phone" value="${esc(S.invoiceSearch || "")}"></div>
