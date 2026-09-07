@@ -1512,7 +1512,7 @@ async function nativeInvoiceSheet(id) {
         `Paid ${money(p.amount)} · ${esc(p.method)} · ${esc(String(p.received_at).slice(0, 10))}`).join("<br>")}</p>` : ""}
       ${inv.email_enabled ? `<button class="pillbtn" id="bemail"><b>Email invoice</b></button>` : ""}
       ${inv.email_sent_at ? `<p class="note">Emailed to ${esc(inv.email_sent_to)} · ${esc(String(inv.email_sent_at).slice(0, 10))}</p>` : ""}
-      <button class="pillbtn" id="blink">Copy payment link</button>
+      <button class="pillbtn" id="blink">Copy pay link</button>
       <button class="pillbtn" id="bopen">Open invoice page</button>
       ${Number(inv.balance) > 0 ? `
         <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Record a payment</span></div>
