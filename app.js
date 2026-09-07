@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 107;
+const APP_BUILD = 108;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -1132,7 +1132,10 @@ async function loadHomeKpis() {
   // Est. profit on a QuickBooks shop comes from the profit board — the iPhone's
   // loadQboProfit. The QuickBooks snapshot carries a placeholder zero there,
   // which used to read as "$0 · 0% margin" on every web Home.
-  if (books && S.booksProvider !== "native") {
+  // The profit board is books-aware server-side (invoices as income, captured
+  // receipts as cost on a Ledger-books shop), so both providers get a real
+  // "Est. profit" instead of a dash on one of them.
+  if (books) {
     k.today_profit = null; k.profit_margin = null;
     try {
       const t = (await src.profit())?.today;
