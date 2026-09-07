@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 102;
+const APP_BUILD = 103;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -2106,7 +2106,9 @@ async function loadInvoices() {
     const all = S.qbo?.qbo?.invoices || [];
     const k = S.qbo?.qbo?.kpis || {};
     const over30Cut = localDay(new Date(Date.now() - 30 * 86400000));
+    const todayISO = localDay();
     const filtered = all.filter((i) => S.invoiceFilter === "all" ? true
+        : S.invoiceFilter === "late" ? (Number(i.balance) > 0 && i.due_date && i.due_date < todayISO)
         : S.invoiceFilter === "over30" ? (Number(i.balance) > 0 && (i.date || "") < over30Cut)
         : i.status === S.invoiceFilter)
       .filter((i) => !S.invoiceSearch || (i.customer + " " + i.doc + " " + (i.email || "")).toLowerCase().includes(S.invoiceSearch));
@@ -2135,7 +2137,7 @@ async function loadInvoices() {
       <div class="searchwrap" style="margin-top:15px"><span class="mag">${MAG}</span>
         <input id="invsearch" placeholder="Customer, invoice, email or phone" value="${esc(S.invoiceSearch || "")}"></div>
       <div class="chips" style="margin:13px 0 4px">
-        ${[["all", "All"], ["open", "Open"], ["over30", "Over 30"], ["paid", "Paid"]].map(([k2, l]) =>
+        ${[["all", "All"], ["open", "Open"], ["late", "Late"], ["over30", "Over 30"], ["paid", "Paid"]].map(([k2, l]) =>
           `<button class="chip ${S.invoiceFilter === k2 ? "on" : ""}" data-if="${k2}">${l}</button>`).join("")}
       </div>
       ${S.invoiceSearch ? `<div class="lanehead"><span class="eyebrow">Search results</span>
