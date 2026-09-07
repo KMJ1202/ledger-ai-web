@@ -147,6 +147,13 @@
 /* SEVEN DAYS OF SHAPE. Bars, not a line — these are counts of discrete things
    that happened, and a line would imply a continuous quantity. align-self is
    explicit so this can never inherit a stretch from a row rule again. */
+/* The 14-day sales bars on Finance. They used to borrow .pspark, the 38x26
+   automation sparkline, so every bar rendered invisible (Kyle spotted it
+   against the iPhone, 2026-09-07). Own class, own size. */
+.salespark{display:flex;align-items:flex-end;gap:4px;height:76px;margin-top:12px}
+.salespark .b{flex:1;min-height:3px;border-radius:4px 4px 2px 2px;
+  background:linear-gradient(180deg,rgba(58,200,245,.95),rgba(58,200,245,.22))}
+.salespark .b.hot{background:linear-gradient(180deg,#2fe0a0,rgba(47,224,160,.28));box-shadow:0 0 12px rgba(47,224,160,.35)}
 .pspark{display:flex;align-items:flex-end;gap:2px;width:38px;height:26px;
  flex:0 0 38px;align-self:center;color:var(--dim2)}
 .pspark i{flex:1;border-radius:1.5px;min-height:2px}
@@ -1597,5 +1604,5 @@ nav#tabs button .cnt{position:absolute;top:4px;right:18%;min-width:17px;height:1
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=96"></script>
+<script type="module" src="app.js?v=97"></script>
 </body></html>

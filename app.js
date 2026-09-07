@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 96;
+const APP_BUILD = 97;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -1405,7 +1405,7 @@ function salesIntelNative(invoices) {
     <p class="cap">This month</p>
     <div class="big">${money(mtd)}</div>
     <div class="sub">Live sales performance</div>
-    <div class="pspark">${days.map((d, i) =>
+    <div class="salespark">${days.map((d, i) =>
       `<div class="b ${i === days.length - 1 ? "hot" : ""}" style="height:${Math.max(Math.round(d.total / max * 100), 3)}%" title="${d.key}: ${money0(d.total)}"></div>`).join("")}</div>
     <div class="sparkends"><span>14 days ago</span><span>Today</span></div>
     <div class="kpis" style="margin-top:15px">
@@ -2214,7 +2214,7 @@ function salesIntel(invoices, k) {
     <p class="cap">This month</p>
     <div class="big">${money(monthTotal)}</div>
     <div class="sub">Live sales performance</div>
-    <div class="pspark">${days.map((d, i) =>
+    <div class="salespark">${days.map((d, i) =>
       `<div class="b ${i === days.length - 1 ? "hot" : ""}" style="height:${Math.max(Math.round(d.total / max * 100), 3)}%" title="${d.key}: ${money0(d.total)}"></div>`).join("")}</div>
     <div class="sparkends"><span>14 days ago</span><span>Today</span></div>
     <div class="kpis" style="margin-top:15px">
