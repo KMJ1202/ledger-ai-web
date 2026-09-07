@@ -24,7 +24,36 @@ const S = {
   installPrompt: null,
 };
 
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+// Keep the offline copy honest (Kyle 2026-09-07). A stale cached bundle is
+// invisible: the app just quietly runs an older build, which is exactly what
+// happened on Kyle's Mac. On every open: ask the worker to look for a newer
+// build, and if the shell on the server points at a newer app.js than the one
+// running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
+const APP_BUILD = 96;
+if ("serviceWorker" in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  let refreshing = false;
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || refreshing) return;   // first install is not an update
+    refreshing = true;
+    location.reload();
+  });
+  (async () => {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.update();
+      const shell = await (await fetch("app.html", { cache: "reload" })).text();
+      const stamp = shell.match(/app\.js\?v=(\d+)/);
+      const latest = stamp ? Number(stamp[1]) : 0;
+      // sessionStorage guard: one refresh per build per tab, never a loop.
+      if (latest > APP_BUILD && sessionStorage.getItem("ledger.freshen") !== String(latest)) {
+        sessionStorage.setItem("ledger.freshen", String(latest));
+        location.reload();
+      }
+    } catch { /* offline or blocked: keep running what we have */ }
+  })();
+}
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); S.installPrompt = e; });
 
 /* ---------------- helpers ---------------- */
@@ -533,8 +562,8 @@ async function renderHome() {
       <div id="homebanner"></div>
       <div class="brandcard">
         <div class="tile">${logo ? `<img src="${esc(logo)}" alt="">` : '<img src="assets/logo-mark-96.png" alt="">'}</div>
-        <div class="who"><b class="chrome" id="heroname">${esc(S.profile?.business?.name || "Ledger AI")}</b><span>Your business, answered.</span></div>
-        <span class="status"><i></i>Ready</span>
+        <div class="who"><b class="chrome" id="heroname">${esc(S.profile?.business?.name || "Ledger AI")}</b><span>Your business, answered.</span>
+          <div class="status inline"><i></i>Ready</div></div>
       </div>
 
       <div id="homesetup"></div>
