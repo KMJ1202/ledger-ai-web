@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 104;
+const APP_BUILD = 105;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -910,7 +910,13 @@ async function homeBooksKpis() {
 /** Newest customers first, from whichever book is live. */
 async function homeCustomers() {
   if (S.booksProvider === "native") {
-    if (!S.nativeCustomers) S.nativeCustomers = (await booksApi({ action: "customers" })).customers || [];
+    if (!S.nativeCustomers) {
+      const rows = (await booksApi({ action: "customers" })).customers || [];
+      S.nativeCustomers = rows.map((c) => ({
+        ...c,
+        name: [c.first_name, c.last_name].filter(Boolean).join(" ") || c.company || "\u2014",
+      }));
+    }
     return S.nativeCustomers;
   }
   if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
@@ -6687,7 +6693,7 @@ async function loadNativeDirectory() {
     $("cbal").onclick = () => { S.custBalancesOnly = !S.custBalancesOnly; loadDirectory(); };
     if ($("cclr")) $("cclr").onclick = () => { S.custSearch = ""; loadDirectory(); };
     $("cadd").onclick = () => nativeCustomerSheet(null);
-    S.nativeCustomers = all; S.nativeInvoices = invoices;
+    S.nativeDirRows = all; S.nativeInvoices = invoices;
     on("[data-nprof]", "click", (e) => nativeProfileSheet(all.find((c) => c.id === e.currentTarget.dataset.nprof)), slot);
     on("[data-review]", "click", (e) => {
       const c = all.find((x) => x.id === e.currentTarget.dataset.review);
@@ -6720,7 +6726,7 @@ function nativeProfileSheet(c) {
   const last = inv[0];
   const nkey = (v) => (v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
   const pkey = (v) => (v || "").replace(/\D/g, "").slice(-10);
-  const dupes = (S.nativeCustomers || []).filter((o) => o.id !== c.id && (
+  const dupes = (S.nativeDirRows || []).filter((o) => o.id !== c.id && (
     (c.email && (o.email || "").toLowerCase() === String(c.email).toLowerCase()) ||
     (c.phone && pkey(o.phone) && pkey(o.phone) === pkey(c.phone)) ||
     nkey(o.name) === nkey(c.name)));
