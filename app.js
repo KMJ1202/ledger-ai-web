@@ -3691,8 +3691,6 @@ function drawCalendar() {
 
   view().innerHTML = `<div class="sect">
     ${pageHead("Calendar")}
-    <div class="searchwrap"><span class="mag">${MAG}</span>
-      <input id="calsearch" placeholder="Search selected day" value="${esc(CAL.q)}"></div>
     ${next ? `<button class="nexthero" data-ev="${esc(next.id)}">
       <div class="t"><span class="dot"></span><span class="lbl">NEXT UP</span><span class="go">&#10132;</span></div>
       <div class="big">${esc(countdown(next.start))}</div>
@@ -3707,6 +3705,11 @@ function drawCalendar() {
     </div>
     ${runSheet}
     ${intel}
+    <button class="bookbtn" id="crewbtn">
+      <span class="ic">&#128119;</span>
+      <span class="m"><b>Crew</b>
+        <span>Roster, time cards and who's on what</span></span>
+      <span class="go">&#8599;</span></button>
     <div class="bookcal">
       <div class="bchead">
         <div><span class="eyebrow">Booking calendar</span>
@@ -3720,11 +3723,6 @@ function drawCalendar() {
       <div class="bcfoot"><span>&#128337; ${selCount} appointment${selCount === 1 ? "" : "s"}</span>
         <span>${selDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</span></div>
     </div>
-    <button class="bookbtn" id="crewbtn">
-      <span class="ic">&#128119;</span>
-      <span class="m"><b>Crew</b>
-        <span>Roster, time cards and who's on what</span></span>
-      <span class="go">&#8599;</span></button>
     <button class="bookbtn" id="bookday">
       <span class="ic">&#128197;</span>
       <span class="m"><b>Book ${selDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b>
@@ -3735,6 +3733,8 @@ function drawCalendar() {
       <span class="m"><b>Business hours</b>
         <span id="bizhoursline">${esc(CAL.hoursLine || "Loading…")}</span></span>
       <span class="go">&#8599;</span></button>
+    <div class="searchwrap"><span class="mag">${MAG}</span>
+      <input id="calsearch" placeholder="Search selected day" value="${esc(CAL.q)}"></div>
     <div class="dayhead">
       <div><span class="eyebrow">Day schedule</span>
         <b>${selDate.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</b></div>
