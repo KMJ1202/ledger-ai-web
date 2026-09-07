@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 106;
+const APP_BUILD = 107;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -916,6 +916,10 @@ async function homeBooksKpis() {
 
 /** Newest customers first, from whichever book is live. */
 async function homeCustomers() {
+  if (S.booksProvider === undefined) {
+    try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
+    catch { S.booksProvider = "quickbooks"; }
+  }
   if (S.booksProvider === "native") {
     if (!S.nativeCustomers) {
       const rows = (await booksApi({ action: "customers" })).customers || [];
