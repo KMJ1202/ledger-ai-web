@@ -45,6 +45,35 @@
 .panel.flush{padding:0;overflow:hidden}
 .prow{display:flex;gap:12px;align-items:flex-start;padding:15px;border-top:1px solid var(--line2);cursor:pointer}
 .prow:first-child{border-top:0}
+.psilent{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:14px;margin-bottom:12px;background:rgba(255,97,97,.12);border:1px solid rgba(255,97,97,.35)}
+.psilent b{font-size:13.5px;color:var(--text)}
+.psilent .btn{padding:7px 12px;background:var(--red);color:#fff;border-color:transparent}
+.pnow{margin-bottom:12px}
+.pnowtop{display:flex;gap:12px;align-items:flex-start}
+.pnowk{font-size:20px;line-height:1.2}
+.pnowh{font-size:20px;font-weight:900;letter-spacing:-.3px}
+.pnowwait{font:700 10px/1 var(--mono);letter-spacing:1px;color:var(--gold);margin-top:6px;text-transform:uppercase}
+.pnowout{margin-top:8px;font-size:13.5px;color:var(--dim)}
+.pnowfoot{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--hair);font:700 10px/1 var(--mono);letter-spacing:1px;color:var(--dim2);text-transform:uppercase}
+.pnowfoot b{color:var(--text);letter-spacing:.2px}
+.pnowfoot .ok{color:var(--emerald)}
+.pdesc{font-size:12px;color:var(--dim2);margin:-8px 4px 12px}
+.plane .badge.dim{opacity:.7}
+.pcallback{display:inline-block;margin-top:8px;font:600 10px/1 var(--mono);letter-spacing:.4px;color:var(--cyan);text-decoration:none;text-transform:uppercase}
+.pdel{background:none;border:0;color:var(--dim2);font-size:20px;line-height:1;padding:0 6px;cursor:pointer;align-self:center}
+.pdel:hover{color:var(--red)}
+.pdelwrap{display:flex;align-items:stretch;gap:2px}
+.pdelwrap>.item{flex:1;min-width:0}
+.pjump{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;cursor:pointer;margin-top:12px;padding:12px 14px;color:inherit;font:inherit}
+.pjump small{display:block;font:700 9px/1 var(--mono);letter-spacing:1.2px;color:var(--dim2)}
+.pjump b{display:block;margin-top:4px;font-size:13px}
+.pjump span{font:600 10px/1 var(--mono);letter-spacing:.4px;color:var(--cyan);text-transform:uppercase;white-space:nowrap}
+.pday .pcell{cursor:pointer;border-radius:12px}
+.pday .pcell.on{background:rgba(58,200,245,.12)}
+.prow.pperson{width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--hair);color:inherit;font:inherit;cursor:pointer;align-items:center}
+.prow.pperson:first-child{border-top:0}
+.pperson.warm .needsm{color:var(--orange)}
+.ptime{font:700 12px/1 var(--mono);min-width:64px;color:var(--cyan)}
 .pchev{color:#4a5563;font-size:16px;align-self:center}
 .needsdot{width:7px;height:7px;border-radius:99px;margin-top:6px;flex:0 0 7px}
 .needst{font-size:13.6px;font-weight:700;letter-spacing:-.15px}
@@ -1523,5 +1552,5 @@ nav#tabs button .cnt{position:absolute;top:4px;right:18%;min-width:17px;height:1
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=92"></script>
+<script type="module" src="app.js?v=93"></script>
 </body></html>

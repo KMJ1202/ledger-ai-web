@@ -3815,7 +3815,7 @@ function eventSheet(e, back) {
 const BOOK_SOURCES = ["Phone", "Quo / OpenPhone", "Facebook", "Website", "Walk-in", "Kyle internal"];
 
 // New/edit appointment — the web twin of iOS AddBookingView / EditBookingSheet.
-function bookingSheet(dayISO, editing) {
+function bookingSheet(dayISO, editing, prefill) {
   const base = editing ? new Date(editing.start) : new Date(dayISO + "T09:00:00");
   const now = new Date();
   const startAt = !editing && base < now ? new Date(now.getTime() + 3600000) : base;
@@ -3828,7 +3828,7 @@ function bookingSheet(dayISO, editing) {
     <div class="cmpsect">
       <input id="bkFirst" class="cmpinput" placeholder="First name">
       <input id="bkLast" class="cmpinput" placeholder="Last name">
-      <input id="bkPhone" class="cmpinput" inputmode="tel" placeholder="Phone">
+      <input id="bkPhone" class="cmpinput" inputmode="tel" placeholder="Phone" value="${esc((prefill && prefill.phone) || "")}">
       <input id="bkEmail" class="cmpinput" inputmode="email" placeholder="Email">
     </div>
     <div class="eyebrow">Appointment</div>
@@ -4284,7 +4284,8 @@ async function renderPhone() {
             lane. Call forwarding is the thing that has to be working before any
             of this tab means anything, and a setup guide found at the bottom of
             a third sub-tab is a setup guide nobody reads. */""}
-      ${d.hasNumber ? phoneStatusRail(d) : ""}
+      ${d.hasNumber ? phoneSilentStrip(d) : ""}
+      ${d.hasNumber ? phoneNowCard(d) : ""}
       ${d.hasNumber ? phoneLaneSwitcher(d) : ""}
       ${d.hasNumber ? phoneLaneBody(d) : ""}
     </div>`;
@@ -4295,6 +4296,40 @@ async function renderPhone() {
       if ($("phsetup")) $("phsetup").onclick = () => phoneSetupSheet(d);
       if ($("phsettings")) $("phsettings").onclick = () => phoneSettingsSheet(d);
       on("[data-plane]", "click", (e) => { S.phoneLane = e.currentTarget.dataset.plane; renderPhone(); });
+      if ($("parm")) $("parm").onclick = () => phoneArmLine(d);
+      on("[data-pnowtext]", "click", (e) => phoneTextNumber(d, e.currentTarget.dataset.pnowtext));
+      on("[data-pnowbook]", "click", (e) => phoneBookNumber(e.currentTarget.dataset.pnowbook));
+      on("[data-needscall]", "click", (e) => e.stopPropagation());
+      on("[data-needsdel]", "click", (e) => { e.stopPropagation(); phoneNeedsDelete(d, e.currentTarget.dataset.needsdel); });
+      if ($("pjump")) $("pjump").onclick = () => { S.phoneLane = "autopilot"; renderPhone(); };
+      on("[data-pcell]", "click", (e) => {
+        const k = e.currentTarget.dataset.pcell;
+        S.phoneDayCell = S.phoneDayCell === k ? null : k;
+        document.querySelectorAll("[data-pcell]").forEach((b) => b.classList.toggle("on", b.dataset.pcell === S.phoneDayCell));
+        phoneDrawDayPeople(d);
+      });
+      phoneDrawDayPeople(d);
+      on("[data-ptscan]", "click", (e) => {
+        const a = ((d.today || {}).items || []).find((x) => x.id === e.currentTarget.dataset.ptscan);
+        if (a) vehicleScanSheet({ id: a.id, start: a.at, title: a.name }, () => renderPhone());
+      });
+      if ($("thclear")) $("thclear").onclick = async () => {
+        if (!confirm("Clear text threads?\n\nThreads still waiting on a reply from you are kept. Everything else comes off the tab.")) return;
+        try { await api("/phone", { action: "threads-clear" }); renderPhone(); } catch (err) { toast(err.message); }
+      };
+      on("[data-thdel]", "click", async (e) => {
+        e.stopPropagation();
+        if (!confirm("Delete this thread?\n\nIt comes off the tab. Every message stays on file, and if they text again the thread comes right back.")) return;
+        try { await api("/phone", { action: "thread-delete", conversation_id: e.currentTarget.dataset.thdel }); renderPhone(); } catch (err) { toast(err.message); }
+      });
+      if ($("evclear")) $("evclear").onclick = async () => {
+        if (!confirm("Clear the missed-call feed?\n\nThese come off the tab. Calls still holding an unplayed voicemail are kept, and nothing is removed from your call history.")) return;
+        try { await api("/phone", { action: "events-clear", scope: "calls" }); renderPhone(); } catch (err) { toast(err.message); }
+      };
+      on("[data-evdel]", "click", async (e) => {
+        e.stopPropagation();
+        try { await api("/phone", { action: "event-dismiss", event_id: e.currentTarget.dataset.evdel }); renderPhone(); } catch (err) { toast(err.message); }
+      });
       if ($("remindall")) $("remindall").onclick = () => apptReminderPreviewSheet();
       on("[data-needs]", "click", (e) => openNeedsYou(d, e.currentTarget.dataset.needs));
       on("[data-autotoggle]", "click", (e) => {
@@ -4461,7 +4496,7 @@ function phoneThreadsPanel(d) {
     const unread = (t.unreadCount || 0) > 0 && !isDone;
     const preview = (t.lastMessagePreview || "").trim();
     const body = preview ? (t.lastMessageDirection === "outgoing" ? "You: " : "") + preview : "No messages yet.";
-    return `<button class="item thitem${unread ? " unread" : ""}" data-pthread="${esc(t.id)}">
+    return `<div class="pdelwrap"><button class="item thitem${unread ? " unread" : ""}" data-pthread="${esc(t.id)}">
       <div class="main">
         <div class="ttl">${esc(t.peerName || formatE164(t.peerNumber))}${unread ? '<span class="thdot"></span>' : ""}</div>
         <div class="sub">${esc(body)}</div>
@@ -4470,10 +4505,10 @@ function phoneThreadsPanel(d) {
         <small>${esc(t.lastMessageAt ? dayLabel(t.lastMessageAt) + " " + timeLabel(t.lastMessageAt) : "")}</small>
         ${unread ? '<span class="tag open">reply</span>' : isDone ? '<span class="thdone">&#10003;</span>' : ""}
       </div>
-    </button>`;
+    </button><button class="pdel" data-thdel="${esc(t.id)}" aria-label="Delete thread">&times;</button></div>`;
   };
   return `<div class="lanehead"><span class="eyebrow">Text threads</span>
-      <span class="note">${awaiting > 0 ? awaiting + " awaiting reply" : open.length + " open"}</span></div>
+      <span class="note">${awaiting > 0 ? awaiting + " awaiting reply" : open.length + " open"}${threads.length ? ' &middot; <a href="#" id="thclear" onclick="return false">Clear</a>' : ""}</span></div>
     ${threads.length ? `<div class="list">${open.map(row).join("")}${done.length ? `<div class="eyebrow" style="margin:10px 0 4px">Done</div>${done.map(row).join("")}` : ""}</div>`
       : `<div class="empty">No texts yet. When someone texts your business number the conversation lands here, and you can answer from this screen.</div>`}`;
 }
@@ -4498,6 +4533,7 @@ async function phoneThreadSheet(t) {
   let status = t.status || "open";
   const wrap = sheet(`<h2>${esc(title)}</h2>
     <p class="sh-sub" id="phthsub">${esc(formatE164(t.peerNumber))}</p>
+    ${t.answeredBy === "front-desk" && status !== "done" ? '<p class="note" style="margin-top:6px">Ledger is answering this one. Anything you send goes out as you.</p>' : ""}
     <div class="chat" id="phchat"><div class="skel"></div></div>
     <div class="composer">
       <textarea id="phdraft" rows="1" placeholder="Text ${esc(title)}&hellip;"></textarea>
@@ -4557,29 +4593,51 @@ async function phoneThreadSheet(t) {
 
 function phoneFeedPanel(d) {
   const events = d.events || [];
-  return `<div class="lanehead"><span class="eyebrow">Missed-call feed</span><span class="note">${events.length} logged</span></div>
+  return `<div class="lanehead"><span class="eyebrow">Missed-call feed</span><span class="note">${events.length} logged${events.length ? ' &middot; <a href="#" id="evclear" onclick="return false">Clear</a>' : ""}</span></div>
     ${events.length ? `<div class="list">${events.map((ev) => `
-      <button class="item" data-pevt="${esc(ev.id)}">
+      <div class="pdelwrap"><button class="item" data-pevt="${esc(ev.id)}">
         <div class="main">
-          <div class="ttl">${esc(formatE164(ev.callerNumber) || "Unknown caller")}</div>
+          <div class="ttl">${esc(ev.callerName || formatE164(ev.callerNumber) || "Unknown caller")}</div>
           <div class="sub">${esc(dayLabel(ev.occurredAt))} · ${esc(timeLabel(ev.occurredAt))}${ev.voicemailUrl ? " · 🎙 voicemail" : ""}</div>
         </div>
         <div class="amt"><small>${phoneEventBadge(ev)}</small></div>
-      </button>`).join("")}</div>`
+      </button><button class="pdel" data-evdel="${esc(ev.id)}" aria-label="Delete">&times;</button></div>`).join("")}</div>`
       : `<div class="empty">No missed calls yet. When one comes in, it shows up here within seconds.</div>`}`;
 }
 
 function phoneEventSheet(ev) {
   if (!ev) return;
-  sheet(`<h2>${esc(formatE164(ev.callerNumber) || "Unknown caller")}</h2>
+  // Same four actions as the iPhone: Book appointment · Play voicemail (fresh
+  // signed link — provider media links expire) · Call back · Text back into
+  // the in-app thread when one exists.
+  const board = S.phone || {};
+  const thread = (board.threads || []).find((t) => t.peerNumber === ev.callerNumber);
+  const wrap = sheet(`<h2>${esc(ev.callerName || formatE164(ev.callerNumber) || "Unknown caller")}</h2>
     <p class="sh-sub">${esc(dayLabel(ev.occurredAt))} · ${esc(timeLabel(ev.occurredAt))} · ${esc(ev.direction)} · ${esc(ev.status)}</p>
-    ${ev.voicemailUrl ? `<audio controls src="${esc(ev.voicemailUrl)}" style="width:100%;margin-top:10px"></audio>` : ""}
+    ${ev.voicemailUrl ? `<button class="btn em" id="evplay" style="margin-top:10px">&#9654; Play voicemail</button><div id="evplayer"></div>` : ""}
     ${ev.transcript ? `<p class="note" style="margin-top:9px">${esc(ev.transcript)}</p>` : ""}
     <p class="note" style="margin-top:9px">${ev.autoReplySent ? "Auto-reply sent: “" + esc(ev.autoReplyText || "") + "”" : "No auto-reply was sent for this call."}</p>
     <div class="rowbtns" style="margin-top:14px">
+      <button class="btn primary" id="evbook">Book appointment</button>
       <a class="btn ghost" href="tel:${esc(ev.callerNumber)}">Call back</a>
-      <a class="btn primary" href="sms:${esc(ev.callerNumber)}">Text back</a>
+      ${thread ? `<button class="btn ghost" id="evtext">Text back</button>` : `<a class="btn ghost" href="sms:${esc(ev.callerNumber)}">Text back</a>`}
     </div>`);
+  const play = wrap.querySelector("#evplay");
+  if (play) play.onclick = async () => {
+    const slot = wrap.querySelector("#evplayer");
+    slot.innerHTML = `<div class="note">Loading…</div>`;
+    try {
+      const media = await api("/phone", { action: "voicemail-media", event_id: ev.id });
+      slot.innerHTML = `<audio controls autoplay src="${esc(media.url)}" style="width:100%;margin-top:9px"></audio>`;
+      if (!ev.voicemailHeardAt && !VM.heard.has(ev.id)) {
+        VM.heard.add(ev.id);
+        api("/phone", { action: "voicemail-heard", event_id: ev.id }).catch(() => {});
+      }
+    } catch (e) { slot.innerHTML = `<div class="note err">${esc(e.message)}</div>`; }
+  };
+  wrap.querySelector("#evbook").onclick = () => { closeSheet(); phoneBookNumber(ev.callerNumber); };
+  const tx = wrap.querySelector("#evtext");
+  if (tx) tx.onclick = () => phoneThreadSheet(thread);
 }
 
 // Tappable summary row — opens the hours/template editor in a sheet instead
@@ -4624,7 +4682,10 @@ async function loadVoicemails(board) {
     const list = d.voicemails || [];
     const unheard = list.filter((v) => !v.voicemailHeardAt && !VM.heard.has(v.id)).length;
     host.innerHTML = `<div class="panel">
-      <h3>&#9993; Voicemail ${unheard ? `<span class="pill live">${unheard} NEW</span>` : (list.length ? '<span class="pill">all heard</span>' : "")}</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <h3 style="margin:0">&#9993; Voicemail ${unheard ? `<span class="pill live">${unheard} NEW</span>` : (list.length ? '<span class="pill">all heard</span>' : "")}</h3>
+        ${list.length ? '<button class="btn ghost" id="vmclear">Clear all</button>' : ""}
+      </div>
       ${list.length ? `<div class="list">${list.map((v) => voicemailRow(v, board)).join("")}</div>`
         : `<p class="sub">No voicemails. When a caller leaves a message it lands here — play it right on this page, transcript underneath.</p>`}
     </div>`;
@@ -4637,6 +4698,15 @@ async function loadVoicemails(board) {
       const box = host.querySelector(`#vmtx-${e.currentTarget.dataset.vmscript}`);
       if (box) box.hidden = !box.hidden;
     }, host);
+    on("[data-vmdel]", "click", async (e) => {
+      if (!confirm("Delete this voicemail?\n\nIt comes off the Phone tab. The call itself stays in your history.")) return;
+      try { await api("/phone", { action: "event-dismiss", event_id: e.currentTarget.dataset.vmdel }); renderPhone(); } catch (err) { toast(err.message); }
+    }, host);
+    const vmclear = host.querySelector("#vmclear");
+    if (vmclear) vmclear.onclick = async () => {
+      if (!confirm("Clear all voicemail?\n\nEvery message here comes off the tab, heard or not. The calls stay in your history.")) return;
+      try { await api("/phone", { action: "events-clear", scope: "voicemails" }); renderPhone(); } catch (err) { toast(err.message); }
+    };
   } catch (e) {
     host.innerHTML = `<div class="panel"><h3>&#9993; Voicemail</h3><p class="sub">${esc(e.message)}</p></div>`;
   }
@@ -4661,6 +4731,7 @@ function voicemailRow(v, board) {
         ${v.transcript ? `<button class="btn" data-vmscript="${esc(v.id)}">Transcript</button>` : ""}
         <a class="btn" href="tel:${esc(v.callerNumber)}">Call back</a>
         ${thread ? `<button class="btn" data-vmtx="${esc(thread.id)}">Text back</button>` : ""}
+        <button class="btn ghost" data-vmdel="${esc(v.id)}">Delete</button>
       </div>
       <div id="vmplayer-${esc(v.id)}"></div>
       ${v.transcript ? `<div class="note" id="vmtx-${esc(v.id)}" hidden style="margin-top:8px">${esc(v.transcript)}</div>` : ""}
@@ -4710,16 +4781,207 @@ async function playVoicemail(eventId) {
 // behind that choice. Landing on a lane that moves with the day would be the
 // alternative, and it is worse: a screen you cannot predict is a screen you
 // have to read every time.
-const PHONE_LANES = [["autopilot", "AUTOPILOT"], ["inbox", "INBOX"], ["activity", "ACTIVITY"]];
-function phoneLane() { return PHONE_LANES.some(([k]) => k === S.phoneLane) ? S.phoneLane : "autopilot"; }
+// Same three lanes as the iPhone, same names, same order, same landing
+// (Kyle 2026-09-06, Phone tab parity): Needs You · Today · Auto. Work first,
+// settings last. The Needs You badge rides in the bar, so nothing waiting can
+// hide behind the landing choice.
+const PHONE_LANES = [["inbox", "Needs You"], ["activity", "Today"], ["autopilot", "Auto"]];
+const PHONE_LANE_HINT = {
+  inbox: "Calls, texts and voicemail waiting on you",
+  activity: "Today's jobs, your lead pipeline and the call feed",
+  autopilot: "The five things Ledger can answer for you",
+};
+function phoneLane() { return PHONE_LANES.some(([k]) => k === S.phoneLane) ? S.phoneLane : "inbox"; }
 
-// Same three-lane shape Finance uses, for the same reason: one screen per
-// question. What needs me / what is running for me / what happened.
 function phoneLaneSwitcher(d) {
   const lane = phoneLane();
   const need = (d.needsYou || []).length;
+  const rows = d.automations || [];
+  const armed = rows.filter((r) => r.enabled).length;
   return `<div class="plane">${PHONE_LANES.map(([k, label]) => `
-    <button class="${lane === k ? "on" : ""}" data-plane="${k}">${segIc(k)}${label}${k === "inbox" && need ? `<i class="badge">${need}</i>` : ""}</button>`).join("")}</div>`;
+    <button class="${lane === k ? "on" : ""}" data-plane="${k}">${segIc(k)}${label}${k === "inbox" && need ? `<i class="badge">${need} waiting</i>` : ""}${k === "autopilot" && rows.length ? `<i class="badge dim">${armed}/${rows.length}</i>` : ""}</button>`).join("")}</div>
+  <p class="pdesc">${esc(PHONE_LANE_HINT[lane])}</p>`;
+}
+
+// ---- FIXED COMMAND HEADER (iPhone parity) ---------------------------------
+// The top of this tab is a CUSTOMER, not a title. The last person who reached
+// the line sits here with what happened to them and the three things you can
+// do about it; the line's own facts (number, hours, who answers) are its
+// footer. Above it, only when true, the one warning that outranks everything:
+// nobody is answering.
+function phoneSilentReason(d) {
+  const textBack = d.autoReplyEnabled !== false;
+  const desk = !!(d.frontDesk && d.frontDesk.enabled === true);
+  if (!textBack && !desk) return "Nobody is answering your line";
+  if (!textBack) return "Missed calls get no text back";
+  if (!desk) return "Texts go unanswered";
+  return null;
+}
+
+function phoneSilentStrip(d) {
+  const reason = phoneSilentReason(d);
+  if (!reason) return "";
+  return `<div class="psilent"><b>${esc(reason)}</b><button class="btn" id="parm">Turn on</button></div>`;
+}
+
+async function phoneArmLine(d) {
+  const btn = $("parm");
+  if (btn) { btn.disabled = true; btn.textContent = "Turning on…"; }
+  try {
+    if (d.autoReplyEnabled === false) await api("/phone", { action: "settings-save", autoReplyEnabled: true });
+    if (!(d.frontDesk && d.frontDesk.enabled === true)) await api("/phone", { action: "settings-save", frontDeskEnabled: true });
+    toast("Ledger is answering your line");
+  } catch (e) { toast(e.message); }
+  renderPhone();
+}
+
+function phoneHumanize(raw) {
+  const s = String(raw || "");
+  return s ? s[0].toUpperCase() + s.slice(1).toLowerCase() : s;
+}
+
+function phoneNowIcon(kind) {
+  return { voicemail: "&#127908;", text: "&#128172;", call: "&#128222;", missed: "&#128245;" }[kind] || "&#128222;";
+}
+
+function phoneNowCard(d) {
+  const now = d.now;
+  const silent = phoneSilentReason(d);
+  const foot = `<div class="pnowfoot"><b>${esc(formatE164(d.number.e164))}</b><span class="${d.openNow === true ? "ok" : ""}">${d.openNow === true ? "Open now" : "After hours"}</span><span>${silent ? "You answer" : "Ledger answers"}</span></div>`;
+  if (!now) {
+    return `<div class="panel pnow"><div class="pnowh">Your line is live</div>
+      <p class="sub" style="margin:4px 0 0">The next call or text lands here, with who it is.</p>${foot}</div>`;
+  }
+  const bits = [now.vehicle, now.tireSize, now.lastJob ? "last: " + now.lastJob : ""].filter(Boolean);
+  if (now.visits) bits.push(now.visits + (now.visits === 1 ? " visit" : " visits"));
+  const num = now.number || "";
+  return `<div class="panel pnow">
+    <div class="pnowtop"><span class="pnowk">${phoneNowIcon(now.kind)}</span><div style="flex:1;min-width:0">
+      <div class="pnowh">${esc(now.name || formatE164(num) || "Unknown caller")}</div>
+      ${bits.length ? `<div class="sub">${esc(bits.join(" · "))}</div>` : ""}
+      ${now.waitLabel ? `<div class="pnowwait">${esc(String(now.waitLabel).toLowerCase())}</div>` : ""}
+    </div></div>
+    <div class="pnowout">${esc(phoneHumanize(now.outcome))}</div>
+    ${num ? `<div class="rowbtns" style="margin-top:12px">
+      <a class="btn primary" href="tel:${esc(num)}">&#128222; Call</a>
+      <button class="btn" data-pnowtext="${esc(num)}">Text</button>
+      <button class="btn" data-pnowbook="${esc(num)}">Book</button></div>` : ""}
+    ${foot}</div>`;
+}
+
+function phoneTextNumber(d, number) {
+  const t = (d.threads || []).find((x) => x.peerNumber === number);
+  if (t) { phoneThreadSheet(t); return; }
+  location.href = "sms:" + String(number).replace(/[^0-9+]/g, "");
+}
+
+function phoneBookNumber(number) {
+  bookingSheet(localDay(), null, { phone: number });
+}
+
+async function phoneNeedsDelete(d, id) {
+  const item = (d.needsYou || []).find((x) => x.id === id);
+  if (!item) return;
+  const target = id.slice(3);
+  try {
+    if (item.kind === "text") await api("/phone", { action: "thread-delete", conversation_id: target });
+    else if (item.kind === "voicemail" || item.kind === "missed") await api("/phone", { action: "event-dismiss", event_id: target });
+    else return;
+    renderPhone();
+  } catch (e) { toast(e.message); }
+}
+
+// Signpost at the bottom of Needs You. The switches stay in Auto — this says
+// so, and doubles as a state read (Kyle 2026-08-27: "the front desk button is
+// gone from the phone tab").
+function phoneJumpChip(d) {
+  const rows = d.automations || [];
+  const on = rows.filter((r) => r.enabled).length;
+  const summary = !rows.length ? "Nothing set up yet"
+    : on === 0 ? `Nothing is running — ${rows.length} to turn on`
+    : on === rows.length ? `All ${rows.length} running` : `${on} of ${rows.length} running`;
+  return `<button class="panel pjump" id="pjump"><div><small>AUTOMATIONS</small><b>${esc(summary)}</b></div><span>Turn on / off &rsaquo;</span></button>`;
+}
+
+// ---- TODAY LANE PIECES (iPhone parity) ------------------------------------
+// Numbers are people (Kyle 2026-09-01): tap "3 calls" and the three names open
+// under it, each one a tap away from its call or thread.
+function phoneDayPeople(d, key) {
+  const today = localDay();
+  const threads = d.threads || [];
+  const nm = (card, fallback, number) => { const k = ((card && card.name) || "").trim(); return k || fallback || formatE164(number) || "Unknown caller"; };
+  const clock = (iso) => (iso ? timeLabel(iso) : "");
+  if (key === "calls") {
+    return (d.events || []).filter((ev) => ev.direction !== "outgoing" && localDay(new Date(ev.occurredAt)) === today).map((ev) => {
+      let outcome;
+      if (ev.voicemailUrl) outcome = ev.voicemailHeardAt ? "Voicemail" : "Voicemail · unheard";
+      else if (ev.answered) outcome = "Answered" + ((ev.durationSeconds || 0) > 0 ? ` · ${Math.max(1, Math.floor((ev.durationSeconds || 0) / 60))} min` : "");
+      else outcome = "Missed" + (ev.autoReplySent ? " · texted back" : " · nobody followed up");
+      return { id: "call-" + ev.id, name: nm(ev.caller, ev.callerName, ev.callerNumber), detail: `${clock(ev.occurredAt)} · ${outcome}`, warm: !(ev.answered || ev.autoReplySent) };
+    });
+  }
+  if (key === "texts") {
+    return threads.filter((t) => t.lastMessageAt && localDay(new Date(t.lastMessageAt)) === today).map((t) => {
+      const waiting = (t.unreadCount || 0) > 0 && (t.status || "open") !== "done";
+      const who = t.lastMessageDirection === "outgoing" ? (t.answeredBy === "front-desk" ? "Ledger replied" : "You replied") : (waiting ? "Waiting on you" : "Handled");
+      return { id: "text-" + t.id, name: nm(t.caller, t.peerName, t.peerNumber), detail: `${clock(t.lastMessageAt)} · ${who}`, warm: waiting };
+    });
+  }
+  const cutoff = Date.now() - 7 * 86400000;
+  return ((S.board && S.board.leads) || []).filter((l) => new Date(l.createdAt).getTime() >= cutoff).map((l) => {
+    const digits = String(l.phone || "").replace(/\D/g, "").slice(-10);
+    const t = digits.length >= 7 ? threads.find((x) => String(x.peerNumber || "").replace(/\D/g, "").slice(-10) === digits) : null;
+    const status = l.status ? l.status[0].toUpperCase() + l.status.slice(1) : "";
+    return { id: t ? "text-" + t.id : "lead-" + l.id, name: l.name || formatE164(l.phone) || "Unknown", detail: [status, l.source || ""].filter(Boolean).join(" · "), warm: false };
+  });
+}
+
+function phoneDayStrip(d) {
+  const m = d.metrics || {};
+  const cells = [["calls", m.callsToday ?? 0, "calls today"], ["texts", m.textsToday ?? 0, "texts"], ["leads", m.leads7d ?? 0, "new leads"]];
+  const openKey = S.phoneDayCell;
+  return `<div class="panel hero pday">${cells.map(([k, n, l]) =>
+    `<div class="pcell${openKey === k ? " on" : ""}" data-pcell="${k}" role="button"><p class="n">${esc(String(n))}</p><p class="l">${esc(l)}</p></div>`).join("")}</div>
+    <div id="pdaypeople"></div>`;
+}
+
+function phoneDrawDayPeople(d) {
+  const host = $("pdaypeople");
+  if (!host) return;
+  const key = S.phoneDayCell;
+  if (!key) { host.innerHTML = ""; return; }
+  const people = phoneDayPeople(d, key);
+  host.innerHTML = !people.length
+    ? `<div class="panel" style="padding:14px;margin-top:-6px"><p class="sub" style="margin:0">Nobody yet.</p></div>`
+    : `<div class="panel flush" style="margin-top:-6px">${people.map((p) => `
+      <button class="prow pperson${p.warm ? " warm" : ""}" data-pperson="${esc(p.id)}"><div style="flex:1;min-width:0">
+        <div class="needst">${esc(p.name)}</div><div class="needsm">${esc(p.detail)}</div></div>
+        ${p.id.startsWith("lead-") ? "" : '<span class="pchev">&rsaquo;</span>'}</button>`).join("")}</div>`;
+  on("[data-pperson]", "click", (e) => {
+    const id = e.currentTarget.dataset.pperson;
+    if (id.startsWith("call-")) { const ev = (d.events || []).find((x) => x.id === id.slice(5)); if (ev) phoneEventSheet(ev); }
+    else if (id.startsWith("text-")) { const t = (d.threads || []).find((x) => x.id === id.slice(5)); if (t) phoneThreadSheet(t); }
+  }, host);
+}
+
+function phoneTodayCard(d) {
+  const t = d.today;
+  if (!t || !t.count) return "";
+  let headline;
+  if (t.remaining === 0) headline = t.count === 1 ? "1 job today, all done" : `${t.count} jobs today, all done`;
+  else if (t.nextLabel && t.nextName) headline = `${t.nextLabel} · ${t.nextName}`;
+  else headline = t.remaining === 1 ? "1 job left today" : `${t.remaining} jobs left today`;
+  return `<p class="zonehead">${t.count === 1 ? "TODAY · 1 JOB" : `TODAY · ${t.count} JOBS`}</p>
+    <div class="panel flush">
+      <div class="prow" style="cursor:default"><div style="flex:1;min-width:0">
+        <small class="eyebrow">${t.remaining === 0 ? "DONE" : "NEXT"}</small>
+        <div class="needst" style="font-size:16px">${esc(headline)}</div>
+        ${t.unconfirmed > 0 ? `<div class="needsm" style="color:var(--gold)">${t.unconfirmed === 1 ? "1 of them still hasn't confirmed." : `${t.unconfirmed} of them still haven't confirmed.`}</div>` : ""}
+      </div></div>
+      ${(t.items || []).map((a) => `<div class="prow" style="align-items:center;cursor:default"><b class="ptime">${esc(a.time)}</b>
+        <div style="flex:1;min-width:0"><div class="needst">${esc(a.name)}</div>${a.confirmed ? "" : '<div class="needsm" style="color:var(--gold)">Unconfirmed</div>'}</div>
+        ${a.done ? '<span class="thdone">&#10003;</span>' : isAuto() ? `<button class="btn" data-ptscan="${esc(a.id)}">Scan</button>` : ""}</div>`).join("")}
+    </div>`;
 }
 
 function phoneLaneBody(d) {
@@ -4737,6 +4999,7 @@ function heroStrip(cells) {
 function phoneInboxLane(d) {
   const items = (d.needsYou || []).filter((i) => i.kind !== "unconfirmed");
   const appt = (d.needsYou || []).find((i) => i.kind === "unconfirmed");
+  const total = d.needsYouTotal || 0;
   return `
     ${items.length ? `<div class="panel flush">${items.map((it) => `
       <div class="prow" data-needs="${esc(it.id)}">
@@ -4745,9 +5008,14 @@ function phoneInboxLane(d) {
           <div class="needst">${esc(it.title)}</div>
           ${it.detail ? `<div class="needsm">${esc(it.detail)}</div>` : ""}
           <div class="needsw">${esc(it.meta || "")}</div>
-        </div><span class="pchev">&rsaquo;</span></div>`).join("")}</div>`
+          ${it.number ? `<a class="pcallback" href="tel:${esc(it.number)}" data-needscall>&#128222; Call back</a>` : ""}
+        </div>
+        <button class="pdel" data-needsdel="${esc(it.id)}" aria-label="Delete">&times;</button>
+        <span class="pchev">&rsaquo;</span></div>`).join("")}</div>
+      ${total > items.length ? `<p class="sub" style="margin:8px 4px 0">Showing the ${items.length} that matter most — ${total} are waiting in total.</p>` : ""}`
       : `<div class="panel" style="text-align:center;padding:26px">
-           <p class="sub" style="margin:0">Nothing waiting on you. Every call, text and voicemail has been handled.</p></div>`}
+           <p class="needst" style="margin:0 0 4px">All caught up</p>
+           <p class="sub" style="margin:0">Nothing waiting on you.</p></div>`}
     ${appt ? `<p class="zonehead">TOMORROW</p>
       <div class="panel flush"><div class="prow" style="cursor:default">
         <span class="needsdot" style="background:var(--cyan)"></span>
@@ -4756,7 +5024,8 @@ function phoneInboxLane(d) {
           <div class="needsm">${esc(appt.detail || "")}</div>
           <button class="btn em" id="remindall" style="margin-top:11px">Send them all a confirmation text</button>
         </div></div></div>` : ""}
-    <div id="vmlane"></div>`;
+    <div id="vmlane"></div>
+    ${phoneJumpChip(d)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -4865,6 +5134,11 @@ function phoneAutopilotLane(d) {
   const render = (text) => esc(text).replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--gold)">$1</b>');
   const rows = phoneRankedAutomations(d);
   const costing = rows.filter((r) => r.impact?.tone === "cost").length;
+  if (!rows.length) {
+    return `<p class="zonehead">THIS WEEK, WITHOUT YOU TOUCHING IT</p>
+      <div class="panel"><p class="sub" style="margin:0">Nothing is running yet. Turn on Front Desk, reminders or auto text-back and this is where they report in.</p></div>
+      ${phoneAutopilotFeed(d)}`;
+  }
   return `
     ${phoneArmature(d)}
     <p class="zonehead${costing ? " cost" : ""}">${costing
@@ -4920,10 +5194,14 @@ function phoneAutopilotFeed(d) {
 }
 
 function phoneActivityLane(d) {
-  const m = d.metrics || {};
+  // Same order as the iPhone's Today lane: the day's numbers (people) first,
+  // then the Lead Pipeline, today's bays, what happened, and the line's own
+  // settings last. A live lead never sits under a history (Kyle 2026-08-27).
   return `
-    ${heroStrip([[m.callsToday ?? 0, "CALLS TODAY"], [m.textsToday ?? 0, "TEXTS"], [m.leads7d ?? 0, "NEW LEADS"]])}
+    ${phoneDayStrip(d)}
     <div id="phoneleads"><div class="skel"></div></div>
+    ${phoneTodayCard(d)}
+    <p class="zonehead">WHAT HAPPENED</p>
     ${phoneThreadsPanel(d)}
     ${phoneFeedPanel(d)}
     <p class="zonehead">YOUR LINE</p>
@@ -6653,8 +6931,9 @@ async function loadPhoneLeads() {
   catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 
-const LEAD_FILTERS = [["active", "Active"], ["any", "All"], ["new", "New"],
-  ["contacted", "Contacted"], ["quoted", "Quoted"], ["won", "Won"], ["lost", "Lost"]];
+// Active / All only — the same two chips as the iPhone (Kyle 2026-09-06).
+// The status still shows as a tag on every lead.
+const LEAD_FILTERS = [["active", "Active"], ["any", "All"]];
 
 function leadStatusTag(l) {
   if (l.status === "won") return "paid";
