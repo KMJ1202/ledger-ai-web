@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 108;
+const APP_BUILD = 109;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -2530,6 +2530,17 @@ async function loadNativeProfit() {
   let summary;
   try { summary = await booksApi({ action: "summary" }); }
   catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  // The profit board reads a Ledger-books shop too (invoices as income,
+  // captured receipts as cost), so today's profit and the 14-day trend belong
+  // here as well — only the QuickBooks-specific sweep stays behind.
+  let board = {};
+  try { board = (await get("/profit/board")).board || {}; } catch { board = {}; }
+  const today = board.today || {};
+  const hasToday = today.date === localDay();
+  const series = (board.daily || []).slice(-14);
+  const trendMax = Math.max(1, ...series.map((x) => Math.abs(x.net_profit || 0)));
+  const income = today.total_income || 0, costs = today.total_expenses || 0;
+  const margin = income > 0 ? Math.round((today.net_profit || 0) / income * 100) : 0;
   const months = (summary.months || []).slice(-12).reverse();
   const nowKey = new Date().toISOString().slice(0, 7);
   const cur = months.find((m) => m.month === nowKey) || { income: 0, expenses: 0, net: 0 };
@@ -2537,9 +2548,27 @@ async function loadNativeProfit() {
   const ytdNet = ytdRows.reduce((s, m) => s + Number(m.net || 0), 0);
   const monthLabel = (k) => new Date(k + "-15").toLocaleDateString(undefined, { month: "long", year: "numeric" });
   slot.innerHTML = `
+    <div class="hero">
+      <div class="headline"><span class="eyebrow">Today's profit</span>
+        <span class="when">${esc(today.date || localDay())}</span></div>
+      ${hasToday ? `<div class="big" style="color:${(today.net_profit || 0) >= 0 ? "var(--emerald)" : "var(--red)"}">${money(today.net_profit)}</div>
+      <div class="trio">
+        <div><small>Income</small><b style="color:var(--cyan)">${money0(income)}</b></div>
+        <div><small>Expenses</small><b style="color:var(--orange)">${money0(costs)}</b></div>
+        <div><small>Margin</small><b style="color:var(--magenta)">${margin}%</b></div>
+      </div>`
+      : `<p class="sub" style="margin-top:8px">Nothing invoiced yet today. The moment you send one, this fills in.</p>`}
+    </div>
+    ${series.length ? `<div class="panel">
+      <div class="eyebrow" style="margin-bottom:12px">Profit trend</div>
+      <div class="salespark">${series.map((x) => `
+        <div class="b ${(x.net_profit || 0) < 0 ? "hot" : ""}" style="height:${Math.max(Math.round(Math.abs(x.net_profit || 0) / trendMax * 100), 3)}%"
+          title="${esc(x.date)}: ${money0(x.net_profit || 0)}"></div>`).join("")}</div>
+      <div class="sparkends"><span>14 days ago</span><span>Today</span></div>
+    </div>` : ""}
     <div class="fintiles">
-      <div class="fintile"><small>THIS MONTH NET</small><b>${money(cur.net || 0)}</b></div>
-      <div class="fintile"><small>YEAR TO DATE NET</small><b>${money(ytdNet)}</b></div>
+      <div class="fintile"><small>This month net</small><b>${money(cur.net || 0)}</b></div>
+      <div class="fintile"><small>Year to date net</small><b>${money(ytdNet)}</b></div>
     </div>
     <div class="panel">
       <h3>&#128200; Month by month</h3>
