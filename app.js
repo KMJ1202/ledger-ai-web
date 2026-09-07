@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 101;
+const APP_BUILD = 102;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -2107,7 +2107,7 @@ async function loadInvoices() {
     const k = S.qbo?.qbo?.kpis || {};
     const over30Cut = localDay(new Date(Date.now() - 30 * 86400000));
     const filtered = all.filter((i) => S.invoiceFilter === "all" ? true
-        : S.invoiceFilter === "over30" ? (Number(i.balance) > 0 && i.due_date && i.due_date < over30Cut)
+        : S.invoiceFilter === "over30" ? (Number(i.balance) > 0 && (i.date || "") < over30Cut)
         : i.status === S.invoiceFilter)
       .filter((i) => !S.invoiceSearch || (i.customer + " " + i.doc + " " + (i.email || "")).toLowerCase().includes(S.invoiceSearch));
     // iOS searches customers alongside invoices and lists the matches above them.
