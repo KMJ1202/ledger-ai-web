@@ -5478,7 +5478,7 @@ function phoneInboxLane(d) {
         <button class="pdel" data-needsdel="${esc(it.id)}" aria-label="Delete">&times;</button>
         <span class="pchev">&rsaquo;</span></div>`).join("")}</div>
       ${total > items.length ? `<p class="sub" style="margin:8px 4px 0">Showing the ${items.length} that matter most — ${total} are waiting in total.</p>` : ""}`
-      : `<div class="panel" style="text-align:center;padding:26px">
+      : appt ? "" : `<div class="panel" style="text-align:center;padding:26px">
            <p class="needst" style="margin:0 0 4px">All caught up</p>
            <p class="sub" style="margin:0">Nothing waiting on you.</p></div>`}
     ${appt ? `<p class="zonehead">TOMORROW</p>
