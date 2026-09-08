@@ -3012,19 +3012,20 @@ async function runProfitSweep() {
     <p class="sh-sub" id="psStage">Pulling today's receipts from your email…</p>
     <div class="note" id="psNote" style="margin-top:8px"></div>`);
   const stage = (t) => { const el = document.querySelector("#psStage"); if (el) el.textContent = t; };
+  // Pulling the inbox and reading the invoice lines moved INTO /profit/sweep
+  // on 2026-09-08. It used to live here, which meant the website went and
+  // looked for today's supplier invoices and the iPhone did not — same button,
+  // two different answers, and the phone's profit was quietly wrong. One
+  // sweep, one behaviour, every client.
   let scanNote = "", gmailNeeds = "";
-  try { await api("/gmail/scan", {}); }
-  catch (e) { scanNote = "Email scan skipped — " + e.message; if (/reconnect|not connected/i.test(e.message)) gmailNeeds = e.message; } // Gmail down or not connected: sweep what we have
-  // "Match, don't move" (Kyle 2026-09-05): read each supplier invoice line by
-  // line so the matcher can find the sale it fed. This tap is explicit intent,
-  // so it reads a bigger batch than the nightly scan does.
-  stage("Reading supplier invoices line by line…");
-  try { const r = await api("/gmail/read-lines", { limit: 15 }); if (r.skipped && !gmailNeeds) gmailNeeds = r.skipped; }
-  catch { /* lines are a bonus; the sweep still runs on what is on file */ }
-  stage("Sweeping the books and matching costs to jobs…");
+  stage("Reading today's supplier invoices and matching costs to jobs…");
   let sweepResult;
   try { sweepResult = await api("/profit/sweep", {}); applyBoard(sweepResult); }
   catch (e) { toast(e.message, "err"); closeSheet(); return; }
+  if (sweepResult?.email_scan && !sweepResult.email_scan.ok) {
+    scanNote = "Email scan skipped — " + (sweepResult.email_scan.error || "couldn't read your inbox");
+    if (sweepResult.email_scan.needs_reconnect) gmailNeeds = sweepResult.email_scan.error;
+  }
   const tally = { confirmed: 0, excluded: 0, parked: 0, classified: 0, added: 0, matched: 0, waiting: 0, stock: 0, scanNote, gmailNeeds };
   const review = sweepResult.match || { auto: [], proposed: [], waiting: [], new_vendors: [], unread_count: 0 };
   // Costs the matcher doesn't handle (fuel, supplies, meals) still get the old
