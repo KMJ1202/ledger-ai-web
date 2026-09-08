@@ -644,6 +644,36 @@ select.pillbtn{appearance:none;-webkit-appearance:none;text-align:center;padding
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:11px}
 /* iOS Finance Overview tiles: 2x2 dark KPI cards, mono labels, big figures */
 .fintiles{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:13px}
+/* The seam between "create" and "find" on Finance (Kyle 1202, 2026-09-07).
+   The divider is the money; underneath it the floor drops to a lower deck.
+   iPhone twin: FinanceMoneySeam in CommandDashboardView.swift. */
+.seam{background:linear-gradient(160deg,var(--card),var(--card2));border:1px solid var(--line);
+  border-radius:18px;padding:13px 15px;box-shadow:0 8px 22px rgba(0,0,0,.35);margin-top:13px}
+.seamtop{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:10px}
+.seamtop span{font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:1.4px;color:var(--dim);text-transform:uppercase}
+.seamtop b{font-size:14px;font-weight:900;letter-spacing:-.3px}
+.seamrail{display:flex;gap:3px;height:13px;border-radius:999px;background:rgba(0,0,0,.32);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.10)}
+.seamrail .sb{height:13px;border:0;border-radius:999px;padding:0;cursor:pointer;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
+.seamrail .sb.cur{background:linear-gradient(180deg,#3ac8f5,rgba(58,200,245,.55));box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 2px 7px rgba(58,200,245,.5)}
+.seamrail .sb.lt{background:linear-gradient(180deg,#fbbf24,rgba(251,191,36,.55));box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 2px 7px rgba(251,191,36,.5)}
+.seamrail .sb.o30{background:linear-gradient(180deg,#f87171,rgba(248,113,113,.55));box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 2px 7px rgba(248,113,113,.5)}
+.seamleg{display:grid;grid-template-columns:1fr 1fr 1fr;margin-top:9px}
+.seamleg .sl{background:none;border:0;padding:2px 0;cursor:pointer;font-family:inherit;color:inherit;text-align:center}
+.seamleg .sl small{display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;font-weight:700;color:var(--dim)}
+.seamleg .sl b{display:block;font-size:12.5px;font-weight:800;margin-top:3px;letter-spacing:-.2px}
+.seamleg .sl.off b{color:var(--dim2)}
+.seamleg .sl i{width:6px;height:6px;border-radius:50%;display:inline-block}
+.seamleg .sl i.cur{background:#3ac8f5;box-shadow:0 0 6px rgba(58,200,245,.85)}
+.seamleg .sl i.lt{background:#fbbf24;box-shadow:0 0 6px rgba(251,191,36,.85)}
+.seamleg .sl i.o30{background:#f87171;box-shadow:0 0 6px rgba(248,113,113,.85)}
+.seamclear{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--dim)}
+.seamclear b{color:var(--emerald)}
+/* One bright edge, then the light goes: the list below sits on a lower deck. */
+.seamstep{height:19px;margin:9px -16px -4px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.30),transparent) top/100% 1px no-repeat,
+             linear-gradient(180deg,rgba(0,0,0,.45),rgba(0,0,0,.14) 55%,transparent)}
 .fintile{
   position:relative;background:linear-gradient(160deg,var(--card),var(--card2));
   border:1px solid var(--line);border-radius:18px;padding:15px 16px;
@@ -1666,5 +1696,5 @@ nav#tabs button .cnt{position:absolute;top:4px;right:18%;min-width:17px;height:1
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=117"></script>
+<script type="module" src="app.js?v=118"></script>
 </body></html>

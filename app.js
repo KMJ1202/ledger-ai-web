@@ -1449,6 +1449,56 @@ function salesIntelNative(invoices) {
   </div>`;
 }
 
+// The seam between "create" and "find" on the Finance screen (Kyle 1202,
+// 2026-09-07, msg #11498). The divider IS the money: every dollar still owed,
+// split into three mutually exclusive aging bands that add up to outstanding,
+// each band and legend tapping through to the identical chip filter beneath it
+// (they carry data-if, so the chip handler already wired below drives them).
+// Under the plinth the floor drops, so the search and list read as a lower
+// deck. iPhone twin: `FinanceMoneySeam` in CommandDashboardView.swift — same
+// bands, same rules, same words.
+function moneySeam(rows, issuedKey) {
+  const today = localDay();
+  const cut = localDay(new Date(Date.now() - 30 * 86400000));
+  let current = 0, late = 0, over30 = 0;
+  for (const i of rows) {
+    const bal = Number(i.balance) || 0;
+    if (bal <= 0 || i.status === "void" || i.status === "paid") continue;
+    const issued = String(i[issuedKey] || "");
+    if (issued && issued < cut) over30 += bal;
+    else if (i.due_date && i.due_date < today) late += bal;
+    else current += bal;
+  }
+  const total = current + late + over30;
+  const bands = [["open", "Current", current, "cur"], ["late", "Late", late, "lt"], ["over30", "Over 30", over30, "o30"]];
+  const legend = bands.map(([k, label, amt, cls]) =>
+    `<button class="sl ${amt > 0.005 ? "" : "off"}" data-if="${k}" aria-label="${label} ${money(amt)}, show these invoices">
+      <small><i class="${cls}"></i>${label}</small><b>${money(amt)}</b></button>`).join("");
+  let rail = "";
+  const live = bands.filter((b) => b[2] > 0.005);
+  if (live.length) {
+    // A floor so a small band stays visible, with the surplus shaved off
+    // whatever sits above it, so the widths always add up to the rail.
+    const floorPct = 6;
+    let w = live.map((b) => Math.max((b[2] / total) * 100, floorPct));
+    for (let pass = 0; pass < 5; pass++) {
+      const over = w.reduce((a, b2) => a + b2, 0) - 100;
+      if (over <= 0.01) break;
+      const slack = w.map((x) => Math.max(x - floorPct, 0));
+      const pool = slack.reduce((a, b2) => a + b2, 0);
+      if (pool <= 0.01) break;
+      w = w.map((x, idx) => x - over * (slack[idx] / pool));
+    }
+    rail = `<div class="seamrail">${live.map((b, idx) =>
+      `<button class="sb ${b[3]}" data-if="${b[0]}" style="width:calc(${w[idx].toFixed(2)}% - 2px)" aria-hidden="true" tabindex="-1"></button>`).join("")}</div>`;
+  }
+  return `<div class="seam">
+      <div class="seamtop"><span>Outstanding</span><b>${money(total)}</b></div>
+      ${live.length ? rail + `<div class="seamleg">${legend}</div>`
+        : `<div class="seamclear"><b>&#10003;</b> Every invoice is settled.</div>`}
+    </div><div class="seamstep"></div>`;
+}
+
 async function loadNativeInvoices() {
   const slot = $("finbody"); if (!slot) return;
   let data, summary, connect, settings;
@@ -1522,6 +1572,7 @@ async function loadNativeInvoices() {
         <span class="m"><b>New estimate</b><span>Quote &mdash; posts nothing</span></span>
         <span class="go">&#8250;</span></button>
     </div>
+    ${moneySeam(live, "issue_date")}
     <div class="searchwrap" style="margin-top:15px"><span class="mag">${MAG}</span>
       <input id="invsearch" placeholder="Customer or invoice number" value="${esc(S.invoiceSearch || "")}"></div>
     <div class="chips" style="margin:13px 0 4px">
@@ -2290,6 +2341,7 @@ async function loadInvoices() {
           <span class="m"><b>New estimate</b><span>Quote &mdash; posts nothing</span></span>
           <span class="go">&#8250;</span></button>
       </div>
+      ${moneySeam(all, "date")}
       <div class="searchwrap" style="margin-top:15px"><span class="mag">${MAG}</span>
         <input id="invsearch" placeholder="Customer, invoice, email or phone" value="${esc(S.invoiceSearch || "")}"></div>
       <div class="chips" style="margin:13px 0 4px">
