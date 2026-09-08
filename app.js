@@ -108,7 +108,11 @@ function knownDisconnected(path) {
   return hit && !S.connMap[hit[1]] ? hit[2] : null;
 }
 
-async function api(path, body, method = "POST") {
+// `opts.silentUpgrade` is for calls a screen makes on its own — loading a
+// card, filling a picker. Those must never throw the Ledger Pro door in a
+// customer's face; the screen shows an inline "part of Pro" panel instead.
+// The door is for something the customer actually asked for.
+async function api(path, body, method = "POST", opts = {}) {
   const t = await token(); if (!t) throw new Error("Signed out");
   const offline = knownDisconnected(path);
   if (offline) { const err = new Error(offline); err.status = 409; err.data = { error: offline }; throw err; }
@@ -128,7 +132,7 @@ async function api(path, body, method = "POST") {
     // subscription is paused. One handler updates the banner so the customer
     // sees why, whatever screen they were on.
     if (r.status === 402 && d.code === "subscription_required") paywallHit(d);
-    if (r.status === 402 && d.code === "upgrade_required") upgradeHit(d);
+    if (r.status === 402 && d.code === "upgrade_required" && !opts.silentUpgrade) upgradeHit(d);
     throw err;
   }
   return d;
@@ -4321,7 +4325,7 @@ function bookingSheet(dayISO, editing, prefill) {
     // each picked name is put on the new job the moment it exists.
     const picked = new Set();
     const crewBox = sh.querySelector("#bkCrew");
-    if (crewBox) api("/crew", { action: "list" }).then((r) => {
+    if (crewBox) api("/crew", { action: "list" }, "POST", { silentUpgrade: true }).then((r) => {
       if (!sh.contains(crewBox)) return;
       const crew = (r.employees || []).filter((x) => x.active !== false);
       crewBox.innerHTML = crew.length
@@ -8245,8 +8249,17 @@ async function renderCatalog(sh) {
   const slot = sh.querySelector("#catslot");
   if (!slot) return;
   let board;
-  try { board = await api("/catalog", { action: "board" }); }
-  catch (err) { slot.innerHTML = `<p class="note">Couldn't load your catalog — ${esc(err.message)}</p>`; return; }
+  try { board = await api("/catalog", { action: "board" }, "POST", { silentUpgrade: true }); }
+  catch (err) {
+    if (err.status === 402 && err.data?.code === "upgrade_required") {
+      slot.innerHTML = `<p class="note">${esc(err.data.message || "Selling off your own price list is part of Ledger Pro.")}</p>
+        <button class="btn em wide" style="margin-top:9px" id="catup">Move up to Ledger Pro</button>`;
+      const up = slot.querySelector("#catup");
+      if (up) up.onclick = () => upgradeHit(err.data);
+      return;
+    }
+    slot.innerHTML = `<p class="note">Couldn't load your catalog — ${esc(err.message)}</p>`; return;
+  }
 
   // A live feed that answers through the shop's own machine can be connected and
   // still unable to answer, because the machine is off. Saying "live feed" with
