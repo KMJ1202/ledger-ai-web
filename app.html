@@ -756,6 +756,10 @@ select.pillbtn{appearance:none;-webkit-appearance:none;text-align:center;padding
 }
 svg.sic{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .seg button svg.sic,.plane button svg.sic{width:12px;height:12px;vertical-align:-2px;margin-right:5px}
+/* Four lanes (Finance: Overview / Estimates / Profit / Receipts) — tighten so
+   every word stays on one line on a phone. Kyle 2026-09-07. */
+.seg.four button{font-size:9.5px;letter-spacing:.2px;padding:10px 2px;white-space:nowrap;min-width:0}
+.seg.four button svg.sic{width:11px;height:11px;margin-right:2px}
 
 /* chips */
 .chips{display:flex;gap:9px;flex-wrap:wrap}
@@ -1646,5 +1650,5 @@ nav#tabs button .cnt{position:absolute;top:4px;right:18%;min-width:17px;height:1
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=113"></script>
+<script type="module" src="app.js?v=114"></script>
 </body></html>

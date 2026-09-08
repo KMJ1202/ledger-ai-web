@@ -253,6 +253,8 @@ const MAG = `<svg viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 015.9 12.1l4.3 
 // waveform). Stroke inherits the pill's text colour.
 const SEG_ICONS = {
   overview: `<path d="M4 20h16M6 16v-5M11 16V7M16 16v-8"/>`,
+  estimates: `<path d="M8 3h6l4 4v13a1 1 0 01-1 1H8a1 1 0 01-1-1V4a1 1 0 011-1zM14 3v4h4M10 12h5M10 16h3"/>`,
+  tray: `<path d="M4 14l2-8h12l2 8v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM4 14h4l1 2h6l1-2h4"/>`,
   profit: `<path d="M3 17l5-5 4 3 8-8M20 7h-5M20 7v5"/>`,
   receipts: `<path d="M7 3h10a1 1 0 011 1v16l-3-1.6L12 20l-3-1.6L6 20V4a1 1 0 011-1zM9 8h6M9 12h6"/>`,
   directory: `<circle cx="9" cy="8" r="3"/><path d="M4 19c0-2.8 2.2-5 5-5s5 2.2 5 5M15 5a3 3 0 010 6M17 14c1.9.6 3 2.3 3 5"/>`,
@@ -1449,20 +1451,16 @@ function salesIntelNative(invoices) {
 
 async function loadNativeInvoices() {
   const slot = $("finbody"); if (!slot) return;
-  let data, summary, connect, estData, settings;
+  let data, summary, connect, settings;
   try {
-    [data, summary, connect, estData, settings] = await Promise.all([
+    [data, summary, connect, settings] = await Promise.all([
       booksApi({ action: "invoices" }),
       booksApi({ action: "summary" }),
       booksApi({ action: "connect-status" }),
-      booksApi({ action: "estimates" }).catch(() => ({ estimates: [] })),
       booksApi({ action: "settings" }).catch(() => null),
     ]);
   } catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   const invoices = data.invoices || [];
-  const estimates = estData.estimates || [];
-  // Same split as iOS: open/accepted estimates are live work; the rest is history.
-  const liveEst = estimates.filter((x) => x.status === "open" || x.status === "accepted");
   const over30Cut = localDay(new Date(Date.now() - 30 * 86400000));
   const todayISO = localDay();
   const filtered = invoices
@@ -1514,15 +1512,6 @@ async function loadNativeInvoices() {
         <span class="dot"></span><small>Overdue</small><b>${money(overdueAmt)}</b>
         <span class="fincap">${overdueRows.length === 0 ? "Nothing past due" : overdueRows.length === 1 ? "1 invoice past due" : overdueRows.length + " invoices past due"}</span></div>
     </div>
-    ${liveEst.length ? `<div class="lanehead"><span class="eyebrow" style="color:var(--dim)">Estimates</span>
-      <span class="note">${liveEst.length}</span></div>
-    <div class="list">${liveEst.slice(0, 40).map((x) => `
-      <button class="item" data-best="${esc(x.id)}">
-        <div class="main"><div class="ttl">${esc(x.customer || "—")}</div>
-          <div class="sub">${esc(x.number || "EST")} · ${esc(dateShort(x.issue_date))}${x.expiry_date ? " · expires " + esc(dateShort(x.expiry_date)) : ""}</div></div>
-        <div class="amt">${money(x.total)}
-          <small><span class="tag ${x.status === "accepted" ? "paid" : "open"}">${esc(x.status)}</span></small></div>
-      </button>`).join("")}</div>` : ""}
     <div class="actbars">
       <button class="actbar cy" id="newinv">
         <span class="tic">&#43;</span>
@@ -2126,7 +2115,7 @@ async function booksSettingsSheet() {
   };
 }
 
-const FINANCE_TITLE = { invoices: "Finance", profit: "Profit", receipts: "Receipts" };
+const FINANCE_TITLE = { invoices: "Finance", estimates: "Estimates", profit: "Profit", receipts: "Receipts" };
 
 async function renderFinance() {
   // Which ledger this workspace runs on decides the whole tab: native books
@@ -2137,11 +2126,12 @@ async function renderFinance() {
     catch { S.booksProvider = "quickbooks"; }
   }
   const native = S.booksProvider === "native";
-  const lane = S.financeLane === "profit" || S.financeLane === "receipts" ? S.financeLane : "invoices";
+  const lane = ["profit", "receipts", "estimates"].includes(S.financeLane) ? S.financeLane : "invoices";
   view().innerHTML = `<div class="sect">
     ${pageHead(FINANCE_TITLE[lane])}
-    <div class="seg">
+    <div class="seg four">
       <button class="${lane === "invoices" ? "on" : ""}" data-fl="invoices">${segIc("overview")}Overview</button>
+      <button class="${lane === "estimates" ? "on" : ""}" data-fl="estimates">${segIc("estimates")}Estimates</button>
       <button class="${lane === "profit" ? "on" : ""}" data-fl="profit">${segIc("profit")}Profit</button>
       <button class="${lane === "receipts" ? "on" : ""}" data-fl="receipts">${segIc("receipts")}Receipts</button>
     </div>
@@ -2150,8 +2140,89 @@ async function renderFinance() {
   on("[data-fl]", "click", (e) => { S.financeLane = e.currentTarget.dataset.fl; renderFinance(); });
   if (lane === "profit") { if (native) loadNativeProfit(); else loadProfit(); }
   else if (lane === "receipts") loadReceipts();
+  else if (lane === "estimates") { if (native) loadNativeEstimates(); else loadQBOEstimates(); }
   else if (native) loadNativeInvoices();
   else loadInvoices();
+}
+
+// Kyle 2026-09-07: estimates are their own tab you tap into — never a pile
+// stacked on top of the invoice list. One renderer, both books modes.
+function estimatesLaneHTML(estimates, row) {
+  const q = S.estSearch || "";
+  const live = estimates.filter((x) => x.status === "open" || x.status === "accepted");
+  const shown = !q ? estimates : estimates.filter((x) =>
+    ((x.customer || "") + " " + (x.number || "") + " " + (x.status || "")).toLowerCase().includes(q));
+  const sum = (rows) => rows.reduce((t, x) => t + Number(x.total || 0), 0);
+  return `
+    <div class="fintiles">
+      <div class="fintile tn t-em"><span class="tic">${segIc("estimates")}</span>
+        <span class="dot"></span><small>Live quotes</small><b>${money(sum(live))}</b>
+        <span class="fincap">${live.length === 1 ? "1 awaiting an answer" : live.length + " awaiting an answer"}</span></div>
+      <div class="fintile tn t-cyan"><span class="tic">${segIc("tray")}</span>
+        <span class="dot"></span><small>All estimates</small><b>${money(sum(estimates))}</b>
+        <span class="fincap">${estimates.length === 1 ? "1 estimate" : estimates.length + " estimates"}</span></div>
+    </div>
+    <div class="actbars">
+      <button class="actbar em" id="newest">
+        <span class="tic">&#9998;</span>
+        <span class="m"><b>New estimate</b><span>Quote &mdash; posts nothing until you convert it</span></span>
+        <span class="go">&#8250;</span></button>
+    </div>
+    <div class="searchwrap" style="margin-top:15px"><span class="mag">${MAG}</span>
+      <input id="estsearch" placeholder="Customer, estimate number or status" value="${esc(q)}"></div>
+    <div class="lanehead" style="margin:16px 0 9px"><span class="eyebrow" style="color:var(--dim)">Estimates</span>
+      <span class="note">${shown.length}</span></div>
+    ${shown.length ? `<div class="list">${shown.slice(0, 120).map(row).join("")}</div>`
+      : `<div class="empty">${q ? "No matches." : "No estimates yet — start one above, or ask Ledger in chat."}</div>`}`;
+}
+
+// Live quotes first, settled ones after — the same order both apps use.
+function sortEstimates(rows) {
+  return rows.slice().sort((a, b) => {
+    const live = (x) => (x.status === "open" || x.status === "accepted") ? 0 : 1;
+    return live(a) - live(b) || String(b.issue_date || "").localeCompare(String(a.issue_date || ""));
+  });
+}
+
+function wireEstimateSearch(reload) {
+  const search = $("estsearch");
+  if (!search) return;
+  search.oninput = () => { S.estSearch = search.value.trim().toLowerCase(); reload(); };
+}
+
+async function loadNativeEstimates() {
+  const slot = $("finbody"); if (!slot) return;
+  let estData;
+  try { estData = await booksApi({ action: "estimates" }); }
+  catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  const estimates = sortEstimates(estData.estimates || []);
+  slot.innerHTML = estimatesLaneHTML(estimates, (x) => `
+    <button class="item" data-best="${esc(x.id)}">
+      <div class="main"><div class="ttl">${esc(x.customer || "—")}</div>
+        <div class="sub">${esc(x.number || "EST")} · ${esc(dateShort(x.issue_date))}${x.expiry_date ? " · expires " + esc(dateShort(x.expiry_date)) : ""}</div></div>
+      <div class="amt">${money(x.total)}
+        <small><span class="tag ${x.status === "accepted" || x.status === "converted" ? "paid" : x.status === "declined" ? "grey" : "open"}">${esc(x.status)}</span></small></div>
+    </button>`);
+  $("newest").onclick = () => nativeComposerSheet("estimate");
+  on("[data-best]", "click", (e) => nativeEstimateSheet(e.currentTarget.dataset.best), slot);
+  wireEstimateSearch(loadNativeEstimates);
+}
+
+async function loadQBOEstimates() {
+  const slot = $("finbody"); if (!slot) return;
+  try {
+    if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
+  } catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  const estimates = sortEstimates(S.qbo?.qbo?.estimate_rows || []);
+  slot.innerHTML = estimatesLaneHTML(estimates, (e) => `
+    <div class="item" style="cursor:default">
+      <div class="main"><div class="ttl">${esc(e.customer || "—")}</div>
+        <div class="sub">${esc(e.number ? "#" + e.number : "Estimate")} \u00b7 ${esc(dateShort(e.issue_date))}${e.expiry_date ? " \u00b7 expires " + esc(dateShort(e.expiry_date)) : ""}</div></div>
+      <div class="amt">${money(e.total)}
+        <small><span class="tag ${e.status === "accepted" || e.status === "converted" ? "paid" : e.status === "declined" ? "grey" : "open"}">${esc(e.status)}</span></small></div>
+    </div>`);
+  $("newest").onclick = () => composerSheet("estimate");
+  wireEstimateSearch(loadQBOEstimates);
 }
 
 async function loadInvoices() {
@@ -2182,13 +2253,6 @@ async function loadInvoices() {
         : i.status === S.invoiceFilter)
       .filter((i) => !S.invoiceSearch || (i.customer + " " + i.doc + " " + (i.email || "")).toLowerCase().includes(S.invoiceSearch));
     // iOS searches customers alongside invoices and lists the matches above them.
-    // Live quotes first, settled ones after — the same order the books tab uses.
-    const qboEstimates = (S.qbo?.qbo?.estimate_rows || [])
-      .slice()
-      .sort((a, b) => {
-        const live = (x) => (x.status === "open" || x.status === "accepted") ? 0 : 1;
-        return live(a) - live(b) || String(b.issue_date || "").localeCompare(String(a.issue_date || ""));
-      });
     const custHits = !S.invoiceSearch ? [] : (S.qbo?.qbo?.customers || []).filter((c) =>
       (c.name + " " + (c.email || "") + " " + (c.phone || "") + " " + c.id).toLowerCase().includes(S.invoiceSearch)).slice(0, 20);
     slot.innerHTML = `
@@ -2208,16 +2272,6 @@ async function loadInvoices() {
           <span class="dot"></span><small>Overdue</small><b>${money(overdueAmt)}</b>
           <span class="fincap">${overdueRows.length === 0 ? "Nothing past due" : overdueRows.length === 1 ? "1 invoice past due" : overdueRows.length + " invoices past due"}</span></div>
       </div>
-      ${qboEstimates.length ? `<div class="lanehead" style="margin:16px 0 9px">
-          <span class="eyebrow" style="color:var(--dim)">Estimates</span>
-          <span class="note">${qboEstimates.length}</span></div>
-        <div class="list">${qboEstimates.slice(0, 40).map((e) => `
-          <div class="item" style="cursor:default">
-            <div class="main"><div class="ttl">${esc(e.customer || "—")}</div>
-              <div class="sub">${esc(e.number ? "#" + e.number : "Estimate")} \u00b7 ${esc(dateShort(e.issue_date))}${e.expiry_date ? " \u00b7 expires " + esc(dateShort(e.expiry_date)) : ""}</div></div>
-            <div class="amt">${money(e.total)}
-              <small><span class="tag ${e.status === "accepted" ? "paid" : e.status === "converted" ? "paid" : e.status === "declined" ? "grey" : "open"}">${esc(e.status)}</span></small></div>
-          </div>`).join("")}</div>` : ""}
       <div class="actbars">
         <button class="actbar cy" id="newinv">
           <span class="tic">&#43;</span>
