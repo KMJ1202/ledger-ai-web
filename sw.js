@@ -1,6 +1,6 @@
 // Ledger AI service worker — app-shell cache, network-first for documents and assets.
-const CACHE = "ledger-ai-v153";
-const SHELL = ["./app.html", "./app.js?v=60", "./index.html", "./manifest.webmanifest", "./icon.svg",
+const CACHE = "ledger-ai-v154";
+const SHELL = ["./app.html", "./app.js?v=121", "./index.html", "./manifest.webmanifest", "./icon.svg",
                "./icon-192.png", "./icon-512.png", "./icon-maskable-192.png", "./icon-maskable-512.png",
                "./assets/styles.css?v=47", "./assets/herodemo.js?v=2", "./assets/support-widget.css?v=2", "./assets/support-widget.js?v=1", "./assets/logo-mark-96.png", "./assets/logo-full-640.png", "./assets/icons/quickbooks.svg", "./assets/icons/gmail.svg", "./assets/icons/googlecalendar.svg", "./assets/icons/googlebusiness.svg",
                "./integrations/quickbooks.html", "./integrations/gmail.html",
@@ -38,7 +38,24 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Network-first for same-origin assets too. app.js is part of the shell, so a
+  // Versioned assets are cache-first (Kyle 2026-09-08). A deploy changes the
+  // ?v= stamp, so the URL itself is the cache key and a stale copy can never
+  // win. This is what makes the second launch instant instead of pulling the
+  // whole 600 KB bundle down again before anything paints.
+  if (url.searchParams.has("v")) {
+    event.respondWith(
+      caches.match(request).then((hit) => hit || fetch(request).then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
+        }
+        return response;
+      }))
+    );
+    return;
+  }
+
+  // Network-first for everything else same-origin. app.js is part of the shell, so a
   // cache-first rule here served a stale bundle against fresh HTML after every
   // deploy until the cache name changed. Cache stays populated for offline.
   // app.js also carries a ?v= stamp from app.html: a device still running an

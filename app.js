@@ -1031,6 +1031,14 @@ const SETUP_HIDE_KEY = "ledger.setupHidden";
 async function loadHomeSetup() {
   const slot = $("homesetup"); if (!slot) return;
   if (localStorage.getItem(SETUP_HIDE_KEY) === "1") return;
+  // Instant open (Kyle 2026-09-08): the checklist used to appear only after
+  // three round trips and then shove the page down when it landed. The last
+  // known shape paints straight from storage; the network only corrects it.
+  const SETUP_CACHE_KEY = "ledger.setup.v1";
+  let cachedSetup = null;
+  try { cachedSetup = JSON.parse(localStorage.getItem(SETUP_CACHE_KEY) || "null"); } catch {}
+  if (cachedSetup) paint(cachedSetup.shop, cachedSetup.books, cachedSetup.cal, cachedSetup.paid,
+                         cachedSetup.trialLine, cachedSetup.stalled, cachedSetup.billingReady);
   let map = {}, bill = null, bs = null;
   try {
     [map, bill, bs] = await Promise.all([
@@ -1047,50 +1055,58 @@ async function loadHomeSetup() {
   // card" again opened a second Checkout (sim bug 1, double-billing risk).
   const paid = !!bill && (["active", "past_due"].includes(bill.subscription_status) || !!bill.card_on_file);
   const shop = !!S.shop?.completed;
-  if (shop && books && cal && paid) return;
+  const billingReady = !!bill?.billing_ready;
+  if (shop && books && cal && paid) { slot.innerHTML = ""; try { localStorage.removeItem(SETUP_CACHE_KEY); } catch {} return; }
   // Stalled = still not set up a day after signing up. Only then offer the
   // founder's calendar — most shops never need the call (Kyle, 2026-09-05).
   const since = S.profile?.business?.member_since ? Date.parse(S.profile.business.member_since) : Date.now();
   const stalled = Date.now() - since > 24 * 3600 * 1000;
-  const step = (done, num, title, detail, action) => `<div class="setupstep${done ? " done" : ""}">
-      <span class="num">${done ? "&#10003;" : num}</span>
-      <span class="m"><b>${title}</b><small>${detail}</small></span>
-      ${done ? "" : action}</div>`;
   const trialLine = bill?.subscription_status === "trialing" && bill.trial_ends_at
     ? `Free until ${dateShort(bill.trial_ends_at)} — add a card so nothing stops on day 15.` : "Keep Ledger running after your trial.";
-  slot.innerHTML = `<div class="setupcard">
-    <div class="lanehead" style="margin-top:0"><span class="eyebrow">&#9889; Get set up</span><button class="pill" id="setuphide" title="Hide">Hide</button></div>
-    ${step(shop, 1, "Tell Ledger about your shop", shop ? "" : "Six taps — what you do, how you charge, who you serve. Ledger fits itself to your business.",
-      `<button class="btn primary" id="setupshop">Start</button>`)}
-    ${step(books, 2, "Choose your books", books ? "" : `Already on QuickBooks? Connect it. Otherwise Ledger's built-in books handle invoices, estimates and payment links.
-        <span style="display:flex;gap:8px;margin-top:9px"><button class="btn primary" data-connect="/quickbooks-oauth/start">QuickBooks</button><button class="btn ghost" id="setupnative">Built-in books</button></span>`, "")}
-    ${step(cal, 3, "Connect Google Calendar", "See your week and let Ledger book jobs — every booking still needs your tap.",
-      `<button class="btn ghost" data-connect="/google-calendar/start">Connect</button>`)}
-    ${step(paid, 4, "Add a card", trialLine,
-      bill?.billing_ready ? `<button class="btn ghost" id="setupcard">Add card</button>` : "")}
-    ${stalled ? `<p class="note" style="margin-top:10px">Stuck? <a href="https://heyledger.ai/talk" target="_blank" rel="noopener">Book 15 minutes with Kyle</a> and he'll walk you through it.</p>` : ""}
-  </div>`;
-  wireConnect(slot);
-  const shopBtn = slot.querySelector("#setupshop");
-  if (shopBtn) shopBtn.onclick = () => shopProfileSheet(() => { S.cal = null; setTab("home"); });
-  const native = slot.querySelector("#setupnative");
-  if (native) native.onclick = async () => {
-    native.disabled = true;
-    try {
-      await booksApi({ action: "provider-choose", provider: "native" });
-      S.booksProvider = "native";
-      toast("Built-in books it is — invoices and estimates are ready in Finance");
-      loadHomeSetup();
-    } catch (e) { native.disabled = false; toast(e.message, "err"); }
-  };
-  const hide = slot.querySelector("#setuphide");
-  if (hide) hide.onclick = () => { localStorage.setItem(SETUP_HIDE_KEY, "1"); slot.innerHTML = ""; };
-  const card = slot.querySelector("#setupcard");
-  if (card) card.onclick = async () => {
-    card.disabled = true;
-    try { const c = await startCheckout(); location.href = c.url; }
-    catch (e) { card.disabled = false; toast(e.message, "err"); }
-  };
+  try { localStorage.setItem(SETUP_CACHE_KEY, JSON.stringify({ shop, books, cal, paid, trialLine, stalled, billingReady })); } catch {}
+  paint(shop, books, cal, paid, trialLine, stalled, billingReady);
+
+  // Everything below only draws. It is a named function so the cached shape
+  // above can paint the card before a single request has come back.
+  function paint(shop, books, cal, paid, trialLine, stalled, billingReady) {
+    const step = (done, num, title, detail, action) => `<div class="setupstep${done ? " done" : ""}">
+        <span class="num">${done ? "&#10003;" : num}</span>
+        <span class="m"><b>${title}</b><small>${detail}</small></span>
+        ${done ? "" : action}</div>`;
+    slot.innerHTML = `<div class="setupcard">
+      <div class="lanehead" style="margin-top:0"><span class="eyebrow">&#9889; Get set up</span><button class="pill" id="setuphide" title="Hide">Hide</button></div>
+      ${step(shop, 1, "Tell Ledger about your shop", shop ? "" : "Six taps — what you do, how you charge, who you serve. Ledger fits itself to your business.",
+        `<button class="btn primary" id="setupshop">Start</button>`)}
+      ${step(books, 2, "Choose your books", books ? "" : `Already on QuickBooks? Connect it. Otherwise Ledger's built-in books handle invoices, estimates and payment links.
+          <span style="display:flex;gap:8px;margin-top:9px"><button class="btn primary" data-connect="/quickbooks-oauth/start">QuickBooks</button><button class="btn ghost" id="setupnative">Built-in books</button></span>`, "")}
+      ${step(cal, 3, "Connect Google Calendar", "See your week and let Ledger book jobs — every booking still needs your tap.",
+        `<button class="btn ghost" data-connect="/google-calendar/start">Connect</button>`)}
+      ${step(paid, 4, "Add a card", trialLine,
+        billingReady ? `<button class="btn ghost" id="setupcard">Add card</button>` : "")}
+      ${stalled ? `<p class="note" style="margin-top:10px">Stuck? <a href="https://heyledger.ai/talk" target="_blank" rel="noopener">Book 15 minutes with Kyle</a> and he'll walk you through it.</p>` : ""}
+    </div>`;
+    wireConnect(slot);
+    const shopBtn = slot.querySelector("#setupshop");
+    if (shopBtn) shopBtn.onclick = () => shopProfileSheet(() => { S.cal = null; setTab("home"); });
+    const native = slot.querySelector("#setupnative");
+    if (native) native.onclick = async () => {
+      native.disabled = true;
+      try {
+        await booksApi({ action: "provider-choose", provider: "native" });
+        S.booksProvider = "native";
+        toast("Built-in books it is — invoices and estimates are ready in Finance");
+        loadHomeSetup();
+      } catch (e) { native.disabled = false; toast(e.message, "err"); }
+    };
+    const hide = slot.querySelector("#setuphide");
+    if (hide) hide.onclick = () => { localStorage.setItem(SETUP_HIDE_KEY, "1"); slot.innerHTML = ""; };
+    const card = slot.querySelector("#setupcard");
+    if (card) card.onclick = async () => {
+      card.disabled = true;
+      try { const c = await startCheckout(); location.href = c.url; }
+      catch (e) { card.disabled = false; toast(e.message, "err"); }
+    };
+  }
 }
 
 // Business profile & settings hub — the web twin of the iOS settings row (build 41).
