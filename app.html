@@ -681,9 +681,17 @@ select.pillbtn{appearance:none;-webkit-appearance:none;text-align:center;padding
 .fintile.tn.loud>.tic{background:rgba(var(--t),.24);box-shadow:inset 0 0 0 1px rgba(var(--t),.5)}
 .fintile.tn .dot{z-index:1}
 .fintile.tn .tic svg{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-.fintile.tn .tic{width:34px;height:34px;border-radius:11px;
+.fintile.tn .tic{width:40px;height:40px;border-radius:13px;margin-bottom:0;
   background:linear-gradient(150deg,rgba(var(--t),.32),rgba(var(--t),.10));
   border:1px solid rgba(var(--t),.34);color:rgb(var(--t))}
+.fintile.tn .tic svg{width:19px;height:19px}
+/* Kyle 2026-09-07: the icon lives in the top-right corner of every tile, so the
+   label, the number and the caption all start on the same line on all four. */
+.fintile.tn{display:grid;grid-template-columns:1fr auto;column-gap:10px;align-content:start}
+.fintile.tn>.tic{grid-area:1/2;justify-self:end}
+.fintile.tn>small{grid-area:1/1;align-self:center}
+.fintile.tn>b{grid-area:2/1/auto/-1;margin-top:8px}
+.fintile.tn>.fincap{grid-area:3/1/auto/-1}
 .fintile.tn .dot{background:rgb(var(--t));box-shadow:0 0 8px rgba(var(--t),.85)}
 .fintile.tn b{font-size:24px}
 .fintile .fincap{display:block;margin-top:5px;font-size:10.5px;font-weight:700;color:var(--dim2)}
@@ -1658,5 +1666,5 @@ nav#tabs button .cnt{position:absolute;top:4px;right:18%;min-width:17px;height:1
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=115"></script>
+<script type="module" src="app.js?v=116"></script>
 </body></html>
