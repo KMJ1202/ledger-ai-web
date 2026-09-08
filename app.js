@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 110;
+const APP_BUILD = 111;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -2164,6 +2164,13 @@ async function loadInvoices() {
         : i.status === S.invoiceFilter)
       .filter((i) => !S.invoiceSearch || (i.customer + " " + i.doc + " " + (i.email || "")).toLowerCase().includes(S.invoiceSearch));
     // iOS searches customers alongside invoices and lists the matches above them.
+    // Live quotes first, settled ones after — the same order the books tab uses.
+    const qboEstimates = (S.qbo?.qbo?.estimates || [])
+      .slice()
+      .sort((a, b) => {
+        const live = (x) => (x.status === "open" || x.status === "accepted") ? 0 : 1;
+        return live(a) - live(b) || String(b.issue_date || "").localeCompare(String(a.issue_date || ""));
+      });
     const custHits = !S.invoiceSearch ? [] : (S.qbo?.qbo?.customers || []).filter((c) =>
       (c.name + " " + (c.email || "") + " " + (c.phone || "") + " " + c.id).toLowerCase().includes(S.invoiceSearch)).slice(0, 20);
     slot.innerHTML = `
@@ -2179,6 +2186,16 @@ async function loadInvoices() {
         <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#35;</span>
           <span class="nextchip">Next #${esc(String(k.next_invoice ?? "—"))}</span><small>Open invoices</small><b>${k.open_count ?? 0}</b></div>
       </div>
+      ${qboEstimates.length ? `<div class="lanehead" style="margin:16px 0 9px">
+          <span class="eyebrow" style="color:var(--dim)">Estimates</span>
+          <span class="note">${qboEstimates.length}</span></div>
+        <div class="list">${qboEstimates.slice(0, 40).map((e) => `
+          <div class="item" style="cursor:default">
+            <div class="main"><div class="ttl">${esc(e.customer || "—")}</div>
+              <div class="sub">${esc(e.number ? "#" + e.number : "Estimate")} \u00b7 ${esc(dateShort(e.issue_date))}${e.expiry_date ? " \u00b7 expires " + esc(dateShort(e.expiry_date)) : ""}</div></div>
+            <div class="amt">${money(e.total)}
+              <small><span class="tag ${e.status === "accepted" ? "paid" : e.status === "converted" ? "paid" : e.status === "declined" ? "grey" : "open"}">${esc(e.status)}</span></small></div>
+          </div>`).join("")}</div>` : ""}
       <div class="actbars">
         <button class="actbar cy" id="newinv">
           <span class="tic">&#43;</span>
