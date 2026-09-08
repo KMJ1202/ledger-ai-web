@@ -1184,7 +1184,7 @@ async function loadHomeSetup() {
         `<button class="btn ghost" data-connect="/google-calendar/start">Connect</button>`)}
       ${step(paid, 4, "Add a card", trialLine,
         billingReady && !inAndroidApp() ? `<button class="btn ghost" id="setupcard">Add card</button>` : "")}
-      ${stalled ? `<p class="note" style="margin-top:10px">Stuck? <a href="https://heyledger.ai/talk" target="_blank" rel="noopener">Book 15 minutes with Kyle</a> and he'll walk you through it.</p>` : ""}
+      ${stalled ? `<p class="note" style="margin-top:10px">Stuck? <a href="https://heyledger.ai/talk" target="_blank" rel="noopener">Book 15 minutes with the founder</a> and he'll walk you through it.</p>` : ""}
     </div>`;
     wireConnect(slot);
     const shopBtn = slot.querySelector("#setupshop");
