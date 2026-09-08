@@ -134,11 +134,46 @@ async function api(path, body, method = "POST") {
 }
 const get = (path) => api(path, null, "GET");
 
+/* Google Play's Payments policy forbids an app it distributes from leading
+   anyone to another way to pay — not by a button, a link, a webview or a
+   sign-up flow. The Android app is this same website in a wrapper, so every
+   Stripe entry point below would ship inside it. Until Google Play Billing is
+   wired up, the Android build offers nothing for sale: it states what is
+   needed and stops there, with no price, link or call to action. The browser
+   and the iPhone app are untouched. The referrer is only set on the launch
+   navigation, so the answer is remembered. */
+const ANDROID_APP_KEY = "ledger.androidApp";
+try {
+  if (document.referrer.startsWith("android-app://ai.heyledger.app")) {
+    sessionStorage.setItem(ANDROID_APP_KEY, "1");
+    localStorage.setItem(ANDROID_APP_KEY, "1");
+  }
+} catch {}
+function inAndroidApp() {
+  try {
+    // The launch navigation carries the referrer; the rest of the session is
+    // single-page, so the tab's own storage is the reliable answer.
+    if (sessionStorage.getItem(ANDROID_APP_KEY) === "1") return true;
+    // Belt: a standalone window on a device that has launched the Play build.
+    // A normal Chrome tab is never standalone, so browsing heyledger.ai on the
+    // same phone still works exactly as it always did.
+    return window.matchMedia("(display-mode: standalone)").matches
+      && localStorage.getItem(ANDROID_APP_KEY) === "1";
+  } catch { return false; }
+}
+const SUBSCRIPTION_REQUIRED = "An active Ledger AI subscription is required.";
+
 // Checkout is for a shop with no subscription. A shop that already has one
 // (trial with a card, active, past due) is refused with already_subscribed —
 // card changes go through the billing portal, never a second Checkout.
 async function startCheckout() {
-  try { return await startCheckout(); }
+  // Safety net behind the hidden buttons: nothing inside the Android app may
+  // reach a Stripe checkout, however it got called.
+  if (inAndroidApp()) throw new Error(SUBSCRIPTION_REQUIRED);
+  // 2026-09-08: this line read `await startCheckout()` — the wrapper called
+  // itself and every Subscribe button on the site died in a recursion loop
+  // from 2026-09-06 until today. It has always meant the checkout endpoint.
+  try { return await api("/stripe-billing/checkout", {}); }
   catch (e) {
     if (e.status === 409 && e.data?.error === "already_subscribed" && e.data?.portal_available) {
       toast("Your card is already on file — opening billing.");
@@ -1082,7 +1117,7 @@ async function loadHomeSetup() {
       ${step(cal, 3, "Connect Google Calendar", "See your week and let Ledger book jobs — every booking still needs your tap.",
         `<button class="btn ghost" data-connect="/google-calendar/start">Connect</button>`)}
       ${step(paid, 4, "Add a card", trialLine,
-        billingReady ? `<button class="btn ghost" id="setupcard">Add card</button>` : "")}
+        billingReady && !inAndroidApp() ? `<button class="btn ghost" id="setupcard">Add card</button>` : "")}
       ${stalled ? `<p class="note" style="margin-top:10px">Stuck? <a href="https://heyledger.ai/talk" target="_blank" rel="noopener">Book 15 minutes with Kyle</a> and he'll walk you through it.</p>` : ""}
     </div>`;
     wireConnect(slot);
@@ -6393,7 +6428,8 @@ function requestNumberCard(pending, locked) {
       <h3>&#128241; Your own business line &#128664;</h3>
       <p class="sub">A local number of your own, included with your subscription: missed calls text the caller back automatically, every lead lands in your Leads list, and you can reply right from this tab.</p>
       <p class="note" style="margin-top:10px">Included with Ledger AI &mdash; after you subscribe, tell us your area code and we set your line up, usually the same business day.</p>
-      <button class="btn em wide" style="margin-top:13px" id="rnsubscribe">Subscribe to get your number</button>
+      ${inAndroidApp() ? `<p class="note" style="margin-top:13px">${SUBSCRIPTION_REQUIRED}</p>`
+        : `<button class="btn em wide" style="margin-top:13px" id="rnsubscribe">Subscribe to get your number</button>`}
       <div class="note" id="rnnote" style="margin-top:8px"></div>
     </div>`;
   }
@@ -7740,7 +7776,8 @@ async function powerUpSheet() {
               { key: "heavy", emoji: "🚀", label: "Heavy Hitter", price: 100, credit: 120 }];
   try { const s = await api("/stripe-billing/status", {}); if (s.topup_packages?.length) pkgs = s.topup_packages; } catch {}
   sheet(`<h2>⚡ Power-Ups</h2><p class="sh-sub">Add to this month's AI allowance — credited the second the payment clears.</p>
-    ${pkgs.map((p) => `<button class="pu-card${p.key === "power" ? " hot" : ""}" data-k="${esc(p.key)}">
+    ${inAndroidApp() ? `<p class="note">${SUBSCRIPTION_REQUIRED}</p>` : ""}
+    ${inAndroidApp() ? "" : pkgs.map((p) => `<button class="pu-card${p.key === "power" ? " hot" : ""}" data-k="${esc(p.key)}">
       <span class="pu-emoji">${p.emoji}</span>
       <span class="pu-info"><b>${esc(p.label)}</b><small>+$${p.credit} AI allowance${p.credit > p.price ? ` · $${p.credit - p.price} bonus` : ""}</small></span>
       <span class="pu-price">$${p.price}</span></button>`).join("")}`, (sh) => {
@@ -7773,10 +7810,10 @@ async function textingSheet() {
   sheet(`<h2>💬 Texting credit</h2><p class="sh-sub">Texts your business number sends and receives — reminders, replies, Front Desk, your own messages.</p>
     <div class="panel">${smsMeterHtml(s)}</div>
     ${s?.exhausted ? `<p class="note" style="margin-top:10px;color:var(--orange)">This month's credit is used up. Reminders and replies are paused until you add credit.</p>` : ""}
-    <button class="pu-card hot" data-k="${esc(pkg.key)}" style="margin-top:12px">
+    ${inAndroidApp() ? `<p class="note" style="margin-top:12px">${SUBSCRIPTION_REQUIRED}</p>` : `<button class="pu-card hot" data-k="${esc(pkg.key)}" style="margin-top:12px">
       <span class="pu-emoji">${pkg.emoji}</span>
       <span class="pu-info"><b>Add $${pkg.credit} texting credit</b><small>About ${Math.round(pkg.credit / 0.0113 / 100) * 100} more texts · credited the second the payment clears</small></span>
-      <span class="pu-price">$${pkg.price}</span></button>`, (sh) => {
+      <span class="pu-price">$${pkg.price}</span></button>`}`, (sh) => {
     on(".pu-card", "click", async (e) => {
       const b = e.currentTarget; b.disabled = true;
       try { const c = await api("/stripe-billing/sms-topup", {}); location.href = c.url; }
@@ -7813,6 +7850,7 @@ function renderAccessBanner(s) {
   const a = $("alertbar"); if (!a) return;
   a.textContent = ""; a.style.background = ""; a.style.color = ""; a.style.display = "none";
   const link = (label, path) => {
+    if (inAndroidApp()) { a.appendChild(document.createTextNode(label)); return; }
     const b = document.createElement("u"); b.style.cursor = "pointer"; b.textContent = label;
     b.onclick = async () => { try { const c = path === "/stripe-billing/checkout" ? await startCheckout() : await api(path, {}); location.href = c.url; } catch (e) { toast(e.message, "err"); } };
     a.appendChild(b);
@@ -8460,7 +8498,7 @@ async function businessSheet() {
       slot.innerHTML = `${(t.members || []).map((m) => `<div class="kv"><span>${esc(m.email)}</span><span>${esc(m.role)}</span></div>`).join("")}
         ${(t.invites || []).map((i) => `<div class="kv"><span>${esc(i.email)}</span><span style="color:var(--gold)">invited</span></div>`).join("")}
         ${(S.profile?.role || (S.team?.members || []).find((m) => (m.email || "").toLowerCase() === S.email)?.role) === "owner" ? `<div style="margin-top:10px"><input id="invmail" type="email" placeholder="teammate@business.com">
-          <button class="btn ghost wide" style="margin-top:8px" id="invgo">Invite — $299/mo per seat</button></div>` : ""}`;
+          ${inAndroidApp() ? "" : `<button class="btn ghost wide" style="margin-top:8px" id="invgo">Invite — $299/mo per seat</button>`}</div>` : ""}`;
       const go = slot.querySelector("#invgo");
       if (go) go.onclick = async () => {
         go.disabled = true;
@@ -8629,11 +8667,13 @@ function lockView(seed) {
     <h2>${esc(headline)}</h2>
     ${name ? `<p class="note" style="margin-top:-6px">${esc(name)}</p>` : ""}
     <p>${esc(body)}</p>
-    <button class="btn" id="lk-pay">${expiredTrial ? "Subscribe now" : "Resume subscription"}</button>
+    ${inAndroidApp() ? `<p class="note">${SUBSCRIPTION_REQUIRED}</p>`
+      : `<button class="btn" id="lk-pay">${expiredTrial ? "Subscribe now" : "Resume subscription"}</button>`}
     <p class="note" style="margin-top:10px">Cancel any time · your records stay exactly as you left them</p>
     <p style="margin-top:22px;font-size:13px;line-height:2"><a href="#" id="lk-export" style="color:var(--cyan)">Export my data</a> &middot; <a href="#" id="lk-delete" style="color:var(--dim)">Delete my account</a> &middot; <a href="#" id="lk-out" style="color:var(--dim)">Sign out</a></p>
     <p style="margin-top:12px;font-size:12.5px"><a href="privacy.html" style="color:var(--dim)">Privacy</a> &middot; <a href="terms.html" style="color:var(--dim)">Terms</a> &middot; <a href="support.html" style="color:var(--dim)">Support</a></p></div>`;
-  $("lk-pay").onclick = async (e) => {
+  const lkPay = $("lk-pay");
+  if (lkPay) lkPay.onclick = async (e) => {
     e.currentTarget.disabled = true;
     try {
       // A shop that already has a Stripe customer resumes in the portal; a
