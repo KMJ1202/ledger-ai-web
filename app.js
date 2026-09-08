@@ -1780,7 +1780,7 @@ async function nativeComposerSheet(kind) {
   // clientRef is minted once per open form: the server treats a repeat of the
   // same ref as the same document, so a nervous double-tap can never bill twice.
   const C = { customer: null, customers: [], query: "", lines: [{ name: "", quantity: 1, rate: 0, taxable2: true }], memo: "", termsDays: 0, validDays: 14, newCust: false, busy: false, shortcuts: [],
-    tax: null, noWayToPay: false, clientRef: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`) };
+    tax: null, noWayToPay: false, noTaxNumber: false, clientRef: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`) };
   const wrap = sheet(`<h2>${isEst ? "New Estimate" : "New Invoice"}</h2><div id="bcmp"><div class="skel"></div></div>`);
   const body = () => wrap.querySelector("#bcmp");
   try {
@@ -1796,6 +1796,10 @@ async function nativeComposerSheet(kind) {
     // No card payments and no typed instructions = the customer's page shows
     // a bill with no way to pay it. Say so here, before the invoice goes out.
     C.noWayToPay = !isEst && !!set && !set.stripe_connected && !String(set.payment_instructions || "").trim();
+    // Charging tax with no registration number on the document: the customer
+    // cannot claim it back, and CRA wants the number on the invoice. Said here,
+    // before it goes out, with the fix one click away.
+    C.noTaxNumber = !!set && Number(set.tax?.rate || 0) > 0 && !String(set.tax?.registration_number || "").trim();
   } catch { C.customers = []; }
   const lineAmt = (l) => Math.round((Number(l.quantity) || 0) * (Number(l.rate) || 0) * 100) / 100;
   const subtotal = () => C.lines.reduce((t, l) => t + lineAmt(l), 0);
@@ -1866,6 +1870,7 @@ async function nativeComposerSheet(kind) {
       </div>`}
       <input id="bmemo" class="cmpinput sm" placeholder="Note to customer (optional)" value="${esc(C.memo)}">
       <div id="btotals">${totalsHtml()}</div>
+      ${C.noTaxNumber ? `<p class="note" style="color:#b45309"><b>Heads up:</b> you're charging ${esc(C.tax?.name || "tax")} with no registration number, so your customer can't claim it back. <button class="linkbtn" id="btaxreg" style="display:inline;padding:0">Add your tax number</button></p>` : ""}
       ${C.noWayToPay ? `<p class="note" style="color:#b45309"><b>Heads up:</b> customers have no way to pay this online yet — card payments aren't set up and there are no payment instructions. <button class="linkbtn" id="bpayhow" style="display:inline;padding:0">Add payment instructions</button></p>` : ""}
       <button class="cta" id="bcreate" ${C.busy || !C.customer || !C.lines.length ? "disabled" : ""}>
         <span><b>${C.busy ? "Creating…" : isEst ? "Create estimate" : "Create invoice"}</b>
@@ -1927,6 +1932,8 @@ async function nativeComposerSheet(kind) {
     wrap.querySelector("#bmemo").oninput = (e) => { C.memo = e.target.value; };
     const payhow = wrap.querySelector("#bpayhow");
     if (payhow) payhow.onclick = () => { closeSheet(); booksSettingsSheet(); };
+    const taxreg = wrap.querySelector("#btaxreg");
+    if (taxreg) taxreg.onclick = () => { closeSheet(); booksSettingsSheet(); };
     const create = wrap.querySelector("#bcreate");
     if (create) create.onclick = async (e, force, allowZero) => {
       if (C.busy) return;
@@ -2069,6 +2076,7 @@ async function booksSettingsSheet() {
     <label class="emailrow">Second tax rate %<input id="srate2" type="number" min="0" max="100" step="0.001" class="cmpinput" value="${(Number(s.tax.second_rate || 0) * 100).toFixed(3).replace(/\.?0+$/, "")}"></label>
     <p class="note">${s.tax.second_name ? "Both taxes print as separate lines. The second tax can be switched off per line when you write an invoice — most services are exempt from it." : Number(s.tax.rate) > 0 ? "" : "Tax is 0% — nothing is added to your invoices. Set the rate your area requires, or leave it at 0 if you don't charge sales tax."}</p>
     <label class="emailrow">Tax registration # (shown on invoices)<input id="sreg" class="cmpinput" value="${esc(s.tax.registration_number || "")}"></label>
+    ${Number(s.tax.rate) > 0 && !String(s.tax.registration_number || "").trim() ? `<p class="note err">You're charging ${esc(s.tax.name || "tax")} with no registration number. It prints on every invoice, and without it your customers can't claim the tax back.</p>` : ""}
     <label class="emailrow">Invoice prefix<input id="spre" class="cmpinput" value="${esc(s.numbering.prefix)}"></label>
     <p class="note">Next invoice: ${esc(s.numbering.prefix)}${s.numbering.next_number}</p>
     <label class="emailrow">How customers pay you (shown on unpaid invoices when card payments are off)

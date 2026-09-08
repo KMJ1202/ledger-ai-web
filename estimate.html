@@ -84,7 +84,7 @@ function render(data, justResponded){
     rs.setProperty("--accent-text", (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#14181d" : "#ffffff");
     rs.setProperty("--accent-soft", `rgba(${r},${g},${b},.18)`);
   }
-  const contact = [biz.address, biz.phone].filter(Boolean).join(" · ");
+  const contact = [biz.address, biz.phone, biz.tax_registration ? `GST/HST # ${biz.tax_registration}` : ""].filter(Boolean).join(" · ");
   const taxRows = (Array.isArray(est.taxes) && est.taxes.length ? est.taxes : (est.tax_total > 0 ? [{ name: est.tax_name, rate: est.tax_rate, total: est.tax_total }] : []))
     .filter((t) => t.total > 0)
     .map((t) => { const pct = Math.round(t.rate * 100000) / 1000; return `<tr><td>${esc(t.name || "Tax")} (${pct.toFixed(pct % 1 ? ((pct * 100) % 1 ? 3 : 2) : 0)}%)</td><td class="num">${cur(t.total, c)}</td></tr>`; }).join("");
