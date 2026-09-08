@@ -128,6 +128,7 @@ async function api(path, body, method = "POST") {
     // subscription is paused. One handler updates the banner so the customer
     // sees why, whatever screen they were on.
     if (r.status === 402 && d.code === "subscription_required") paywallHit(d);
+    if (r.status === 402 && d.code === "upgrade_required") upgradeHit(d);
     throw err;
   }
   return d;
@@ -163,17 +164,82 @@ function inAndroidApp() {
 }
 const SUBSCRIPTION_REQUIRED = "An active Ledger AI subscription is required.";
 
+/* ---------------- plans (2026-09-08) ---------------- */
+// Copy lives here, prices come from the server so the website, the app and the
+// gates can never disagree about what a plan costs.
+const PLAN_BLURB = {
+  solo: {
+    tag: "For one or two people",
+    line: "The copilot on your live books, invoicing, estimates, payments, Receipt Radar, Client Hub, booking, leads, your business number and review replies.",
+    extra: "$60/mo AI · $10/mo texting",
+  },
+  pro: {
+    tag: "For a shop with staff",
+    line: "Everything in Solo, plus crew dispatch and live job links, punch-clock time cards, selling off your own price list, Front Desk answering the phone, and teammate logins.",
+    extra: "$150/mo AI · $25/mo texting",
+  },
+};
+
+// Asks which plan to buy. Resolves to "solo" | "pro", or null if dismissed.
+// Never a native confirm() — that wedges the in-app browser.
+function choosePlanSheet(plans) {
+  return new Promise((resolve) => {
+    let picked = null;
+    const card = (p) => {
+      const b = PLAN_BLURB[p.key] || { tag: "", line: "", extra: "" };
+      return `<button type="button" class="planpick" data-plan="${p.key}">
+        <div class="planpick-top"><span class="planpick-name">${p.name}</span>
+        <span class="planpick-price"><s>$${p.list_price}</s>$${p.price}<small>/mo</small></span></div>
+        <div class="planpick-tag">${b.tag}</div>
+        <div class="planpick-line">${b.line}</div>
+        <div class="planpick-extra">${b.extra}</div></button>`;
+    };
+    sheet(`<h3>Choose your plan</h3>
+      <p class="muted" style="margin:0 0 14px">The difference is people. Solo is you and the truck. Pro is you and a crew — you can move up any time and nothing is rebuilt.</p>
+      <div class="planpicks">${plans.map(card).join("")}</div>`, (pane) => {
+      pane.querySelectorAll(".planpick").forEach((b) => {
+        b.onclick = () => { picked = b.dataset.plan; closeSheet(); };
+      });
+    });
+    // The sheet can close by tap, by the Close button or by the backdrop, and
+    // `sheet()` hands the callback the pane rather than the wrapper — so the
+    // one reliable signal that the customer is done is the wrapper going away.
+    // Never hang the caller.
+    const poll = setInterval(() => {
+      if (!document.getElementById("sheetwrap")) { clearInterval(poll); resolve(picked); }
+    }, 250);
+  });
+}
+
+// A Solo customer touched a Pro feature. They are paying — say what it costs
+// and where to switch, never "your subscription ended".
+function upgradeHit(d) {
+  toast(d.message || d.error || "That's part of Ledger Pro.", "err");
+}
+
 // Checkout is for a shop with no subscription. A shop that already has one
 // (trial with a card, active, past due) is refused with already_subscribed —
 // card changes go through the billing portal, never a second Checkout.
-async function startCheckout() {
+async function startCheckout(plan) {
   // Safety net behind the hidden buttons: nothing inside the Android app may
   // reach a Stripe checkout, however it got called.
   if (inAndroidApp()) throw new Error(SUBSCRIPTION_REQUIRED);
   // 2026-09-08: this line read `await startCheckout()` — the wrapper called
   // itself and every Subscribe button on the site died in a recursion loop
   // from 2026-09-06 until today. It has always meant the checkout endpoint.
-  try { return await api("/stripe-billing/checkout", {}); }
+  let chosen = plan;
+  if (!chosen) {
+    // Only ask when there is something to ask about: if Solo is not sellable
+    // yet, this is the same one-price checkout it has always been.
+    let status = null;
+    try { status = await api("/stripe-billing/status", {}); } catch { /* fall through to Pro */ }
+    const options = (status?.plans || []).filter((p) => p.key !== "solo" || status?.solo_available);
+    if (status?.solo_available && options.length > 1) {
+      chosen = await choosePlanSheet(options);
+      if (!chosen) return Promise.reject(Object.assign(new Error("cancelled"), { cancelled: true }));
+    } else chosen = "pro";
+  }
+  try { return await api("/stripe-billing/checkout", { plan: chosen }); }
   catch (e) {
     if (e.status === 409 && e.data?.error === "already_subscribed" && e.data?.portal_available) {
       toast("Your card is already on file — opening billing.");
@@ -1139,7 +1205,7 @@ async function loadHomeSetup() {
     if (card) card.onclick = async () => {
       card.disabled = true;
       try { const c = await startCheckout(); location.href = c.url; }
-      catch (e) { card.disabled = false; toast(e.message, "err"); }
+      catch (e) { card.disabled = false; if (!e.cancelled) toast(e.message, "err"); }
     };
   }
 }
@@ -6464,7 +6530,7 @@ function wireRequestNumber(pending, locked) {
     const sub = $("rnsubscribe");
     if (sub) sub.onclick = async () => {
       try { const c = await startCheckout(); location.href = c.url; }
-      catch (err) { const note = $("rnnote"); note.className = "note err"; note.textContent = err.message; }
+      catch (err) { if (err.cancelled) return; const note = $("rnnote"); note.className = "note err"; note.textContent = err.message; }
     };
     return;
   }
@@ -7852,7 +7918,7 @@ function renderAccessBanner(s) {
   const link = (label, path) => {
     if (inAndroidApp()) { a.appendChild(document.createTextNode(label)); return; }
     const b = document.createElement("u"); b.style.cursor = "pointer"; b.textContent = label;
-    b.onclick = async () => { try { const c = path === "/stripe-billing/checkout" ? await startCheckout() : await api(path, {}); location.href = c.url; } catch (e) { toast(e.message, "err"); } };
+    b.onclick = async () => { try { const c = path === "/stripe-billing/checkout" ? await startCheckout() : await api(path, {}); location.href = c.url; } catch (e) { if (!e.cancelled) toast(e.message, "err"); } };
     a.appendChild(b);
   };
   const access = s.access || "full";
@@ -8681,7 +8747,7 @@ function lockView(seed) {
       const st = await api("/stripe-billing/status", {}).catch(() => ({}));
       const c = expiredTrial || !st.portal_available ? await startCheckout() : await api("/stripe-billing/portal", {});
       location.href = c.url;
-    } catch (err) { toast(err.message, "err"); e.currentTarget.disabled = false; }
+    } catch (err) { if (!err.cancelled) toast(err.message, "err"); e.currentTarget.disabled = false; }
   };
   $("lk-export").onclick = async (e) => {
     e.preventDefault();

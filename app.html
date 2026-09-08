@@ -1693,8 +1693,21 @@ nav#tabs button .cnt{position:absolute;top:4px;right:18%;min-width:17px;height:1
 .actbar.cy .tic{background:rgba(58,200,245,.28);color:#fff}
 .actbar.em{border-color:rgba(47,224,160,.3)}
 .actbar.em .tic{background:rgba(47,224,160,.16);color:var(--emerald)}
+
+/* plan chooser (2026-09-08 two-tier pricing) */
+.planpicks{display:flex;flex-direction:column;gap:12px;margin-bottom:6px}
+.planpick{display:block;width:100%;text-align:left;padding:16px 16px 14px;border-radius:16px;border:1px solid var(--pline,rgba(255,255,255,.12));background:rgba(255,255,255,.03);color:inherit;cursor:pointer;transition:border-color .15s ease,transform .15s ease}
+.planpick:hover,.planpick:focus-visible{border-color:rgba(58,200,245,.55);transform:translateY(-1px)}
+.planpick-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.planpick-name{font-size:16px;font-weight:800}
+.planpick-price{font-size:22px;font-weight:900;letter-spacing:-.5px;white-space:nowrap}
+.planpick-price s{font-size:14px;font-weight:700;opacity:.55;margin-right:7px}
+.planpick-price small{font-size:12px;font-weight:700;opacity:.6;margin-left:2px}
+.planpick-tag{margin-top:3px;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800;opacity:.65}
+.planpick-line{margin-top:9px;font-size:13.5px;line-height:1.5;opacity:.85}
+.planpick-extra{margin-top:9px;font-size:12px;font-weight:700;opacity:.6}
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=122"></script>
+<script type="module" src="app.js?v=123"></script>
 </body></html>

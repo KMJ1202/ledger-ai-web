@@ -1007,3 +1007,14 @@ nav.sitenav .brand b{background:linear-gradient(90deg,#fff 0%,#fff 40%,var(--cya
 .capture .cmsg.err{color:var(--red)}
 .capture .cfine{position:relative;margin-top:10px;color:var(--dim2);font-size:12.5px}
 @media (max-width:560px){.capture{padding:26px 20px}.capture form{flex-direction:column}.capture .btn{width:100%}}
+
+/* ---------- two-tier pricing (2026-09-08) ---------- */
+.pricegrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;max-width:1040px;margin:0 auto;align-items:start}
+.pricegrid .price{max-width:none;margin:0}
+.price.solo{background:linear-gradient(160deg,rgba(47,224,160,.45),rgba(58,200,245,.28) 45%,rgba(47,224,160,.10));box-shadow:0 30px 90px rgba(47,224,160,.12)}
+.price.solo .plantag{color:var(--emerald);border-color:rgba(47,224,160,.35);background:rgba(47,224,160,.08)}
+.price .amount s{font-size:30px;font-weight:800;letter-spacing:-1px;margin-right:12px;color:rgba(150,168,186,.7);-webkit-text-fill-color:rgba(150,168,186,.7);text-decoration-thickness:3px;text-decoration-color:rgba(224,92,240,.75)}
+.price .founding{margin-top:10px;font-family:var(--mono);font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;font-weight:800;color:var(--gold)}
+.price .plusline{margin:26px 0 0;text-align:left;font-size:13.5px;font-weight:800;color:var(--text);letter-spacing:.2px}
+.price .forwho{margin:14px 0 0;font-size:14px;line-height:1.5;color:var(--dim)}
+@media(max-width:900px){.pricegrid{grid-template-columns:1fr;max-width:520px}}
