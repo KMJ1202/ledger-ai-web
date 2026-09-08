@@ -271,7 +271,7 @@ const SEG_ICONS = {
   // Finance tiles: these four match the SF Symbols the iOS tiles use, so the
   // same number wears the same icon on both apps (Kyle 2026-09-07).
   sun: `<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M16.9 16.9l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/>`,
-  hourglass: `<path d="M6 3h12M6 21h12M8 3v3.5l4 5.5 4-5.5V3M8 21v-3.5l4-5.5 4 5.5V21"/>`,
+  hourglass: `<path d="M8 3.6v2.9l4 5.5 4-5.5V3.6z" style="fill:currentColor;stroke:none"/><path d="M6 3h12M6 21h12M8 3v3.5l4 5.5 4-5.5V3M8 21v-3.5l4-5.5 4 5.5V21"/>`,
   sealcheck: `<path d="M12 2.6l2.2 1.7 2.8-.2.9 2.6 2.3 1.5-1 2.6 1 2.6-2.3 1.5-.9 2.6-2.8-.2L12 21.4 9.8 19.7l-2.8.2-.9-2.6-2.3-1.5 1-2.6-1-2.6 2.3-1.5.9-2.6 2.8.2z"/><path d="M8.6 12.2l2.3 2.3 4.4-4.6"/>`,
   calendar: `<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>`,
   tag: `<path d="M3 12V4h8l9 9-8 8-9-9z"/><circle cx="7.5" cy="8.5" r="1.3"/>`,
@@ -1500,16 +1500,16 @@ async function loadNativeInvoices() {
     ${salesIntelNative(invoices)}
 <div class="fintiles">
       <div class="fintile tn t-cyan"><span class="tic">${segIc("sun")}</span>
-        <span class="dot"></span><small>Today</small><b>${money(todaySales)}</b>
+        <small>Today</small><b>${money(todaySales)}</b>
         <span class="fincap">Next ${esc(String(nextNum))}</span></div>
       <div class="fintile tn t-em"><span class="tic">${segIc("profit")}</span>
-        <span class="dot"></span><small>Year to date</small><b>${money(ytdSales)}</b>
+        <small>Year to date</small><b>${money(ytdSales)}</b>
         <span class="fincap">Since Jan 1</span></div>
       <div class="fintile tn t-orange"><span class="tic">${segIc("hourglass")}</span>
-        <span class="dot"></span><small>Outstanding</small><b>${money(summary.open_balance || 0)}</b>
+        <small>Outstanding</small><b>${money(summary.open_balance || 0)}</b>
         <span class="fincap">${openCount === 1 ? "1 open invoice" : openCount + " open invoices"}</span></div>
-      <div class="fintile tn ${overdueRows.length ? "t-red" : "t-em"}"><span class="tic">${segIc(overdueRows.length ? "warn" : "sealcheck")}</span>
-        <span class="dot"></span><small>Overdue</small><b>${money(overdueAmt)}</b>
+      <div class="fintile tn ${overdueRows.length ? "t-red loud" : "t-em"}"><span class="tic">${segIc(overdueRows.length ? "warn" : "sealcheck")}</span>
+        <small>Overdue</small><b>${money(overdueAmt)}</b>
         <span class="fincap">${overdueRows.length === 0 ? "Nothing past due" : overdueRows.length === 1 ? "1 invoice past due" : overdueRows.length + " invoices past due"}</span></div>
     </div>
     <div class="actbars">
@@ -2156,10 +2156,10 @@ function estimatesLaneHTML(estimates, row) {
   return `
     <div class="fintiles">
       <div class="fintile tn t-em"><span class="tic">${segIc("estimates")}</span>
-        <span class="dot"></span><small>Live quotes</small><b>${money(sum(live))}</b>
+        <small>Live quotes</small><b>${money(sum(live))}</b>
         <span class="fincap">${live.length === 1 ? "1 awaiting an answer" : live.length + " awaiting an answer"}</span></div>
       <div class="fintile tn t-cyan"><span class="tic">${segIc("tray")}</span>
-        <span class="dot"></span><small>All estimates</small><b>${money(sum(estimates))}</b>
+        <small>All estimates</small><b>${money(sum(estimates))}</b>
         <span class="fincap">${estimates.length === 1 ? "1 estimate" : estimates.length + " estimates"}</span></div>
     </div>
     <div class="actbars">
@@ -2260,16 +2260,16 @@ async function loadInvoices() {
       ${salesIntel(all, k)}
       <div class="fintiles">
         <div class="fintile tn t-cyan"><span class="tic">${segIc("sun")}</span>
-          <span class="dot"></span><small>Today</small><b>${money(k.today_sales || 0)}</b>
+          <small>Today</small><b>${money(k.today_sales || 0)}</b>
           <span class="fincap">Next #${esc(String(k.next_invoice ?? "—"))}</span></div>
         <div class="fintile tn t-em"><span class="tic">${segIc("profit")}</span>
-          <span class="dot"></span><small>Year to date</small><b>${money(k.ytd_sales || 0)}</b>
+          <small>Year to date</small><b>${money(k.ytd_sales || 0)}</b>
           <span class="fincap">Since Jan 1</span></div>
         <div class="fintile tn t-orange"><span class="tic">${segIc("hourglass")}</span>
-          <span class="dot"></span><small>Outstanding</small><b>${money(k.outstanding || 0)}</b>
+          <small>Outstanding</small><b>${money(k.outstanding || 0)}</b>
           <span class="fincap">${(k.open_count ?? 0) === 1 ? "1 open invoice" : (k.open_count ?? 0) + " open invoices"}</span></div>
-        <div class="fintile tn ${overdueRows.length ? "t-red" : "t-em"}"><span class="tic">${segIc(overdueRows.length ? "warn" : "sealcheck")}</span>
-          <span class="dot"></span><small>Overdue</small><b>${money(overdueAmt)}</b>
+        <div class="fintile tn ${overdueRows.length ? "t-red loud" : "t-em"}"><span class="tic">${segIc(overdueRows.length ? "warn" : "sealcheck")}</span>
+          <small>Overdue</small><b>${money(overdueAmt)}</b>
           <span class="fincap">${overdueRows.length === 0 ? "Nothing past due" : overdueRows.length === 1 ? "1 invoice past due" : overdueRows.length + " invoices past due"}</span></div>
       </div>
       <div class="actbars">
