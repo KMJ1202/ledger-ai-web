@@ -211,10 +211,69 @@ function choosePlanSheet(plans) {
   });
 }
 
-// A Solo customer touched a Pro feature. They are paying — say what it costs
-// and where to switch, never "your subscription ended".
+// A Solo customer touched a Pro feature. They are PAYING — this is a growth
+// moment, not a failure, so it gets a real door with the price on it and one
+// button that actually changes the plan. Never "your subscription ended", and
+// never a red error toast for something the customer is allowed to buy.
+let upgradeSheetOpen = false;
 function upgradeHit(d) {
-  toast(d.message || d.error || "That's part of Ledger Pro.", "err");
+  // Google Play forbids an app it distributes from pointing anywhere else to
+  // pay. Inside the Android wrapper we state the fact and stop there.
+  if (inAndroidApp()) { toast(d.message || d.error || "That's part of Ledger Pro.", "err"); return; }
+  if (upgradeSheetOpen) return;
+  upgradeSheetOpen = true;
+  const price = d.required_plan_price || 699;
+  const title = d.feature_title || "Ledger Pro";
+  const body = d.message || d.error || "That's part of Ledger Pro.";
+  sheet(`<h3>${esc(title)}</h3>
+    <p class="muted" style="margin:0 0 14px">${esc(body)}</p>
+    <div class="planpick" style="cursor:default;margin-bottom:14px">
+      <div class="planpick-top"><span class="planpick-name">Ledger Pro</span>
+      <span class="planpick-price">$${price}<small>/mo</small></span></div>
+      <div class="planpick-tag">${PLAN_BLURB.pro.tag}</div>
+      <div class="planpick-line">${PLAN_BLURB.pro.line}</div>
+      <div class="planpick-extra">${PLAN_BLURB.pro.extra}</div>
+    </div>
+    <button class="btn em wide" id="upgo">Move up to Ledger Pro</button>
+    <p class="note" style="margin-top:10px;text-align:center">Nothing is rebuilt and nothing is lost — everything you already have stays exactly where it is. You only pay the difference for the rest of this month.</p>`,
+    (pane) => {
+      const go = pane.querySelector("#upgo");
+      go.onclick = async () => {
+        go.disabled = true; go.textContent = "Switching…";
+        const ok = await moveToPlan("pro");
+        if (!ok) { go.disabled = false; go.textContent = "Move up to Ledger Pro"; }
+      };
+    });
+  const poll = setInterval(() => {
+    if (!document.getElementById("sheetwrap")) { clearInterval(poll); upgradeSheetOpen = false; }
+  }, 250);
+}
+
+// The one place a plan actually changes. Handles all four real states: a live
+// Stripe subscription (swap the price, prorated), no subscription yet (that is
+// a checkout, not a change), an App Store subscription (only Apple can move
+// it), and a downgrade blocked by teammates. Returns true when the plan moved.
+async function moveToPlan(plan) {
+  if (inAndroidApp()) { toast("Plan changes aren't available in the Android app yet.", "err"); return false; }
+  try {
+    const d = await api("/stripe-billing/change-plan", { plan });
+    if (d.unchanged) { toast(d.message); return true; }
+    toast(d.message || `You're on ${d.plan_name}.`);
+    closeSheet();
+    // Every gated screen has to redraw against the new plan, and the copilot's
+    // tool list is built per request — a clean reload is the honest way to
+    // show a customer that what they just paid for is on.
+    setTimeout(() => location.reload(), 1400);
+    return true;
+  } catch (e) {
+    const code = e.data?.code || e.data?.error;
+    if (code === "no_subscription") {
+      try { const c = await startCheckout(plan); location.href = c.url; return true; }
+      catch (err) { if (!err.cancelled) toast(err.message, "err"); return false; }
+    }
+    toast(e.message, "err");
+    return false;
+  }
 }
 
 // Checkout is for a shop with no subscription. A shop that already has one
@@ -8379,6 +8438,9 @@ async function businessSheet() {
     <div class="eyebrow" style="margin-top:20px">NOTIFICATIONS</div>
     <div id="pushslot" class="note" style="margin-top:8px">Checking…</div>
 
+    <div class="eyebrow" style="margin-top:20px">YOUR PLAN</div>
+    <div id="planslot" class="note" style="margin-top:8px">Checking…</div>
+
     <div class="eyebrow" style="margin-top:20px">APP</div>
     <div class="rowbtns" style="margin-top:8px;flex-direction:column">
       ${S.installPrompt ? `<button class="btn primary wide" id="install">📲 Install Ledger AI</button>` : ""}
@@ -8518,6 +8580,38 @@ async function businessSheet() {
       } catch { slot.textContent = "Booking unavailable right now."; }
     };
     renderBooking();
+    // Which tier this shop is on, in words, with the one button that moves it.
+    // A customer should never have to guess what they are paying for.
+    (async () => {
+      const slot = sh.querySelector("#planslot"); if (!slot) return;
+      try {
+        const st = await api("/stripe-billing/status", {});
+        const key = st.plan || "pro";
+        const spec = (st.plans || []).find((p) => p.key === key);
+        const b = PLAN_BLURB[key] || { tag: "", line: "", extra: "" };
+        const price = spec?.price;
+        const apple = st.billing_source === "apple";
+        let action = "";
+        if (inAndroidApp()) action = "";
+        else if (key === "solo") action = `<button class="btn em wide" style="margin-top:11px" id="planup">Move up to Ledger Pro${st.plans?.find((p) => p.key === "pro")?.price ? ` — $${st.plans.find((p) => p.key === "pro").price}/mo` : ""}</button>`;
+        else if (st.can_change_plan) action = `<button class="btn ghost wide" style="margin-top:11px" id="plandown">Switch to Ledger Solo</button>`;
+        slot.innerHTML = `<div class="kv"><span><b>${esc(st.plan_name || (key === "solo" ? "Ledger Solo" : "Ledger Pro"))}</b><br>
+          <small style="color:var(--dim)">${esc(b.tag)}</small></span>
+          <span>${price ? `$${price}<small style="color:var(--dim)">/mo</small>` : ""}</span></div>
+          <p class="note" style="margin:8px 0 0">${esc(b.line)}</p>
+          ${apple ? `<p class="note" style="margin:8px 0 0">Billed through the App Store — change your plan on your iPhone in Settings → your name → Subscriptions.</p>` : ""}
+          ${action}`;
+        const up = slot.querySelector("#planup");
+        if (up) up.onclick = async () => { up.disabled = true; up.textContent = "Switching…"; if (!(await moveToPlan("pro"))) { up.disabled = false; up.textContent = "Move up to Ledger Pro"; } };
+        const down = slot.querySelector("#plandown");
+        if (down) down.onclick = async () => {
+          // Two taps, never one: dropping a tier is a decision, not a slip.
+          if (down.dataset.armed !== "1") { down.dataset.armed = "1"; down.textContent = "Tap again to move down to Solo"; return; }
+          down.disabled = true; down.textContent = "Switching…";
+          if (!(await moveToPlan("solo"))) { down.disabled = false; down.dataset.armed = ""; down.textContent = "Switch to Ledger Solo"; }
+        };
+      } catch { slot.textContent = "Plan unavailable right now."; }
+    })();
     sh.querySelector("#bpu").onclick = powerUpSheet;
     const bsms = sh.querySelector("#bsms"); if (bsms) bsms.onclick = textingSheet;
     sh.querySelector("#bnew").onclick = () => { newConversation(); closeSheet(); openChat(); };
