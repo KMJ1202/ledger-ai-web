@@ -8619,7 +8619,17 @@ async function businessSheet() {
         const down = slot.querySelector("#plandown");
         if (down) down.onclick = async () => {
           // Two taps, never one: dropping a tier is a decision, not a slip.
-          if (down.dataset.armed !== "1") { down.dataset.armed = "1"; down.textContent = "Tap again to move down to Solo"; return; }
+          if (down.dataset.armed !== "1") {
+            down.dataset.armed = "1";
+            down.textContent = "Tap again to move down to Solo";
+            // Say what actually goes away, and that moving back up is at
+            // today's price — an older price is never handed back.
+            const warn = document.createElement("p");
+            warn.className = "note"; warn.id = "plandownwarn"; warn.style.marginTop = "8px"; warn.style.color = "var(--gold)";
+            warn.textContent = "This switches off crew dispatch, time cards, teammate logins, your own price list and Front Desk, and drops your included AI to $60/mo. Moving back up later is at today's Pro price.";
+            if (!slot.querySelector("#plandownwarn")) down.after(warn);
+            return;
+          }
           down.disabled = true; down.textContent = "Switching…";
           if (!(await moveToPlan("solo"))) { down.disabled = false; down.dataset.armed = ""; down.textContent = "Switch to Ledger Solo"; }
         };
