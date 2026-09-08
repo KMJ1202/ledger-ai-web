@@ -8803,7 +8803,7 @@ const ONBOARD_QUESTIONS = [
   { id: "obq1", q: "What kind of work do you do?", ph: "e.g. mobile tire shop, plumbing, barbershop, towing", fact: "Business type", cat: "operations" },
   { id: "obq2", q: "What are your main services or products?", ph: "e.g. tire installs, seasonal changeovers, flat repairs", fact: "Main services/products", cat: "operations" },
   { id: "obq3", q: "Who's on the team, and who handles the books?", ph: "e.g. just me — I do everything; my wife does invoicing", fact: "Team", cat: "people" },
-  { id: "obq4", q: "What are your hours and service area?", ph: "e.g. Mon-Sat 9-6, Calgary and area", fact: "Hours and service area", cat: "operations" },
+  { id: "obq4", q: "What are your hours and service area?", ph: "e.g. Mon-Sat 9-6, and the areas you cover", fact: "Hours and service area", cat: "operations" },
 ];
 
 // Shown once, but never lost: the open interview is pinned in localStorage
