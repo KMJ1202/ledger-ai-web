@@ -266,6 +266,11 @@ const SEG_ICONS = {
   calclock: `<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4M12 13v3l2 1"/>`,
   camera: `<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>`,
   pulse: `<path d="M3 12h3l2-5 3 10 2-5h8"/>`,
+  // Finance tiles: these four match the SF Symbols the iOS tiles use, so the
+  // same number wears the same icon on both apps (Kyle 2026-09-07).
+  sun: `<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M16.9 16.9l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/>`,
+  hourglass: `<path d="M6 3h12M6 21h12M8 3v3.5l4 5.5 4-5.5V3M8 21v-3.5l4-5.5 4 5.5V21"/>`,
+  sealcheck: `<path d="M12 2.6l2.2 1.7 2.8-.2.9 2.6 2.3 1.5-1 2.6 1 2.6-2.3 1.5-.9 2.6-2.8-.2L12 21.4 9.8 19.7l-2.8.2-.9-2.6-2.3-1.5 1-2.6-1-2.6 2.3-1.5.9-2.6 2.8.2z"/><path d="M8.6 12.2l2.3 2.3 4.4-4.6"/>`,
   calendar: `<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>`,
   tag: `<path d="M3 12V4h8l9 9-8 8-9-9z"/><circle cx="7.5" cy="8.5" r="1.3"/>`,
   bubble: `<path d="M4 5h11v8H8l-4 3V5z"/><path d="M15 9h5v8l-3-2h-6v-3"/>`,
@@ -1477,6 +1482,11 @@ async function loadNativeInvoices() {
   const ytdSales = live.filter((i) => (i.issue_date || "").slice(0, 4) === todayKey.slice(0, 4))
     .reduce((s, i) => s + (Number(i.total) || 0), 0);
   const openCount = summary.open_invoices ?? live.filter((i) => Number(i.balance) > 0).length;
+  // Kyle 2026-09-07: Outstanding and Overdue are two different questions.
+  // Outstanding is everything still owing; Overdue is only the slice already
+  // past its due date. Same rule as the iPhone tile and the Late chip.
+  const overdueRows = live.filter((i) => Number(i.balance) > 0 && i.due_date && i.due_date < todayISO);
+  const overdueAmt = overdueRows.reduce((sum, i) => sum + (Number(i.balance) || 0), 0);
   // iOS Overview parity: the 2x2 KPI tile grid renders every time — zeros on
   // a fresh workspace beat a blank screen. THIS MONTH / YTD come from the
   // summary's monthly income series (payments received).
@@ -1491,14 +1501,18 @@ async function loadNativeInvoices() {
   slot.innerHTML = `
     ${salesIntelNative(invoices)}
 <div class="fintiles">
-      <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">${segIc("pulse")}</span>
-        <span class="dot cyan"></span><small>Today</small><b>${money(todaySales)}</b></div>
-      <div class="fintile"><span class="tic" style="background:rgba(168,85,247,.15);color:var(--magenta)">${segIc("profit")}</span>
-        <span class="dot em"></span><small>Year to date</small><b>${money(ytdSales)}</b></div>
-      <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#36;</span>
-        <span class="dot orange"></span><small>Outstanding</small><b>${money(summary.open_balance || 0)}</b></div>
-      <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#35;</span>
-        <span class="nextchip">Next ${esc(String(nextNum))}</span><small>Open invoices</small><b>${openCount}</b></div>
+      <div class="fintile tn t-cyan"><span class="tic">${segIc("sun")}</span>
+        <span class="dot"></span><small>Today</small><b>${money(todaySales)}</b>
+        <span class="fincap">Next ${esc(String(nextNum))}</span></div>
+      <div class="fintile tn t-em"><span class="tic">${segIc("profit")}</span>
+        <span class="dot"></span><small>Year to date</small><b>${money(ytdSales)}</b>
+        <span class="fincap">Since Jan 1</span></div>
+      <div class="fintile tn t-orange"><span class="tic">${segIc("hourglass")}</span>
+        <span class="dot"></span><small>Outstanding</small><b>${money(summary.open_balance || 0)}</b>
+        <span class="fincap">${openCount === 1 ? "1 open invoice" : openCount + " open invoices"}</span></div>
+      <div class="fintile tn ${overdueRows.length ? "t-red" : "t-em"}"><span class="tic">${segIc(overdueRows.length ? "warn" : "sealcheck")}</span>
+        <span class="dot"></span><small>Overdue</small><b>${money(overdueAmt)}</b>
+        <span class="fincap">${overdueRows.length === 0 ? "Nothing past due" : overdueRows.length === 1 ? "1 invoice past due" : overdueRows.length + " invoices past due"}</span></div>
     </div>
     ${liveEst.length ? `<div class="lanehead"><span class="eyebrow" style="color:var(--dim)">Estimates</span>
       <span class="note">${liveEst.length}</span></div>
@@ -2158,6 +2172,10 @@ async function loadInvoices() {
     const k = S.qbo?.qbo?.kpis || {};
     const over30Cut = localDay(new Date(Date.now() - 30 * 86400000));
     const todayISO = localDay();
+    // Kyle 2026-09-07: Overdue is the slice of Outstanding already past its due
+    // date. Counted off the full snapshot, never the filtered/searched list.
+    const overdueRows = all.filter((i) => Number(i.balance) > 0 && i.status !== "paid" && i.status !== "void" && i.due_date && i.due_date < todayISO);
+    const overdueAmt = overdueRows.reduce((sum, i) => sum + (Number(i.balance) || 0), 0);
     const filtered = all.filter((i) => S.invoiceFilter === "all" ? true
         : S.invoiceFilter === "late" ? (Number(i.balance) > 0 && i.due_date && i.due_date < todayISO)
         : S.invoiceFilter === "over30" ? (Number(i.balance) > 0 && (i.date || "") < over30Cut)
@@ -2165,7 +2183,7 @@ async function loadInvoices() {
       .filter((i) => !S.invoiceSearch || (i.customer + " " + i.doc + " " + (i.email || "")).toLowerCase().includes(S.invoiceSearch));
     // iOS searches customers alongside invoices and lists the matches above them.
     // Live quotes first, settled ones after — the same order the books tab uses.
-    const qboEstimates = (S.qbo?.qbo?.estimates || [])
+    const qboEstimates = (S.qbo?.qbo?.estimate_rows || [])
       .slice()
       .sort((a, b) => {
         const live = (x) => (x.status === "open" || x.status === "accepted") ? 0 : 1;
@@ -2177,14 +2195,18 @@ async function loadInvoices() {
       ${refreshError ? `<p class="note err">Couldn't refresh — showing the last invoices Ledger loaded. ${esc(refreshError)}</p>` : ""}
       ${salesIntel(all, k)}
       <div class="fintiles">
-        <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">${segIc("pulse")}</span>
-          <span class="dot cyan"></span><small>Today</small><b>${money(k.today_sales || 0)}</b></div>
-        <div class="fintile"><span class="tic" style="background:rgba(168,85,247,.15);color:var(--magenta)">${segIc("profit")}</span>
-          <span class="dot em"></span><small>Year to date</small><b>${money(k.ytd_sales || 0)}</b></div>
-        <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#36;</span>
-          <span class="dot orange"></span><small>Outstanding</small><b>${money(k.outstanding || 0)}</b></div>
-        <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#35;</span>
-          <span class="nextchip">Next #${esc(String(k.next_invoice ?? "—"))}</span><small>Open invoices</small><b>${k.open_count ?? 0}</b></div>
+        <div class="fintile tn t-cyan"><span class="tic">${segIc("sun")}</span>
+          <span class="dot"></span><small>Today</small><b>${money(k.today_sales || 0)}</b>
+          <span class="fincap">Next #${esc(String(k.next_invoice ?? "—"))}</span></div>
+        <div class="fintile tn t-em"><span class="tic">${segIc("profit")}</span>
+          <span class="dot"></span><small>Year to date</small><b>${money(k.ytd_sales || 0)}</b>
+          <span class="fincap">Since Jan 1</span></div>
+        <div class="fintile tn t-orange"><span class="tic">${segIc("hourglass")}</span>
+          <span class="dot"></span><small>Outstanding</small><b>${money(k.outstanding || 0)}</b>
+          <span class="fincap">${(k.open_count ?? 0) === 1 ? "1 open invoice" : (k.open_count ?? 0) + " open invoices"}</span></div>
+        <div class="fintile tn ${overdueRows.length ? "t-red" : "t-em"}"><span class="tic">${segIc(overdueRows.length ? "warn" : "sealcheck")}</span>
+          <span class="dot"></span><small>Overdue</small><b>${money(overdueAmt)}</b>
+          <span class="fincap">${overdueRows.length === 0 ? "Nothing past due" : overdueRows.length === 1 ? "1 invoice past due" : overdueRows.length + " invoices past due"}</span></div>
       </div>
       ${qboEstimates.length ? `<div class="lanehead" style="margin:16px 0 9px">
           <span class="eyebrow" style="color:var(--dim)">Estimates</span>

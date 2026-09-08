@@ -663,6 +663,26 @@ select.pillbtn{appearance:none;-webkit-appearance:none;text-align:center;padding
 .fintile .tic svg{width:16px;height:16px;fill:currentColor}
 .fintile .tic{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;margin-bottom:9px}
 .fintile .nextchip{position:absolute;top:12px;right:13px;font-size:10.5px;font-weight:700;color:var(--blue)}
+/* Finance 2x2 (Kyle 2026-09-07): every tile carries its own tone, a gradient
+   icon chip and a caption line, so the web tile and the iPhone tile read the
+   same. Only tiles marked .tn opt in — the receipts and profit tiles keep the
+   plain look they already had. */
+.fintile.tn{border-color:rgba(var(--t),.28);overflow:hidden}
+.fintile.tn::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(115% 85% at 0% 0%,rgba(var(--t),.14),transparent 62%)}
+.fintile.tn>small,.fintile.tn>b,.fintile.tn>.tic,.fintile.tn>.fincap{position:relative;z-index:1}
+.fintile.tn .dot{z-index:1}
+.fintile.tn .tic svg{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.fintile.tn .tic{width:34px;height:34px;border-radius:11px;
+  background:linear-gradient(150deg,rgba(var(--t),.32),rgba(var(--t),.10));
+  border:1px solid rgba(var(--t),.34);color:rgb(var(--t))}
+.fintile.tn .dot{background:rgb(var(--t));box-shadow:0 0 8px rgba(var(--t),.85)}
+.fintile.tn b{font-size:24px}
+.fintile .fincap{display:block;margin-top:5px;font-size:10.5px;font-weight:700;color:var(--dim2)}
+.fintile.t-cyan{--t:58,200,245}
+.fintile.t-em{--t:47,224,160}
+.fintile.t-orange{--t:251,146,60}
+.fintile.t-red{--t:248,113,113}
 .dtable{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}
 .dtable td{padding:7px 0;border-bottom:1px solid var(--line)}
 .kpi{
@@ -1626,5 +1646,5 @@ nav#tabs button .cnt{position:absolute;top:4px;right:18%;min-width:17px;height:1
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=112"></script>
+<script type="module" src="app.js?v=113"></script>
 </body></html>
