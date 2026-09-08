@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 111;
+const APP_BUILD = 112;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -1500,10 +1500,6 @@ async function loadNativeInvoices() {
       <div class="fintile blue"><span class="tic" style="background:rgba(59,130,246,.15);color:var(--blue)">&#35;</span>
         <span class="nextchip">Next ${esc(String(nextNum))}</span><small>Open invoices</small><b>${openCount}</b></div>
     </div>
-    <div class="chips" style="margin:13px 0 4px">
-      ${[["all", "All"], ["open", "Open"], ["late", "Late"], ["over30", "Over 30"], ["paid", "Paid"]].map(([k2, l]) =>
-        `<button class="chip ${S.invoiceFilter === k2 ? "on" : ""}" data-if="${k2}">${l}</button>`).join("")}
-    </div>
     ${liveEst.length ? `<div class="lanehead"><span class="eyebrow" style="color:var(--dim)">Estimates</span>
       <span class="note">${liveEst.length}</span></div>
     <div class="list">${liveEst.slice(0, 40).map((x) => `
@@ -1525,14 +1521,9 @@ async function loadNativeInvoices() {
     </div>
     <div class="searchwrap" style="margin-top:15px"><span class="mag">${MAG}</span>
       <input id="invsearch" placeholder="Customer or invoice number" value="${esc(S.invoiceSearch || "")}"></div>
-    <div class="opsgrid">
-      <button class="opcard ${chargesOn ? "em" : "purple"}" data-op="stripe"><span class="ic">&#128179;</span>
-        <b>Card payments</b><span>${chargesOn ? "ON — customers can pay online" : "Set up Stripe to get paid online"}</span>
-        <em>${chargesOn ? "MANAGE" : "SET UP"} &#8599;</em></button>
-      <button class="opcard" data-op="bsettings"><span class="ic">&#9881;</span><b>Books settings</b>
-        <span>Tax, invoice numbering, payment info</span><em>OPEN &#8599;</em></button>
-      <button class="opcard" data-op="bexport"><span class="ic">&#128228;</span><b>Export CSV</b>
-        <span>Invoices, payments, customers</span><em>EXPORT &#8599;</em></button>
+    <div class="chips" style="margin:13px 0 4px">
+      ${[["all", "All"], ["open", "Open"], ["late", "Late"], ["over30", "Over 30"], ["paid", "Paid"]].map(([k2, l]) =>
+        `<button class="chip ${S.invoiceFilter === k2 ? "on" : ""}" data-if="${k2}">${l}</button>`).join("")}
     </div>
     <div class="lanehead" style="margin:16px 0 9px"><span class="eyebrow" style="color:var(--dim)">${S.invoiceSearch ? "Matching invoices" : "Recent invoices"}</span>
       <span class="note">${filtered.length}</span></div>
@@ -1543,7 +1534,16 @@ async function loadNativeInvoices() {
         <div class="amt">${money(i.total)}
           <small><span class="tag ${i.status === "paid" ? "paid" : i.status === "void" ? "" : "open"}">${esc(nativeStatusLabel(i))}</span></small></div>
       </button>`).join("")}</div>`
-      : `<div class="empty">${S.invoiceSearch ? "No matches." : "No invoices yet — create your first, or ask Ledger in chat."}</div>`}`;
+      : `<div class="empty">${S.invoiceSearch ? "No matches." : "No invoices yet — create your first, or ask Ledger in chat."}</div>`}
+    <div class="opsgrid">
+      <button class="opcard ${chargesOn ? "em" : "purple"}" data-op="stripe"><span class="ic">&#128179;</span>
+        <b>Card payments</b><span>${chargesOn ? "ON — customers can pay online" : "Set up Stripe to get paid online"}</span>
+        <em>${chargesOn ? "MANAGE" : "SET UP"} &#8599;</em></button>
+      <button class="opcard" data-op="bsettings"><span class="ic">&#9881;</span><b>Books settings</b>
+        <span>Tax, invoice numbering, payment info</span><em>OPEN &#8599;</em></button>
+      <button class="opcard" data-op="bexport"><span class="ic">&#128228;</span><b>Export CSV</b>
+        <span>Invoices, payments, customers</span><em>EXPORT &#8599;</em></button>
+    </div>`;
   $("newinv").onclick = () => nativeComposerSheet();
   $("newest").onclick = () => nativeComposerSheet("estimate");
   const search = $("invsearch");
