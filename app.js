@@ -6754,12 +6754,13 @@ async function loadDirectory() {
   }
 }
 
-// Google Business review destination — same source as iOS: the connector row's
-// public_config.review_uri, falling back to the configured KMJ link.
-const FALLBACK_REVIEW_URL = "https://g.page/r/CbmEs1o9TuK3EBM/review";
+// Google Business review destination — same source as iOS: this workspace's own
+// connector row, and nothing else. There is deliberately no built-in fallback
+// link: a review page belongs to one business, so a shop with no connected
+// listing gets no link rather than somebody else's.
 async function reviewTarget() {
   if (S.reviewUrl !== undefined) return S.reviewUrl;
-  S.reviewUrl = { url: FALLBACK_REVIEW_URL, name: S.profile?.business?.name || "Your business" };
+  S.reviewUrl = { url: null, name: S.profile?.business?.name || "Your business" };
   try {
     const t = await token();
     const r = await fetch(`${SUPA_URL}/rest/v1/connector_accounts?connector=eq.google_business_profile&select=status,display_name,public_config&order=updated_at.desc&limit=1`,
@@ -6767,10 +6768,10 @@ async function reviewTarget() {
     const rows = await r.json();
     const row = Array.isArray(rows) ? rows[0] : null;
     if (row) S.reviewUrl = {
-      url: row.public_config?.review_uri || FALLBACK_REVIEW_URL,
+      url: row.public_config?.review_uri || null,
       name: row.display_name || S.profile?.business?.name || "Your business",
     };
-  } catch { /* keep the configured fallback */ }
+  } catch { /* no connector row reachable — stay linkless */ }
   return S.reviewUrl;
 }
 
@@ -6779,33 +6780,39 @@ async function reviewTarget() {
 async function reviewSheet(c, already) {
   const { url, name } = await reviewTarget();
   const first = (c.name || "").split(" ")[0] || c.name;
-  const msg = `Hi ${first}! Thanks again for choosing ${name}. If you have a moment, would you mind sharing your experience? It really helps our local business: ${url}`;
+  const msg = `Hi ${first}! Thanks again for choosing ${name}. If you have a moment, would you mind sharing your experience? It really helps our local business:${url ? " " + url : ""}`;
   const btn = (id, icon, title, detail, tint) => `<button class="revbtn ${tint}" id="${id}">
       <span class="ic">${icon}</span><span class="m"><b>${esc(title)}</b><span>${esc(detail)}</span></span>
       <span class="chev">&#8250;</span></button>`;
   sheet(`<h2>${already ? "Review already requested" : "Ask " + esc(first) + " for a review?"}</h2>
-    <p class="sh-sub">The verified direct-review link for ${esc(name)} is ready.</p>
+    <p class="sh-sub">${url ? `The verified direct-review link for ${esc(name)} is ready.` : "Connect Google Business Profile to load your verified direct-review link."}</p>
     <div class="eyebrow">Message preview</div>
     <p class="note" style="white-space:pre-wrap;margin-top:7px">${esc(msg)}</p>
     <div class="cmpsect" style="margin-top:14px">
       ${c.phone ? btn("rvsms", "&#128172;", "Open in Messages", c.phone, "em") : ""}
       ${c.email ? btn("rvmail", "&#9993;", "Open in Mail", c.email, "cyan") : ""}
-      ${btn("rvcopy", "&#128279;", "Copy review link", name, "purple")}
-      ${btn("rvopen", "&#8599;", "Preview review page", "Opens Google Reviews", "gold")}
+      ${url ? btn("rvcopy", "&#128279;", "Copy review link", name, "purple") : ""}
+      ${url ? btn("rvopen", "&#8599;", "Preview review page", "Opens Google Reviews", "gold") : ""}
+      ${url ? "" : `<p class="note" style="color:var(--amber,#f5a524)">Connect Google Business Profile in Settings to enable sending.</p>`}
     </div>
     <p class="note">Nothing is sent automatically. You review the exact message in Messages or Mail before sending.</p>`, (sh) => {
     const done = () => { markReviewAsked(c.id); closeSheet(); loadDirectory(); if (S.tab === "home") loadHomeCustomers(); };
     const sms = sh.querySelector("#rvsms");
-    if (sms) sms.onclick = () => { window.location.href = `sms:${c.phone}?&body=${encodeURIComponent(msg)}`; done(); };
+    if (sms) { sms.disabled = !url; sms.style.opacity = url ? "" : "0.45";
+      sms.onclick = () => { if (!url) return; window.location.href = `sms:${c.phone}?&body=${encodeURIComponent(msg)}`; done(); }; }
     const mail = sh.querySelector("#rvmail");
-    if (mail) mail.onclick = () => {
-      window.location.href = `mailto:${c.email}?subject=${encodeURIComponent("Thank you from " + name)}&body=${encodeURIComponent(msg)}`;
-      done();
-    };
-    sh.querySelector("#rvcopy").onclick = async () => {
+    if (mail) { mail.disabled = !url; mail.style.opacity = url ? "" : "0.45";
+      mail.onclick = () => {
+        if (!url) return;
+        window.location.href = `mailto:${c.email}?subject=${encodeURIComponent("Thank you from " + name)}&body=${encodeURIComponent(msg)}`;
+        done();
+      }; }
+    const cp = sh.querySelector("#rvcopy");
+    if (cp) cp.onclick = async () => {
       try { await navigator.clipboard.writeText(url); toast("Review link copied"); } catch { toast("Copy failed", "err"); }
     };
-    sh.querySelector("#rvopen").onclick = () => window.open(url, "_blank", "noopener");
+    const op = sh.querySelector("#rvopen");
+    if (op) op.onclick = () => window.open(url, "_blank", "noopener");
   });
 }
 
