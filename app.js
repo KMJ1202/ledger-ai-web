@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 137;
+const APP_BUILD = 138;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -2949,11 +2949,11 @@ async function jobCostSheet(job, initialReceipt) {
    if(rows.length>150)$('jcresults').insertAdjacentHTML('beforeend','<p class="note">Search to narrow these results.</p>');
    on('[data-jcpick]','click',e=>{const x=rows.find(x=>x.id===e.currentTarget.dataset.jcpick);kind==='stock'?editStock(x):editDocument(x);},$('jcresults'));};$('jcsearch').oninput=render;render();
  };
- const editStock=i=>{if(!i)return;mode='stockEntry';stock=i;doc=null;requestId=crypto.randomUUID();const use=opts.uses.find(u=>u.item_key===i.id),q=use?.quantity??job.allocations.filter(a=>a.item_key===i.id).reduce((n,a)=>n+a.quantity,0);
+ const editStock=i=>{if(!i)return;message='';mode='stockEntry';stock=i;doc=null;requestId=crypto.randomUUID();const use=opts.uses.find(u=>u.item_key===i.id),q=use?.quantity??job.allocations.filter(a=>a.item_key===i.id).reduce((n,a)=>n+a.quantity,0);
   base(`<button class="btn small" id="jcback">Back</button><h3>${esc(i.name)}</h3><p class="note">${i.remaining} ${esc(i.unit)} recorded remaining. Availability is checked on the job date.</p><label>Total quantity used (${esc(i.unit)})<input id="jcquantity" type="number" min="0" step="any" value="${q||''}"></label><p class="note">This is the item's total for this job, including any quantity already matched. Fractions are allowed.</p><label>Extra note (optional)<input id="jcnote" value="${esc(use?.evidence||'')}"></label><button class="btn primary wide" id="jcsave">Save job cost</button>`);
   $('jcback').onclick=choose;$('jcsave').onclick=()=>{if(!$('jcquantity').value)return errorText('Enter the quantity used.');save({request_id:requestId,sale_id:job.id,mode:'stock',item_key:i.id,purchase_id:use?.purchase_id||null,quantity:Number($('jcquantity').value),evidence:$('jcnote').value});};
  };
- const editDocument=d=>{doc=d;stock=null;mode=d?'receiptEntry':'manualEntry';requestId=crypto.randomUUID();
+ const editDocument=d=>{message='';doc=d;stock=null;mode=d?'receiptEntry':'manualEntry';requestId=crypto.randomUUID();
   draft={vendor:d?.vendor||'',number:d?.number||'',date:d?.date||job.date,total:d?.total??'',gst:d?.gst??(d?'':0),lines:d?.lines?.length?d.lines.map(l=>({...l,qty:l.qty??'',unit_cost:l.unit_cost??'',uom:l.uom||'purchase units',selected:false,used:''})):[{description:'',qty:d?'':1,unit_cost:'',uom:d?'purchase units':'job'}],quantity:d?'':1,evidence:''};renderDocument();
  };
  const captureDraft=()=>{for(const k of ['vendor','number','date','total','gst','quantity','evidence']){const n=$('jc'+k);if(n)draft[k]=n.value;}draft.lines.forEach((l,i)=>{const used=$('jcused'+i);if(used)l.used=used.value;for(const k of ['description','qty','uom','unit_cost']){const n=$(`jcl${i}-${k}`);if(n)l[k]=n.value;}});};
