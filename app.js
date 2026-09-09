@@ -4410,17 +4410,17 @@ const CATEGORIES = {
 /* ---------------------------------------------------------------------------
    Stock — the shelf.
 
-   Buying is not a cost; using is. Money leaves the bank the day a supplier is
-   paid, but it only counts against a day's profit when the item goes on a
-   customer's invoice. This screen is where an owner sees what is on the shelf,
-   what it is worth, and turns tracking on for the things they keep in stock.
+   Buying is not a cost; using is. A box of small stuff is held and charged out
+   a little at a time as work goes through the shop.
 
-   Deliberately plain: no jargon, no accounting words, nothing that needs
-   explaining. "On the shelf", "Things you buy", "Used today".
+   The first cut of this screen handed the owner a list of 44 things to switch
+   on. Kyle killed it on sight — "how is it gonna do this for someone else's
+   shop? This is confusion and stupid friction." So there is nothing to tap
+   here: no switches, no setup, no questions. Three numbers and a list.
 ---------------------------------------------------------------------------- */
 const stockQty = (v) => {
   const n = Number(v) || 0;
-  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, "");
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
 };
 
 async function loadStock() {
@@ -4429,50 +4429,31 @@ async function loadStock() {
   try { d = await get("/profit/stock"); }
   catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   S.stock = d;
+  const items = d.items || [];
 
-  const shelf = d.tracked || [];
-  const candidates = d.candidates || [];
   slot.innerHTML = `
     <div class="fintiles" style="grid-template-columns:1.2fr 1fr 1fr">
-      <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">&#128230;</span><small>ON THE SHELF</small><b>${money(d.shelf_value)}</b><i>${shelf.length === 1 ? "1 item" : shelf.length + " items"}</i></div>
+      <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">&#128230;</span><small>ON THE SHELF</small><b>${money(d.shelf_value)}</b><i>${items.length === 1 ? "1 thing" : items.length + " things"}</i></div>
       <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#9203;</span><small>USED TODAY</small><b>${money(d.used_cost_today)}</b><i>charged to today</i></div>
-      <div class="fintile em"><span class="tic" style="background:rgba(47,224,160,.15);color:var(--emerald)">&#128197;</span><small>THIS MONTH</small><b>${money(d.used_cost_month)}</b><i>off the shelf</i></div>
+      <div class="fintile em"><span class="tic" style="background:rgba(47,224,160,.15);color:var(--emerald)">&#128197;</span><small>THIS MONTH</small><b>${money(d.used_cost_month)}</b><i>used so far</i></div>
     </div>
 
-    ${d.short_count > 0 ? `<div class="panel" style="border-color:rgba(248,113,113,.35)">
-      <h3 style="color:var(--red)">&#9888; ${d.short_count === 1 ? "One item has" : d.short_count + " items have"} sold more than was bought</h3>
-      <p class="sub">Either some was already on the shelf before Ledger started counting, or a purchase has not arrived yet. Tap the item and set the real count.</p>
-    </div>` : ""}
+    <div class="panel">
+      <h3>&#128230; Stuff you buy by the box</h3>
+      <p class="sub">Ledger holds it instead of charging it all to the day it was delivered, then charges a bit of it to each day you work. Nothing to set up.</p>
+    </div>
 
-    <div class="lanehead"><span class="eyebrow">On the shelf</span><span class="note">${shelf.length ? "tap for history" : "nothing yet"}</span></div>
+    <div class="lanehead"><span class="eyebrow">What's in it</span><span class="note">${money(d.bought_total)} bought &middot; ${money(d.used_total)} used</span></div>
     <div class="panel flush">
-      ${shelf.length ? shelf.map((x) => `
+      ${items.length ? items.map((x) => `
         <button class="item" data-stk="${esc(x.id)}">
           <div class="main"><div class="ttl">${esc(x.name)}</div>
-            <div class="sub">${stockQty(x.on_hand)} on hand \u00b7 ${money(x.avg_cost)} each${x.sku ? " \u00b7 " + esc(x.sku) : ""}</div></div>
-          <div class="amt">${money(x.value)}${x.short ? `<small><span class="tag" style="background:rgba(248,113,113,.16);color:var(--red)">short</span></small>` : ""}</div>
-        </button>`).join("") : `<div class="empty" style="padding:22px 15px">Nothing on the shelf yet. Turn on the things you buy in bulk below, and the next delivery starts counting.</div>`}
-    </div>
-
-    <div class="lanehead"><span class="eyebrow" style="color:var(--gold)">Things you buy</span><span class="note">${candidates.length} seen</span></div>
-    <div class="panel">
-      <p class="sub" style="margin:0 0 10px">Turn on anything you buy in a box and use a bit at a time. From the next delivery, it stops counting against the day you bought it and starts counting on the day you use it.</p>
-    </div>
-    <div class="panel flush">
-      ${candidates.length ? candidates.map((x) => `
-        <div class="item" style="cursor:default">
-          <div class="main"><div class="ttl">${esc(x.name)}</div>
-            <div class="sub">${x.last_cost != null ? money(x.last_cost) + " each" : "no price seen"}${x.sku ? " \u00b7 " + esc(x.sku) : ""}</div></div>
-          <button class="btn ghost" data-stktrack="${esc(x.id)}" style="flex:0 0 auto;padding:8px 14px;font-size:12.5px">Track</button>
-        </div>`).join("") : `<div class="empty" style="padding:22px 15px">Nothing yet. Ledger fills this in from the lines on your supplier invoices.</div>`}
+            <div class="sub">about ${stockQty(x.left_qty)} left of ${stockQty(x.bought_qty)} &middot; ${money(x.unit_cost)} each${x.sku ? " &middot; " + esc(x.sku) : ""}</div></div>
+          <div class="amt">${money(x.value)}</div>
+        </button>`).join("") : `<div class="empty" style="padding:22px 15px">Nothing yet. This fills in on its own from the lines on your supplier invoices.</div>`}
     </div>`;
 
   on("[data-stk]", "click", (e) => stockItemSheet(e.currentTarget.dataset.stk), slot);
-  on("[data-stktrack]", "click", async (e) => {
-    const btn = e.currentTarget; btn.disabled = true; btn.textContent = "…";
-    try { await api("/profit/stock-track", { id: btn.dataset.stktrack, tracked: true }); toast("Now tracking"); loadStock(); }
-    catch (err) { btn.disabled = false; btn.textContent = "Track"; toast(err.message, "err"); }
-  }, slot);
 }
 
 async function stockItemSheet(id) {
@@ -4482,33 +4463,16 @@ async function stockItemSheet(id) {
   if (d.error) { toast(d.error, "err"); return; }
   const it = d.item;
   sheet(`<h3>${esc(it.name)}</h3>
-    <p class="sub">${stockQty(it.on_hand)} on hand \u00b7 ${money(it.avg_cost)} each \u00b7 worth ${money(it.value)}</p>
-    <label class="fld"><span>Count them and type the real number</span>
-      <input id="stkcount" type="number" step="0.01" inputmode="decimal" value="${stockQty(it.on_hand)}"></label>
-    <div class="row" style="margin-bottom:14px">
-      <button class="btn cancel" id="stkuntrack">Stop tracking</button>
-      <button class="btn confirm" id="stksave">Save count</button>
-    </div>
-    <div class="lanehead"><span class="eyebrow">Every add and take</span></div>
+    <p class="sub">${stockQty(it.bought_qty)} bought &middot; ${money(it.unit_cost)} each${it.sku ? " &middot; " + esc(it.sku) : ""}</p>
+    <div class="lanehead"><span class="eyebrow">Every delivery</span></div>
     <div class="panel flush">
       ${(d.movements || []).length ? d.movements.map((m) => `
         <div class="item" style="cursor:default">
-          <div class="main"><div class="ttl">${m.direction === "in" ? "Added" : m.direction === "out" ? "Used" : "Counted"} ${stockQty(Math.abs(m.qty))}</div>
-            <div class="sub">${esc(dateShort(m.occurred_on))}${m.note ? " \u00b7 " + esc(m.note) : ""}</div></div>
-          <div class="amt">${m.direction === "out" ? "-" : ""}${money(Math.abs(m.total_cost))}</div>
+          <div class="main"><div class="ttl">${stockQty(m.qty)} arrived</div>
+            <div class="sub">${esc(dateShort(m.occurred_on))}${m.note ? " &middot; " + esc(m.note) : ""}</div></div>
+          <div class="amt">${money(m.total_cost)}</div>
         </div>`).join("") : `<div class="empty" style="padding:18px 15px">Nothing yet.</div>`}
-    </div>`, (pane) => {
-    pane.querySelector("#stksave").onclick = async () => {
-      const value = Number(pane.querySelector("#stkcount").value);
-      if (!Number.isFinite(value)) { toast("Type a number", "err"); return; }
-      try { await api("/profit/stock-count", { id, on_hand: value, note: "Hand count" }); closeSheet(); toast("Count saved"); loadStock(); }
-      catch (e) { toast(e.message, "err"); }
-    };
-    pane.querySelector("#stkuntrack").onclick = async () => {
-      try { await api("/profit/stock-track", { id, tracked: false }); closeSheet(); toast("Stopped tracking"); loadStock(); }
-      catch (e) { toast(e.message, "err"); }
-    };
-  });
+    </div>`);
 }
 
 async function loadReceipts() {
