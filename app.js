@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 112;
+const APP_BUILD = 134;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -57,7 +57,7 @@ if ("serviceWorker" in navigator) {
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); S.installPrompt = e; });
 
 /* ---------------- helpers ---------------- */
-const esc = (s) => { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; };
+const esc = (s) => { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;"); };
 const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
 const money = (n) => (Number(n) || 0).toLocaleString(undefined, { style: "currency", currency: S.currency }).replace(/^[A-Z]{2}\$/, "$");
 const money0 = (n) => (Number(n) || 0).toLocaleString(undefined, { style: "currency", currency: S.currency, maximumFractionDigits: 0 }).replace(/^[A-Z]{2}\$/, "$");
@@ -763,7 +763,7 @@ async function renderHome() {
       ${srail("grid", "Go to", "sil")}
       <div class="gotogrid">
         ${[
-          ["finance", "em", "dollar", "Finance", "Invoices · profit", "", false],
+          ["finance", "em", "dollar", "Finance", "Profit · jobs · inventory", "", false],
           ["calendar", "purple", "calendar", "Calendar", "Bookings", "gobdg-calendar", false],
           ["phone", "cyan", "phone", "Phone", "Calls · leads", "gobdg-phone", false],
           ["customers", "red", "people", "Customers", "Directory", "", true],
@@ -2866,137 +2866,69 @@ async function withPdf(inv, sh, fn) {
 // Built-in books P&L — income is payments received, expenses are logged
 // costs, straight off the books summary. Rendered even when empty: a new
 // shop should see the board it is about to fill, not a blank lane.
-async function loadNativeProfit() {
-  const slot = $("finbody"); if (!slot) return;
-  let summary;
-  try { summary = await booksApi({ action: "summary" }); }
-  catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
-  // The profit board reads a Ledger-books shop too (invoices as income,
-  // captured receipts as cost), so today's profit and the 14-day trend belong
-  // here as well — only the QuickBooks-specific sweep stays behind.
-  let board = {};
-  try { board = (await get("/profit/board")).board || {}; } catch { board = {}; }
-  const today = board.today || {};
-  const hasToday = today.date === localDay();
-  const series = (board.daily || []).slice(-14);
-  const trendMax = Math.max(1, ...series.map((x) => Math.abs(x.net_profit || 0)));
-  const income = today.total_income || 0, costs = today.total_expenses || 0;
-  const margin = income > 0 ? Math.round((today.net_profit || 0) / income * 100) : 0;
-  const months = (summary.months || []).slice(-12).reverse();
-  const nowKey = new Date().toISOString().slice(0, 7);
-  const cur = months.find((m) => m.month === nowKey) || { income: 0, expenses: 0, net: 0 };
-  const ytdRows = months.filter((m) => m.month.slice(0, 4) === nowKey.slice(0, 4));
-  const ytdNet = ytdRows.reduce((s, m) => s + Number(m.net || 0), 0);
-  const monthLabel = (k) => new Date(k + "-15").toLocaleDateString(undefined, { month: "long", year: "numeric" });
-  slot.innerHTML = `
-    <div class="hero">
-      <div class="headline"><span class="eyebrow">Today's profit</span>
-        <span class="when">${esc(today.date || localDay())}</span></div>
-      ${hasToday ? `<div class="big" style="color:${(today.net_profit || 0) >= 0 ? "var(--emerald)" : "var(--red)"}">${money(today.net_profit)}</div>
-      <div class="trio">
-        <div><small>Income</small><b style="color:var(--cyan)">${money0(income)}</b></div>
-        <div><small>Expenses</small><b style="color:var(--orange)">${money0(costs)}</b></div>
-        <div><small>Margin</small><b style="color:var(--magenta)">${margin}%</b></div>
-      </div>`
-      : `<p class="sub" style="margin-top:8px">Nothing invoiced yet today. The moment you send one, this fills in.</p>`}
-    </div>
-    ${series.length ? `<div class="panel">
-      <div class="eyebrow" style="margin-bottom:12px">Profit trend</div>
-      <div class="salespark">${series.map((x) => `
-        <div class="b ${(x.net_profit || 0) < 0 ? "hot" : ""}" style="height:${Math.max(Math.round(Math.abs(x.net_profit || 0) / trendMax * 100), 3)}%"
-          title="${esc(x.date)}: ${money0(x.net_profit || 0)}"></div>`).join("")}</div>
-      <div class="sparkends"><span>14 days ago</span><span>Today</span></div>
-    </div>` : ""}
-    <div class="fintiles">
-      <div class="fintile"><small>This month net</small><b>${money(cur.net || 0)}</b></div>
-      <div class="fintile"><small>Year to date net</small><b>${money(ytdNet)}</b></div>
-    </div>
-    <div class="panel">
-      <h3>&#128200; Month by month</h3>
-      <p class="sub">Income is payments received; expenses are the costs you've logged on jobs and receipts.</p>
-    </div>
-    ${months.length ? `<div class="list">${months.map((m) => `
-      <div class="item">
-        <div class="main"><div class="ttl">${esc(monthLabel(m.month))}</div>
-          <div class="sub">${money(m.income || 0)} in &middot; ${money(m.expenses || 0)} out</div></div>
-        <div class="amt" style="color:${Number(m.net || 0) >= 0 ? "var(--emerald)" : "var(--red)"}">${money(m.net || 0)}</div>
-      </div>`).join("")}</div>`
-    : `<div class="panel" style="text-align:center"><p class="sub" style="margin:0">No activity yet — your first paid invoice starts this board.</p></div>`}`;
-}
-
+async function loadNativeProfit() { return loadProfit(); }
 async function loadProfit() {
   const slot = $("finbody"); if (!slot) return;
-  let refreshError = null;
-  try {
-    if (!S.profit || S.profitStale) { S.profit = (await get("/profit/board")).board || {}; S.profitStale = false; }
-  } catch (e) {
-    if (!S.profit) {
-      slot.innerHTML = /not connected/i.test(e.message) ? connectPanel("qbo") : `<div class="empty">${esc(e.message)}</div>`;
-      wireConnect(slot);
-      return;
-    }
-    refreshError = e.message; // keep showing the last profit board Ledger loaded
-  }
-  if (!S.receipts) { try { S.receipts = (await get("/gmail/receipts")).receipts || []; } catch { S.receipts = []; } }
-  // Fixed overhead per open day — the iPhone's "After overhead" line under today's profit.
-  if (S.overhead === undefined) { try { S.overhead = (await get("/profit/overhead")).overhead || null; } catch { S.overhead = null; } }
-  drawProfit(refreshError);
+  try { S.profit = (await get("/profit/board")).board || {}; S.profitStale = false; drawProfit(); }
+  catch (e) { if (S.profit) drawProfit(e.message); else slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
-
 function drawProfit(refreshError) {
   const slot = $("finbody"); if (!slot) return;
-  const p = S.profit || {};
-  const series = (p[S.profitRange] || []).slice(-14);
-  const today = p.today || {};
-  const swept = today.date === localDay();
-  const perDayOpen = Number(S.overhead?.math?.perDayOpen) || 0;
-  const afterOverhead = swept && S.overhead ? (today.net_profit || 0) - perDayOpen : null;
-  const unposted = (S.receipts || []).filter((r) => !r.qbo_purchase_id && r.category !== "Personal").length;
-  const max = Math.max(1, ...series.map((s) => Math.abs(s.net_profit || 0)));
-  const income = today.total_income || 0, costs = today.total_expenses || 0;
-  const margin = income > 0 ? Math.round((today.net_profit || 0) / income * 100) : 0;
-  const total = series.reduce((t, x) => t + (x.net_profit || 0), 0);
-  const best = series.reduce((b, x) => (!b || (x.net_profit || 0) > (b.net_profit || 0) ? x : b), null);
-  slot.innerHTML = `
-    ${refreshError ? `<p class="note err">Couldn't refresh the profit board — showing the last numbers Ledger has. ${esc(refreshError)}</p>` : ""}
-    <div class="hero">
-      <div class="headline"><span class="eyebrow">Today's profit</span>
-        <span class="when">${esc(today.date || localDay())}</span></div>
-      ${swept ? `<div class="big" style="color:${(today.net_profit || 0) >= 0 ? "var(--emerald)" : "var(--red)"}">${money(today.net_profit)}</div>
-      <div class="trio">
-        <div><small>Income</small><b style="color:var(--cyan)">${money0(income)}</b></div>
-        <div><small>Expenses</small><b style="color:var(--orange)">${money0(costs)}</b></div>
-        <div><small>Margin</small><b style="color:var(--magenta)">${margin}%</b></div>
-      </div>
-      ${afterOverhead != null ? `<div class="afterov"><small>After overhead</small><b style="color:${afterOverhead >= 0 ? "var(--emerald)" : "var(--orange)"}">${money(afterOverhead)}</b><span>less ${money(perDayOpen)} of fixed cost for the day</span></div>` : ""}` : `<div class="big" style="color:var(--dim)">Not yet swept</div>
-      <p class="note" style="margin-top:6px">No sweep has locked today yet — run one below or let the evening sweep catch it.</p>`}
+  const p=S.profit||{}, inv=p.inventory, today=p.today, lane=S.profitDetail||"today";
+  const stale=p.refresh?.last_error || (p.last_sweep_at && Date.now()-new Date(p.last_sweep_at).getTime()>90*60000 ? "These records need a refresh." : "");
+  slot.innerHTML=`
+    <div class="seg" aria-label="Profit and inventory">
+      ${[["today","Today"],["jobs","By job"],["inventory","Inventory"]].map(([k,t])=>`<button data-pdetail="${k}" class="${lane===k?"on":""}">${t}</button>`).join("")}
     </div>
-    ${unposted ? `<div class="warnstrip"><em>&#9888;</em><span>${unposted} receipt${unposted === 1 ? " isn't" : "s aren't"} posted to QuickBooks yet — ${unposted === 1 ? "it won't" : "they won't"} count in tonight's sweep.</span></div>` : ""}
-    <div class="panel">
-      <div class="eyebrow" style="margin-bottom:12px">Profit trend</div>
-      <div class="seg">${[["daily", "Daily"], ["weekly", "Weekly"], ["monthly", "Monthly"]].map(([k, l]) =>
-        `<button class="${S.profitRange === k ? "on" : ""}" data-pr="${k}">${l}</button>`).join("")}</div>
-      ${series.length ? `<div class="bars">${series.map((s) => {
-        const h = Math.round(Math.abs(s.net_profit || 0) / max * 100);
-        return `<div class="b ${(s.net_profit || 0) < 0 ? "neg" : ""}" style="height:${Math.max(h, 2)}%" title="${esc(s.label || s.date)}: ${money0(s.net_profit)}"></div>`;
-      }).join("")}</div>
-      <div class="barlabels">${series.map((s, i) => `<span>${i % 2 === 0 ? esc((s.label || s.date || "").slice(-5)) : ""}</span>`).join("")}</div>
-      <p class="note" style="margin-top:11px">Total ${money(total)}${best ? " · best " + esc((best.label || best.date || "").slice(-5)) + ": " + money(best.net_profit) : ""}</p>`
-      : `<div class="empty">No history yet — the first sweep backfills a month of profit automatically.</div>`}
+    ${refreshError||stale?`<p class="note err" role="status">${esc(refreshError||stale)} Showing the last available records.</p>`:""}
+    <div id="profitcontent"></div>
+    <p class="note" style="margin:16px 0 10px">${p.last_sweep_at?"Updated "+esc(new Date(p.last_sweep_at).toLocaleString()):"First update is pending"} · updates when you open this view and during automatic catch-up.</p>
+    <button class="btn wide" id="profitrefresh">Refresh records</button>`;
+  on("[data-pdetail]","click",e=>{S.profitDetail=e.currentTarget.dataset.pdetail;drawProfit();},slot);
+  $("profitrefresh").onclick=async()=>{const b=$("profitrefresh");b.disabled=true;b.textContent="Refreshing…";try{const r=await api("/profit/sweep",{});S.profit=r.board;drawProfit(r.email_scan&&!r.email_scan.ok?"Email could not be checked. Other records were refreshed.":null);}catch(e){drawProfit(e.message);}};
+  const content=$("profitcontent");
+  if(lane==="today"){
+    const series=(p[S.profitRange]||[]).slice(-14), max=Math.max(1,...series.map(x=>Math.abs(x.net_profit||0)));
+    const gaps=inv?.gaps||[], counts={};for(const g of gaps)counts[g.kind]=(counts[g.kind]||0)+1;
+    const jobCount=(inv?.jobs||[]).filter(j=>j.date===p.today_date).length;
+    content.innerHTML=`<div class="hero" style="margin-top:14px">
+      <div class="headline"><span class="eyebrow">Profit so far</span><span class="pill">Partial costs</span></div>
+      <div class="big" style="color:${today&&today.net_profit<0?"var(--red)":"var(--emerald)"}">${today?money(today.net_profit):"—"}</div>
+      <p class="sub">Sales less recorded costs. Unrecorded labour, supplies or expenses may still reduce this.</p>
+      <div class="trio"><div><small>Sales before tax</small><b>${today?money(today.total_income):"—"}</b></div><div><small>Recorded costs</small><b>${today?money(today.total_expenses):"—"}</b></div><div><small>Jobs today</small><b>${jobCount}</b></div></div>
     </div>
-    ${costPanel(p.cost_of_operations || {})}
-    <div class="panel">
-      <div style="display:flex;align-items:center;gap:9px">
-        <span class="eyebrow" style="color:var(--emerald)">Profit sweep</span>
-        <span class="note" style="margin-left:auto;font-family:var(--mono);font-size:10.5px;letter-spacing:1.1px">AUTO AT ${String(p.sweep_hour ?? 18).padStart(2, "0")}:30</span>
-      </div>
-      <p class="sub" style="margin-top:9px">One button, the whole day: pulls today's receipts from your email, walks you through each one — today's cost, not a cost, or a future job — then locks the day's profit.</p>
-      <p class="note" style="margin-top:8px">${p.last_sweep_at ? "Last sweep " + esc(new Date(p.last_sweep_at).toLocaleString()) : "Never swept"} · ${p.snapshot_count || 0} days on file · runs by itself every evening too</p>
-      <button class="btn em wide" style="margin-top:13px" id="sweep">&#8635;&nbsp; Profit sweep</button>
-    </div>`;
-  on("[data-pr]", "click", (e) => { S.profitRange = e.currentTarget.dataset.pr; drawProfit(); }, slot);
-  wireCostPanel(slot);
-  $("sweep").onclick = () => runProfitSweep();
+    <div class="fintiles"><button class="fintile" id="profitjobs"><small>See each job</small><b>Money left →</b></button><button class="fintile" id="profitstock"><small>Inventory</small><b>${inv?inv.items.length+" items →":"Loading…"}</b></button></div>
+    <div class="panel"><h3>What's included</h3><p class="sub">Documented item use and recorded business expenses. Buying stock does not mean it was all used that day. An overhead budget is not subtracted a second time.</p>
+    ${gaps.length?`<details style="margin-top:12px"><summary>What's still missing</summary><p class="note">${Object.entries(counts).map(([k,n])=>esc(k.replace(/_/g," "))+": "+n).join(" · ")}</p><p class="note">Open a job or inventory item to see its evidence. You do not need to approve every receipt.</p></details>`:""}</div>
+    <div class="panel"><h3>Profit trend · recorded costs</h3><div class="seg">${[["daily","Daily"],["weekly","Weekly"],["monthly","Monthly"]].map(([k,l])=>`<button data-pr="${k}" class="${S.profitRange===k?"on":""}">${l}</button>`).join("")}</div>
+    ${series.length?`<div class="bars">${series.map(x=>`<div class="b ${(x.net_profit||0)<0?"neg":""}" style="height:${Math.max(2,Math.abs(x.net_profit||0)/max*100)}%" title="${esc(x.date||x.label)}: ${money(x.net_profit)}"></div>`).join("")}</div>`:`<p class="sub">History appears after your first successful update.</p>`}</div>`;
+    $("profitjobs").onclick=()=>{S.profitDetail="jobs";drawProfit();};$("profitstock").onclick=()=>{S.profitDetail="inventory";drawProfit();};
+    on("[data-pr]","click",e=>{S.profitRange=e.currentTarget.dataset.pr;drawProfit();},content);
+  } else if(!inv) content.innerHTML=`<div class="empty">Inventory records are not ready yet. Refresh to try again.</div>`;
+  else {
+    const stock=lane==="inventory";
+    content.innerHTML=`<div class="panel" style="margin-top:14px"><h3>${stock?"Your recorded inventory":"Money left by job"}</h3><p class="sub">${stock?"Purchases less documented use and returns. Opening stock and unrecorded use may change the physical count.":"After identifiable materials, before unrecorded labour, supplies and shared business costs."}</p>
+      <label class="note" for="profitsearch">${stock?"Find an item":"Find a customer or invoice"}</label><input id="profitsearch" type="search" placeholder="${stock?"Name, part number or supplier":"Customer, invoice or date"}" style="width:100%;margin-top:6px" autocomplete="off"></div><div id="profitresults"></div>`;
+    let visibleLimit=100;
+    const render=()=>{
+      const q=$("profitsearch").value.trim().toLowerCase(), matching=(stock?inv.items:inv.jobs).filter(x=>(stock?[x.name,x.sku,x.vendor]:[x.customer,x.number,x.date]).join(" ").toLowerCase().includes(q));
+      const rows=matching.slice(0,visibleLimit);
+      $("profitresults").innerHTML=rows.length?`<div class="list">${rows.map(x=>stock?`<button class="item profit-result" data-item="${esc(x.id)}"><div class="main"><div class="ttl">${esc(x.name)}</div><div class="sub">${esc(x.sku||x.vendor)} · ${esc(x.role)}</div><div class="note">${esc(x.quantity_status)}</div></div><div class="amt">${x.remaining.toLocaleString()}<small style="display:block;font-size:11px;color:var(--dim)">${esc(x.unit)}</small></div></button>`:`<button class="item profit-result" data-job="${esc(x.id)}"><div class="main"><div class="ttl">${esc(x.customer||"Customer")}</div><div class="sub">${esc(x.number||"Invoice")} · ${esc(x.date)}</div><div class="note">${esc(x.status)}</div></div><div class="amt">${money(x.money_left)}<small style="display:block;font-size:11px;color:var(--dim)">before other costs</small></div></button>`).join("")}</div>`:`<div class="empty">${q?"No matching records.":stock?"Your supplier items appear here as complete purchases are read.":"Your issued invoices appear here automatically."}</div>`;
+      if(matching.length>rows.length){const more=document.createElement("button");more.className="btn wide";more.style.marginTop="12px";more.textContent=`Show more · ${rows.length} of ${matching.length}`;more.onclick=()=>{visibleLimit+=100;render();};$("profitresults").appendChild(more);}
+      on("[data-item]","click",e=>profitItem(inv.items.find(x=>x.id===e.currentTarget.dataset.item)),content);
+      on("[data-job]","click",e=>profitJob(inv.jobs.find(x=>x.id===e.currentTarget.dataset.job)),content);
+    };$("profitsearch").oninput=()=>{visibleLimit=100;render();};render();
+  }
+}
+function profitJob(j){
+ if(!j)return;
+ sheet(`<h2>${esc(j.customer||"Job")}</h2><p class="sh-sub">${esc(j.number||"Invoice")} · ${esc(j.date)}</p><div class="hero"><span class="eyebrow">Money left before other costs</span><div class="big">${money(j.money_left)}</div><p class="sub">${esc(j.note)}</p></div><div class="item"><span>Sales before tax</span><b>${money(j.revenue)}</b></div><div class="item"><span>Documented materials</span><b>${money(j.known_material_cost)}</b></div><p class="note">${esc(j.status)}</p><h3>Cost evidence</h3>${j.allocations.length?j.allocations.map(a=>{const i=S.profit.inventory.items.find(i=>i.id===a.item_key);return `<div class="item"><span>${esc(i?.name||"Item")} · ${a.quantity}</span><b>${money(a.cost)}</b></div>`;}).join(""):`<p class="note">No direct material costs are proven for this job yet. This is not a claim of 100% profit.</p>`}`);
+}
+function profitItem(i){
+ if(!i)return;const inv=S.profit.inventory,gaps=inv.gaps.filter(g=>g.item_key===i.id);
+ sheet(`<h2>${esc(i.name)}</h2><p class="sh-sub">${esc(i.sku||"")} · ${esc(i.vendor)}</p><div class="hero"><span class="eyebrow">Recorded quantity</span><div class="big">${i.remaining.toLocaleString()}</div><p class="sub">${esc(i.unit)} · ${esc(i.quantity_status)}</p></div><div class="item"><span>Purchased</span><b>${i.purchased}</b></div><div class="item"><span>Documented use</span><b>${i.used}</b></div><div class="item"><span>Returned</span><b>${i.returned}</b></div><div class="item"><span>Recorded cost remaining</span><b>${money(i.recorded_value)}</b></div><p class="note">${esc(inv.method)} ${i.value_complete?"":"Some counted units have no documented cost."}</p>${gaps.map(g=>`<p class="note">${esc(g.message)}</p>`).join("")}<details style="margin-top:16px"><summary>Correct item details</summary><p class="note">Optional. One correction is remembered for this item only. Use a supplier document or a measured process as evidence.</p><label>Used as<select id="inventoryrole">${[["material","Goods or job materials"],["supply","Shared supplies"],["equipment","Tools or equipment"],["expense","Business expense on purchase"],["unknown","Not established"]].map(([k,t])=>`<option value="${k}" ${i.role===k?"selected":""}>${t}</option>`).join("")}</select></label><label>Unit name<input id="inventoryunit" value="${esc(i.unit)}"></label><label>Units in each purchase unit<input id="inventoryfactor" type="number" min="0.000001" step="any" value="${i.units_per_purchase||1}"></label><label>Exact name or code used on sales invoices<input id="inventoryalias" value="${esc((i.sale_aliases||[]).join(", "))}"></label><label>Evidence<input id="inventoryevidence" placeholder="Supplier label confirms…"></label><button class="btn wide" id="saveinventoryrule">Save item details</button><p class="note err" id="inventoryruleerror"></p></details><details style="margin-top:16px"><summary>Record a stock count</summary><p class="note">Optional end-of-day check. A lower count records the difference as period usage, not as a made-up job cost.</p><label>Counted quantity<input id="inventorycount" type="number" min="0" step="any" value="${i.remaining}"></label><label>Count date<input id="inventorydate" type="date" value="${esc(S.profit.today_date)}" max="${esc(S.profit.today_date)}"></label><label>Count note<input id="inventorynote" placeholder="Shelf count by…"></label><button class="btn wide" id="saveinventorycount">Save count</button><p class="note err" id="inventoryerror"></p></details>`);
+ $("saveinventoryrule").onclick=async()=>{const b=$("saveinventoryrule");b.disabled=true;try{const r=await api("/profit/inventory-rule",{item_key:i.id,role:$("inventoryrole").value,unit:$("inventoryunit").value,units_per_purchase:Number($("inventoryfactor").value),sale_aliases:$("inventoryalias").value.split(",").map(s=>s.trim()).filter(Boolean),evidence:$("inventoryevidence").value});S.profit=r.board;closeSheet();drawProfit();}catch(e){$("inventoryruleerror").textContent=e.message;b.disabled=false;}};
+ $("saveinventorycount").onclick=async()=>{const b=$("saveinventorycount");b.disabled=true;try{const r=await api("/profit/inventory-count",{item_key:i.id,quantity:Number($("inventorycount").value),date:$("inventorydate").value,evidence:$("inventorynote").value});S.profit=r.board;closeSheet();drawProfit();}catch(e){$("inventoryerror").textContent=e.message;b.disabled=false;}};
 }
 
 /* ---------------- profit sweep walkthrough ----------------
@@ -3008,42 +2940,7 @@ function drawProfit(refreshError) {
    that killed the nightly vendor roll-call. Known vendors arrive pre-answered,
    so the walk decays toward a single confirm as the vendor memory fills in. */
 async function runProfitSweep() {
-  sheet(`<h2>Profit sweep</h2>
-    <p class="sh-sub" id="psStage">Pulling today's receipts from your email…</p>
-    <div class="note" id="psNote" style="margin-top:8px"></div>`);
-  const stage = (t) => { const el = document.querySelector("#psStage"); if (el) el.textContent = t; };
-  // Pulling the inbox and reading the invoice lines moved INTO /profit/sweep
-  // on 2026-09-08. It used to live here, which meant the website went and
-  // looked for today's supplier invoices and the iPhone did not — same button,
-  // two different answers, and the phone's profit was quietly wrong. One
-  // sweep, one behaviour, every client.
-  let scanNote = "", gmailNeeds = "";
-  stage("Reading today's supplier invoices and matching costs to jobs…");
-  let sweepResult;
-  try { sweepResult = await api("/profit/sweep", {}); applyBoard(sweepResult); }
-  catch (e) { toast(e.message, "err"); closeSheet(); return; }
-  if (sweepResult?.email_scan && !sweepResult.email_scan.ok) {
-    scanNote = "Email scan skipped — " + (sweepResult.email_scan.error || "couldn't read your inbox");
-    if (sweepResult.email_scan.needs_reconnect) gmailNeeds = sweepResult.email_scan.error;
-  }
-  const tally = { confirmed: 0, excluded: 0, parked: 0, classified: 0, added: 0, matched: 0, waiting: 0, stock: 0, scanNote, gmailNeeds };
-  const review = sweepResult.match || { auto: [], proposed: [], waiting: [], new_vendors: [], unread_count: 0 };
-  // Costs the matcher doesn't handle (fuel, supplies, meals) still get the old
-  // "is this today's cost?" pass — those are day-of costs, no sale to find.
-  let cards = [];
-  try { cards = ((await get("/profit/day-review")).cards || []).filter((c) => !MATCHABLE_CLASSES.has(c.cost_class) && !c.vendor_pending); }
-  catch { /* the board already updated; a review hiccup shouldn't eat the sweep */ }
-  const after = () => psCard(cards, 0, tally);
-  const nothingToMatch = !review.auto.length && !review.proposed.length && !review.waiting.length
-    && !review.new_vendors.length && !review.unread_count && !gmailNeeds
-    && !(review.returns || []).length && !(review.credits || []).length;
-  // Nothing arrived by email and nothing is on file for today at all — the one
-  // moment the sweep volunteers a question, because it is the owner's explicit
-  // tap that got us here, not a background nag.
-  if (nothingToMatch && !cards.length && sweepResult?.sweep_empty_today) { psEmptyDay(tally); return; }
-  if (nothingToMatch) { after(); return; }
-  if (review.new_vendors.length) { psNewVendors(review.new_vendors, tally, after); return; }
-  psMatchScreen(review, tally, after);
+  S.financeLane="profit";S.profitStale=true;setTab("finance");
 }
 
 /* ---------------- match, don't move ----------------
