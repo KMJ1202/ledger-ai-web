@@ -420,7 +420,6 @@ const SEG_ICONS = {
   estimates: `<path d="M8 3h6l4 4v13a1 1 0 01-1 1H8a1 1 0 01-1-1V4a1 1 0 011-1zM14 3v4h4M10 12h5M10 16h3"/>`,
   tray: `<path d="M4 14l2-8h12l2 8v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM4 14h4l1 2h6l1-2h4"/>`,
   profit: `<path d="M3 17l5-5 4 3 8-8M20 7h-5M20 7v5"/>`,
-  stock: `<path d="M4 7l8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10"/>`,
   receipts: `<path d="M7 3h10a1 1 0 011 1v16l-3-1.6L12 20l-3-1.6L6 20V4a1 1 0 011-1zM9 8h6M9 12h6"/>`,
   directory: `<circle cx="9" cy="8" r="3"/><path d="M4 19c0-2.8 2.2-5 5-5s5 2.2 5 5M15 5a3 3 0 010 6M17 14c1.9.6 3 2.3 3 5"/>`,
   reviews: `<path d="M4 5h16v11H9l-5 4V5zM12 7.5l1 2.2 2.4.2-1.8 1.6.5 2.3-2.1-1.2-2.1 1.2.5-2.3-1.8-1.6 2.4-.2z"/>`,
@@ -2355,7 +2354,7 @@ async function booksSettingsSheet() {
   };
 }
 
-const FINANCE_TITLE = { invoices: "Finance", estimates: "Estimates", profit: "Profit", receipts: "Receipts", stock: "Stock" };
+const FINANCE_TITLE = { invoices: "Finance", estimates: "Estimates", profit: "Profit", receipts: "Receipts" };
 
 async function renderFinance() {
   // Which ledger this workspace runs on decides the whole tab: native books
@@ -2366,21 +2365,19 @@ async function renderFinance() {
     catch { S.booksProvider = "quickbooks"; }
   }
   const native = S.booksProvider === "native";
-  const lane = ["profit", "receipts", "estimates", "stock"].includes(S.financeLane) ? S.financeLane : "invoices";
+  const lane = ["profit", "receipts", "estimates"].includes(S.financeLane) ? S.financeLane : "invoices";
   view().innerHTML = `<div class="sect">
     ${pageHead(FINANCE_TITLE[lane])}
-    <div class="seg four five">
+    <div class="seg four">
       <button class="${lane === "invoices" ? "on" : ""}" data-fl="invoices">${segIc("overview")}Overview</button>
       <button class="${lane === "estimates" ? "on" : ""}" data-fl="estimates">${segIc("estimates")}Estimates</button>
       <button class="${lane === "profit" ? "on" : ""}" data-fl="profit">${segIc("profit")}Profit</button>
       <button class="${lane === "receipts" ? "on" : ""}" data-fl="receipts">${segIc("receipts")}Receipts</button>
-      <button class="${lane === "stock" ? "on" : ""}" data-fl="stock">${segIc("stock")}Stock</button>
     </div>
     <div id="finbody"><div class="skel"></div><div class="skel"></div></div>
   </div>`;
   on("[data-fl]", "click", (e) => { S.financeLane = e.currentTarget.dataset.fl; renderFinance(); });
   if (lane === "profit") { if (native) loadNativeProfit(); else loadProfit(); }
-  else if (lane === "stock") loadStock();
   else if (lane === "receipts") loadReceipts();
   else if (lane === "estimates") { if (native) loadNativeEstimates(); else loadQBOEstimates(); }
   else if (native) loadNativeInvoices();
@@ -4406,74 +4403,6 @@ const CATEGORIES = {
   "Property & Operations": ["Rent & Lease", "Utilities", "Phone & Internet", "Insurance", "Cleaning & Waste", "Security"],
   "Admin & Growth": ["Advertising", "Software & Subscriptions", "Office Supplies", "Professional Fees", "Bank & Processing Fees", "Licences & Permits", "Training & Education", "Other Business Cost"],
 };
-
-/* ---------------------------------------------------------------------------
-   Stock — the shelf.
-
-   Buying is not a cost; using is. A box of small stuff is held and charged out
-   a little at a time as work goes through the shop.
-
-   The first cut of this screen handed the owner a list of 44 things to switch
-   on. Kyle killed it on sight — "how is it gonna do this for someone else's
-   shop? This is confusion and stupid friction." So there is nothing to tap
-   here: no switches, no setup, no questions. Three numbers and a list.
----------------------------------------------------------------------------- */
-const stockQty = (v) => {
-  const n = Number(v) || 0;
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
-};
-
-async function loadStock() {
-  const slot = $("finbody"); if (!slot) return;
-  let d;
-  try { d = await get("/profit/stock"); }
-  catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
-  S.stock = d;
-  const items = d.items || [];
-
-  slot.innerHTML = `
-    <div class="fintiles" style="grid-template-columns:1.2fr 1fr 1fr">
-      <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">&#128230;</span><small>ON THE SHELF</small><b>${money(d.shelf_value)}</b><i>${items.length === 1 ? "1 thing" : items.length + " things"}</i></div>
-      <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#9203;</span><small>USED TODAY</small><b>${money(d.used_cost_today)}</b><i>charged to today</i></div>
-      <div class="fintile em"><span class="tic" style="background:rgba(47,224,160,.15);color:var(--emerald)">&#128197;</span><small>THIS MONTH</small><b>${money(d.used_cost_month)}</b><i>used so far</i></div>
-    </div>
-
-    <div class="panel">
-      <h3>&#128230; Stuff you buy by the box</h3>
-      <p class="sub">Ledger holds it instead of charging it all to the day it was delivered, then charges a bit of it to each day you work. Nothing to set up.</p>
-    </div>
-
-    <div class="lanehead"><span class="eyebrow">What's in it</span><span class="note">${money(d.bought_total)} bought &middot; ${money(d.used_total)} used</span></div>
-    <div class="panel flush">
-      ${items.length ? items.map((x) => `
-        <button class="item" data-stk="${esc(x.id)}">
-          <div class="main"><div class="ttl">${esc(x.name)}</div>
-            <div class="sub">about ${stockQty(x.left_qty)} left of ${stockQty(x.bought_qty)} &middot; ${money(x.unit_cost)} each${x.sku ? " &middot; " + esc(x.sku) : ""}</div></div>
-          <div class="amt">${money(x.value)}</div>
-        </button>`).join("") : `<div class="empty" style="padding:22px 15px">Nothing yet. This fills in on its own from the lines on your supplier invoices.</div>`}
-    </div>`;
-
-  on("[data-stk]", "click", (e) => stockItemSheet(e.currentTarget.dataset.stk), slot);
-}
-
-async function stockItemSheet(id) {
-  let d;
-  try { d = await api("/profit/stock-item", { id }); }
-  catch (e) { toast(e.message, "err"); return; }
-  if (d.error) { toast(d.error, "err"); return; }
-  const it = d.item;
-  sheet(`<h3>${esc(it.name)}</h3>
-    <p class="sub">${stockQty(it.bought_qty)} bought &middot; ${money(it.unit_cost)} each${it.sku ? " &middot; " + esc(it.sku) : ""}</p>
-    <div class="lanehead"><span class="eyebrow">Every delivery</span></div>
-    <div class="panel flush">
-      ${(d.movements || []).length ? d.movements.map((m) => `
-        <div class="item" style="cursor:default">
-          <div class="main"><div class="ttl">${stockQty(m.qty)} arrived</div>
-            <div class="sub">${esc(dateShort(m.occurred_on))}${m.note ? " &middot; " + esc(m.note) : ""}</div></div>
-          <div class="amt">${money(m.total_cost)}</div>
-        </div>`).join("") : `<div class="empty" style="padding:18px 15px">Nothing yet.</div>`}
-    </div>`);
-}
 
 async function loadReceipts() {
   const slot = $("finbody"); if (!slot) return;
