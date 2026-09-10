@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 139;
+const APP_BUILD = 140;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -2012,40 +2012,46 @@ async function nativeComposerSheet(kind) {
   // clientRef is minted once per open form: the server treats a repeat of the
   // same ref as the same document, so a nervous double-tap can never bill twice.
   const C = { customer: null, customers: [], query: "", lines: [{ name: "", quantity: 1, rate: 0, taxable2: true }], memo: "", termsDays: 0, validDays: 14, newCust: false, busy: false, shortcuts: [],
-    tax: null, noWayToPay: false, noTaxNumber: false, clientRef: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`) };
+    settings: null, setupError: "", termsTouched: false, attempted: false, error: "", tax: null, noWayToPay: false, noTaxNumber: false, clientRef: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`) };
   const wrap = sheet(`<h2>${isEst ? "New Estimate" : "New Invoice"}</h2><div id="bcmp"><div class="skel"></div></div>`);
   const body = () => wrap.querySelector("#bcmp");
-  try {
-    const [cust, sc, set] = await Promise.all([
-      booksApi({ action: "customers" }),
-      booksApi({ action: "shortcuts" }).catch(() => ({ shortcuts: [] })),
-      booksApi({ action: "settings" }).catch(() => null),
-    ]);
-    C.customers = cust.customers || [];
-    C.shortcuts = sc.shortcuts || [];
-    C.termsDays = set?.default_terms_days ?? 0;
-    C.tax = set?.tax || null;
-    // No card payments and no typed instructions = the customer's page shows
-    // a bill with no way to pay it. Say so here, before the invoice goes out.
-    C.noWayToPay = !isEst && !!set && !set.stripe_connected && !String(set.payment_instructions || "").trim();
-    // Charging tax with no registration number on the document: the customer
-    // cannot claim it back, and CRA wants the number on the invoice. Said here,
-    // before it goes out, with the fix one click away.
-    C.noTaxNumber = !!set && Number(set.tax?.rate || 0) > 0 && !String(set.tax?.registration_number || "").trim();
-  } catch { C.customers = []; }
-  const lineAmt = (l) => Math.round((Number(l.quantity) || 0) * (Number(l.rate) || 0) * 100) / 100;
-  const subtotal = () => C.lines.reduce((t, l) => t + lineAmt(l), 0);
+  const loadSetup = async () => {
+    C.setupError = "";
+    try {
+      const [cust, sc, set] = await Promise.all([booksApi({action:"customers"}), booksApi({action:"shortcuts"}), booksApi({action:"settings"})]);
+      if (!set?.tax || !set.business_date || !set.timezone || ![Number(set.tax.rate),Number(set.tax.second_rate ?? 0)].every(r=>Number.isFinite(r)&&r>=0&&r<=1)) throw new Error("Business settings are incomplete.");
+      C.customers = cust.customers || []; C.shortcuts = sc.shortcuts || []; C.settings = set; C.tax = set.tax;
+      if (!C.termsTouched) C.termsDays = C.customer?.default_terms_days ?? set.default_terms_days ?? 0;
+      C.noWayToPay = !isEst && !set.stripe_connected && !String(set.payment_instructions || "").trim();
+      C.noTaxNumber = Number(set.tax.rate)>0 && !String(set.tax.registration_number || "").trim();
+    } catch (e) { C.setupError = "Could not load business setup. " + e.message; }
+  };
+  await loadSetup();
+  const rounded = n => Math.round(n * 100) / 100;
+  const problem = l => {
+    if (!l.name.trim() || l.name.trim().length>200) return "Enter a service or product name (up to 200 characters).";
+    const q=Number(l.quantity), r=Number(l.rate);
+    if (String(l.quantity).trim()==="" || !Number.isFinite(q) || q<=0 || q>9999 || Math.abs(q*100-Math.round(q*100))>.000001) return "Quantity must be greater than 0, at most 9999, with up to two decimals.";
+    if (String(l.rate).trim()==="" || !Number.isFinite(r) || r<0 || r>1000000) return "Enter a rate from 0 to 1,000,000.";
+    return "";
+  };
+  const valid = () => !C.setupError && !!C.settings && C.lines.length>0 && C.lines.length<=30 && C.lines.every(l=>!problem(l));
+  const dayPlus = days => { if(!C.settings) return ""; const d=new Date(C.settings.business_date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10); };
+  const lineAmt = (l) => Math.round(Math.round(Number(l.quantity)*100) * Math.round(rounded(Number(l.rate))*100) / 100) / 100;
+  const subtotal = () => rounded(C.lines.reduce((t, l) => t + lineAmt(l), 0));
   const hasTax2 = () => !!(C.tax && C.tax.second_name && Number(C.tax.second_rate) > 0);
   const pct = (r) => { const p = Math.round(Number(r) * 100000) / 1000; return p.toFixed(p % 1 === 0 ? 0 : (p * 100) % 1 === 0 ? 2 : 3) + "%"; };
   // Same math as the server: tax 1 on every line, tax 2 only on lines that keep it.
   const totals = () => {
     const sub = subtotal();
     const r1 = Number(C.tax?.rate || 0), r2 = hasTax2() ? Number(C.tax.second_rate) : 0;
-    const t1 = Math.round(sub * r1 * 100) / 100;
-    const t2 = Math.round(C.lines.filter((l) => l.taxable2 !== false).reduce((t, l) => t + lineAmt(l), 0) * r2 * 100) / 100;
+    const cents=rows=>rows.reduce((t,l)=>t+Math.round(lineAmt(l)*100),0);
+    const t1 = Math.round(cents(C.lines.filter(l=>l.taxable!==false))*Math.round(r1*10000)/10000)/100;
+    const t2 = Math.round(cents(C.lines.filter(l=>l.taxable!==false && l.taxable2!==false))*Math.round(r2*10000)/10000)/100;
     return { sub, t1, t2, total: Math.round((sub + t1 + t2) * 100) / 100 };
   };
   const totalsHtml = () => {
+    if(!valid()) return `<p class="note">Total available after setup and all lines are valid.</p>`;
     const t = totals();
     return `<div class="lanehead" style="margin-top:10px"><span class="eyebrow">Subtotal before tax</span><b>${money(t.sub)}</b></div>
       ${C.tax && Number(C.tax.rate) > 0 ? `<div class="lanehead" style="margin-top:4px"><span class="eyebrow">${esc(C.tax.name || "Tax")} ${pct(C.tax.rate)}</span><b>${money(t.t1)}</b></div>` : ""}
@@ -2053,12 +2059,19 @@ async function nativeComposerSheet(kind) {
       <div class="lanehead" style="margin-top:4px"><span class="eyebrow">Total</span><b>${money(t.total)}</b></div>
       ${C.tax && !(Number(C.tax.rate) > 0) && !hasTax2() ? `<p class="note">No sales tax is being added — this ${isEst ? "estimate" : "invoice"} goes out at 0%. If you charge tax, set the rate in Books settings.</p>` : ""}`;
   };
-  const paintTotals = () => { const el = wrap.querySelector("#btotals"); if (el) el.innerHTML = totalsHtml(); };
+  const paintTotals = () => {
+    const el=wrap.querySelector("#btotals");if(el)el.innerHTML=totalsHtml();
+    C.lines.forEach((l,i)=>{const e=wrap.querySelector(`#blineerror${i}`);if(e){e.textContent=problem(l);e.hidden=!problem(l);}});
+    const create=wrap.querySelector("#bcreate");if(create)create.disabled=C.busy||!C.customer||!valid();
+  };
   const paint = () => {
     const hits = C.query
       ? C.customers.filter((c) => (`${c.first_name} ${c.last_name} ${c.company || ""} ${c.email || ""}`).toLowerCase().includes(C.query.toLowerCase())).slice(0, 8)
       : C.customers.slice(0, 6);
     body().innerHTML = `
+      ${C.setupError ? `<p class="note err">${esc(C.setupError)}</p><button class="pillbtn" id="bretrysetup">Retry setup</button>` : ""}
+      ${C.attempted && !C.busy ? `<p class="note">The save was interrupted. Retry to recover this same document; its details are kept unchanged.</p>` : ""}
+      <fieldset id="bedit" ${C.busy || C.attempted ? "disabled" : ""} style="border:0;padding:0;min-width:0">
       <div class="lanehead"><span class="eyebrow">Customer</span></div>
       ${C.customer ? `<div class="cmpsel"><span class="av">${esc((C.customer.first_name || "?").slice(0, 1).toUpperCase())}</span>
           <span class="m"><b>${esc(`${C.customer.first_name} ${C.customer.last_name}`.trim())}</b>${C.customer.email ? `<span>${esc(C.customer.email)}</span>` : ""}</span>
@@ -2083,9 +2096,12 @@ async function nativeComposerSheet(kind) {
         <div class="t"><input class="cmpinput sm" data-bname="${i}" placeholder="Service or product — or a shortcut like MTFR" value="${esc(l.name)}" style="flex:1" autocomplete="off">
           <button class="del" data-bdel="${i}">&#128465;</button></div>
         <div id="bsug${i}" class="scsug"></div>
-        <div class="f"><label>Qty<input type="number" min="1" step="1" data-bqty="${i}" value="${l.quantity}"></label>
-          <label>Rate<input type="number" min="0" step="0.01" data-brate="${i}" value="${l.rate}"></label>
+        <div class="f"><label>Qty<input type="number" min="0.01" max="9999" step="0.01" data-bqty="${i}" value="${esc(String(l.quantity))}"></label>
+          <label>Rate<input type="number" min="0" step="0.01" data-brate="${i}" value="${esc(String(l.rate))}"></label></div>
+        <div class="f">
+          <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" data-btax="${i}" ${l.taxable !== false ? "checked" : ""} style="width:auto">Tax applies</label>
           ${hasTax2() ? `<label style="flex-direction:row;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" data-btax2="${i}" ${l.taxable2 !== false ? "checked" : ""} style="width:auto;margin:0">${esc(C.tax.second_name)} applies</label>` : ""}</div>
+        <p class="note err" id="blineerror${i}" ${problem(l) ? "" : "hidden"}>${esc(problem(l))}</p>
       </div>`).join("") || `<p class="note">Add what's being billed — free-form, priced by you.${C.shortcuts.length ? " Type a shortcut code to fill a line instantly." : ""}</p>`}
       ${hasTax2() && C.lines.length ? `<p class="note">${esc(C.tax.second_name)} usually applies to goods, not to most services — untick it on labour or service lines.</p>` : ""}
       <button class="pillbtn" id="baddline">+ Add line</button>
@@ -2101,18 +2117,23 @@ async function nativeComposerSheet(kind) {
           `<button class="${C.termsDays === d ? "on" : ""}" data-bterm="${d}">${lbl}</button>`).join("")}
       </div>`}
       <input id="bmemo" class="cmpinput sm" placeholder="Note to customer (optional)" value="${esc(C.memo)}">
+      <p class="note">Issued ${esc(C.settings?.business_date || "—")} · ${isEst ? (C.validDays>0 ? "Expires "+dayPlus(C.validDays) : "No expiry selected") : "Due "+dayPlus(C.termsDays)}</p>
+      </fieldset>
       <div id="btotals">${totalsHtml()}</div>
       ${C.noTaxNumber ? `<p class="note" style="color:#b45309"><b>Heads up:</b> you're charging ${esc(C.tax?.name || "tax")} with no registration number, so your customer can't claim it back. <button class="linkbtn" id="btaxreg" style="display:inline;padding:0">Add your tax number</button></p>` : ""}
       ${C.noWayToPay ? `<p class="note" style="color:#b45309"><b>Heads up:</b> customers have no way to pay this online yet — card payments aren't set up and there are no payment instructions. <button class="linkbtn" id="bpayhow" style="display:inline;padding:0">Add payment instructions</button></p>` : ""}
-      <button class="cta" id="bcreate" ${C.busy || !C.customer || !C.lines.length ? "disabled" : ""}>
-        <span><b>${C.busy ? "Creating…" : isEst ? "Create estimate" : "Create invoice"}</b>
+      <button class="cta" id="bcreate" ${C.busy || !C.customer || !valid() ? "disabled" : ""}>
+        <span><b>${C.busy ? "Saving…" : C.attempted ? "Retry same save" : isEst ? "Create estimate" : "Create invoice"}</b>
           <span>${isEst ? "EST-numbered quote with a share page — posts nothing" : "Numbered + payment link, tax applied"}</span></span></button>
-      <p class="note err" id="bcerr"></p>`;
+      <p class="note err" id="bcerr">${esc(C.error)}</p>`;
+    const close=wrap.querySelector(".sheet-close");if(close)close.disabled=C.busy||C.attempted;
+    wrap.querySelector(".sheet-back").onclick=()=>{if(!C.busy&&!C.attempted)closeSheet();};
+    const retry=wrap.querySelector("#bretrysetup");if(retry)retry.onclick=async()=>{retry.disabled=true;await loadSetup();paint();};
     const q = wrap.querySelector("#bq");
     if (q) { q.oninput = () => { C.query = q.value; paint(); wrap.querySelector("#bq").focus(); const el = wrap.querySelector("#bq"); el.setSelectionRange(el.value.length, el.value.length); }; }
     on("[data-bpick]", "click", (e) => {
       C.customer = C.customers.find((c) => c.id === e.currentTarget.dataset.bpick);
-      if (C.customer?.default_terms_days != null) C.termsDays = C.customer.default_terms_days;
+      if (!C.termsTouched) C.termsDays = C.customer?.default_terms_days ?? C.settings?.default_terms_days ?? 0;
       paint();
     }, body());
     const clear = wrap.querySelector("#bclear"); if (clear) clear.onclick = () => { C.customer = null; paint(); };
@@ -2126,7 +2147,7 @@ async function nativeComposerSheet(kind) {
           email: wrap.querySelector("#nce").value.trim(), phone: wrap.querySelector("#ncp").value.trim(),
           company: wrap.querySelector("#ncc").value.trim(),
         } });
-        C.customers.unshift(r.customer); C.customer = r.customer; C.newCust = false; paint();
+        C.customers.unshift(r.customer); C.customer = r.customer; if(!C.termsTouched)C.termsDays=C.customer.default_terms_days ?? C.settings?.default_terms_days ?? 0; C.newCust = false; paint();
       } catch (e) { wrap.querySelector("#bcerr").textContent = e.message; }
     };
     wrap.querySelector("#baddline").onclick = () => { C.lines.push({ name: "", quantity: 1, rate: 0 }); paint(); };
@@ -2144,7 +2165,7 @@ async function nativeComposerSheet(kind) {
       box.querySelectorAll("[data-bsc]").forEach((btn) => btn.onclick = () => {
         const s = C.shortcuts.find((x) => x.code === btn.dataset.bsc);
         if (!s) return;
-        C.lines[i] = { name: s.name, description: s.description || "", quantity: C.lines[i].quantity || 1, rate: s.rate, code: s.code };
+        C.lines[i] = { name: s.name, description: s.description || "", quantity: C.lines[i].quantity, rate: s.rate, code: s.code, taxable: s.taxable !== false, taxable2: C.lines[i].taxable2 !== false };
         paint();
       });
     };
@@ -2152,14 +2173,15 @@ async function nativeComposerSheet(kind) {
       const i = Number(e.currentTarget.dataset.bname);
       C.lines[i].name = e.currentTarget.value;
       delete C.lines[i].code;
-      paintSuggestions(i, e.currentTarget.value);
+      paintSuggestions(i, e.currentTarget.value); paintTotals();
     }, body());
     // Totals repaint in place as the numbers are typed — no full repaint, so
     // the field keeps focus and the subtotal is never a line behind.
     on("[data-bqty]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.bqty)].quantity = e.currentTarget.value; paintTotals(); }, body());
     on("[data-brate]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.brate)].rate = e.currentTarget.value; paintTotals(); }, body());
+    on("[data-btax]", "change", (e) => { C.lines[Number(e.currentTarget.dataset.btax)].taxable = e.currentTarget.checked; paintTotals(); }, body());
     on("[data-btax2]", "change", (e) => { C.lines[Number(e.currentTarget.dataset.btax2)].taxable2 = e.currentTarget.checked; paintTotals(); }, body());
-    on("[data-bterm]", "click", (e) => { C.termsDays = Number(e.currentTarget.dataset.bterm); paint(); }, body());
+    on("[data-bterm]", "click", (e) => { C.termsDays = Number(e.currentTarget.dataset.bterm); C.termsTouched = true; paint(); }, body());
     on("[data-bvalid]", "click", (e) => { C.validDays = Number(e.currentTarget.dataset.bvalid); paint(); }, body());
     wrap.querySelector("#bmemo").oninput = (e) => { C.memo = e.target.value; };
     const payhow = wrap.querySelector("#bpayhow");
@@ -2168,24 +2190,26 @@ async function nativeComposerSheet(kind) {
     if (taxreg) taxreg.onclick = () => { closeSheet(); booksSettingsSheet(); };
     const create = wrap.querySelector("#bcreate");
     if (create) create.onclick = async (e, force, allowZero) => {
-      if (C.busy) return;
-      const kept = C.lines.filter((l) => l.name.trim());
+      if (C.busy || !C.customer || !valid()) return;
+      const kept = C.lines;
       // A $0 document is almost always a rate left blank. Ask once.
       if (!allowZero && kept.length && subtotal() <= 0) {
         if (!confirm(`This ${isEst ? "estimate" : "invoice"} is for $0.00. Create it anyway?`)) return;
         allowZero = true;
       }
-      C.busy = true; paint();
+      C.busy = true; C.attempted = true; C.error = ""; paint();
       try {
-        const mappedLines = kept.map((l) => ({ name: l.name.trim(), description: l.description || undefined, quantity: Number(l.quantity) || 1, rate: Number(l.rate) || 0, taxable2: l.taxable2 !== false }));
+        const mappedLines = kept.map((l) => ({ name: l.name.trim(), description: l.description || undefined, quantity: Number(l.quantity), rate: rounded(Number(l.rate)), taxable: l.taxable !== false, taxable2: l.taxable2 !== false }));
+        const t=totals();const expected_review={subtotal:t.sub,tax_total:t.t1,tax2_total:t.t2,total:t.total,issue_date:C.settings.business_date,
+          ...(isEst ? {expiry_date:dayPlus(C.validDays>0?C.validDays:14)} : {due_date:dayPlus(C.termsDays)})};
         let r, docId, docNumber;
         if (isEst) {
           r = await booksApi({ action: "estimate-create", customer_id: C.customer.id, lines: mappedLines,
-            memo: C.memo, client_ref: C.clientRef, allow_zero: allowZero === true, ...(C.validDays > 0 ? { valid_for_days: C.validDays } : {}) });
+            memo: C.memo, expected_review, client_ref: C.clientRef, allow_zero: allowZero === true, ...(C.validDays > 0 ? { valid_for_days: C.validDays } : {}) });
           docId = r.estimate.id; docNumber = r.estimate.number;
         } else {
           r = await booksApi({ action: "invoice-create", customer_id: C.customer.id, lines: mappedLines,
-            memo: C.memo, terms_days: C.termsDays, client_ref: C.clientRef, allow_zero: allowZero === true,
+            memo: C.memo, expected_review, terms_days: C.termsDays, client_ref: C.clientRef, allow_zero: allowZero === true,
             shortcut_codes: kept.map((l) => l.code).filter(Boolean), force: force === true });
           docId = r.invoice.id; docNumber = r.invoice.number;
         }
@@ -2199,7 +2223,9 @@ async function nativeComposerSheet(kind) {
         if (offer.length) shortcutOfferSheet(offer, C.shortcuts, openDoc);
         else openDoc();
       } catch (err) {
-        C.busy = false; paint();
+        C.busy = false; if(err.status>=400 && err.status<500) C.attempted=false; C.error=err.message;
+        if(err.data?.review_changed) C.setupError="Refresh setup and review the updated date and total.";
+        paint();
         if (err.status === 409 && err.data?.duplicate_of) {
           if (confirm(err.message + "\n\nCreate anyway?")) return create.onclick(null, true, allowZero);
         } else if (err.status === 409 && err.data?.zero_total) {
