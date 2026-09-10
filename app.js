@@ -4487,7 +4487,7 @@ async function loadReceipts() {
   const slot = $("finbody"); if (!slot) return;
   try {
     if(S.booksProvider===undefined) S.booksProvider=(await booksApi({action:"settings"})).provider;
-    const native=S.booksProvider==="native";
+    const native=S.booksProvider==="native", gmailReady=S.connMap?.gmail !== false;
     const d = await get("/gmail/receipts");
     S.receipts = d.receipts || [];
     const ready = S.receipts.filter((r) => !r.qbo_purchase_id && r.category && r.category !== "Personal" && r.total);
@@ -4540,12 +4540,12 @@ async function loadReceipts() {
       <div class="lanehead"><span class="eyebrow" style="color:var(--red)">Cost ledger</span><span class="note">${S.receipts.length === 1 ? "1 record" : S.receipts.length + " records"}</span></div>
       <div class="panel" style="border-color:rgba(248,113,113,.35);box-shadow:0 0 18px rgba(248,113,113,.08)">
         <h3 style="color:var(--red)">&#128231; Receipt Radar</h3>
-        <p class="sub">Ledger scans your inbox daily at ${hourLabel(d.scan_hour ?? 18)} for receipts and supplier invoices. Photos land here too.</p>
+        <p class="sub">${gmailReady ? `Ledger scans your inbox daily at ${hourLabel(d.scan_hour ?? 18)} for receipts and supplier invoices. Photos land here too.` : "Photographed receipts land here. Connect Gmail to include emailed receipts and supplier invoices."}</p>
         <div class="rowbtns" style="margin-top:12px;align-items:center">
-          <select id="scanhour" class="hourpick" title="Daily scan time">
+          ${gmailReady ? `<select id="scanhour" class="hourpick" title="Daily scan time">
             ${Array.from({ length: 24 }, (_, h) => `<option value="${h}" ${h === (d.scan_hour ?? 18) ? "selected" : ""}>Daily at ${hourLabel(h)}</option>`).join("")}
           </select>
-          <button class="btn em" id="scannow" style="background:linear-gradient(140deg,rgba(248,113,113,.85),rgba(251,146,60,.85));color:#fff;border:0">&#8635; Scan now</button>
+          <button class="btn em" id="scannow" style="background:linear-gradient(140deg,rgba(248,113,113,.85),rgba(251,146,60,.85));color:#fff;border:0">&#8635; Scan now</button>` : `<button class="btn primary" data-connect="/gmail/start">Connect Gmail</button>`}
           ${!native && ready.length >= 2 ? `<button class="btn em" id="batch">Post all ready (${ready.length})</button>` : ""}
         </div>
         <p class="note" style="margin-top:8px">${d.last_scan_at ? "Last scan " + esc(new Date(d.last_scan_at).toLocaleString()) : "Not scanned yet"}</p>
@@ -4575,14 +4575,15 @@ async function loadReceipts() {
     $("preclassify").onchange = (e) => { S.preClassify = e.target.value || null; };
     $("rcptcam").onchange = (e) => captureReceipt(e.target.files?.[0]);
     $("rcptlib").onchange = (e) => captureReceipt(e.target.files?.[0]);
-    $("scannow").onclick = async (e) => {
+    wireConnect(slot);
+    if ($("scannow")) $("scannow").onclick = async (e) => {
       e.currentTarget.disabled = true; e.currentTarget.textContent = "Scanning…";
       try { await api("/gmail/scan", {}); toast("Scan complete"); loadReceipts(); }
       catch (err) { toast(err.message, "err"); loadReceipts(); }
     };
     if ($("batch")) $("batch").onclick = () => batchPost(ready);
     if ($("batchqueue")) $("batchqueue").onclick = () => batchQueueSheet(ready, queueTotal);
-    $("scanhour").onchange = async (e) => {
+    if ($("scanhour")) $("scanhour").onchange = async (e) => {
       const hour = Number(e.target.value);
       try { await api("/gmail/set-schedule", { hour }); toast("Daily scan set to " + hourLabel(hour)); }
       catch (err) { toast(err.message, "err"); loadReceipts(); }
