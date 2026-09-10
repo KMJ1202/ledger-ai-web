@@ -2087,10 +2087,11 @@ async function nativeComposerSheet(kind) {
     if (!l.name.trim() || l.name.trim().length>200) return "Enter a service or product name (up to 200 characters).";
     const q=Number(l.quantity), r=Number(l.rate);
     if (String(l.quantity).trim()==="" || !Number.isFinite(q) || q<=0 || q>9999 || Math.abs(q*100-Math.round(q*100))>.000001) return "Quantity must be greater than 0, at most 9999, with up to two decimals.";
-    if (String(l.rate).trim()==="" || !Number.isFinite(r) || r<0 || r>1000000) return "Enter a rate from 0 to 1,000,000.";
+    if (String(l.rate).trim()==="" || !Number.isFinite(r) || r<0 || r>1000000 || rounded(r)!==r) return "Enter a rate from 0 to 1,000,000 with up to two decimals.";
+    if(String(l.description||"").length>5000) return "Descriptions can contain up to 5,000 characters. Your draft has not been shortened.";
     return "";
   };
-  const valid = () => !C.setupError && !!C.settings && C.lines.length>0 && C.lines.length<=30 && C.lines.every(l=>!problem(l));
+  const valid = () => C.memo.length<=20000 && !C.setupError && !!C.settings && C.lines.length>0 && C.lines.length<=30 && C.lines.every(l=>!problem(l));
   const dayPlus = days => { if(!C.settings) return ""; const d=new Date(C.settings.business_date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10); };
   const lineAmt = (l) => Math.round(Math.round(Number(l.quantity)*100) * Math.round(rounded(Number(l.rate))*100) / 100) / 100;
   const subtotal = () => rounded(C.lines.reduce((t, l) => t + lineAmt(l), 0));
@@ -2101,8 +2102,9 @@ async function nativeComposerSheet(kind) {
     const sub = subtotal();
     const r1 = Number(C.tax?.rate || 0), r2 = hasTax2() ? Number(C.tax.second_rate) : 0;
     const cents=rows=>rows.reduce((t,l)=>t+Math.round(lineAmt(l)*100),0);
-    const t1 = Math.round(cents(C.lines.filter(l=>l.taxable!==false))*Math.round(r1*10000)/10000)/100;
-    const t2 = Math.round(cents(C.lines.filter(l=>l.taxable!==false && l.taxable2!==false))*Math.round(r2*10000)/10000)/100;
+    const tax = (rows,r) => Number((BigInt(cents(rows))*BigInt(Math.round(r*1000000))+500000n)/1000000n)/100;
+    const t1 = tax(C.lines.filter(l=>l.taxable!==false),r1);
+    const t2 = tax(C.lines.filter(l=>l.taxable!==false && l.taxable2!==false),r2);
     return { sub, t1, t2, total: Math.round((sub + t1 + t2) * 100) / 100 };
   };
   const totalsHtml = () => {
@@ -2180,7 +2182,7 @@ async function nativeComposerSheet(kind) {
       <button class="cta" id="bcreate" ${C.busy || !C.customer || !valid() ? "disabled" : ""}>
         <span><b>${C.busy ? "Saving…" : C.attempted ? "Retry same save" : isEst ? "Create estimate" : "Create invoice"}</b>
           <span>${isEst ? "EST-numbered quote with a share page — posts nothing" : "Numbered + payment link, tax applied"}</span></span></button>
-      <p class="note err" id="bcerr">${esc(C.error)}</p>`;
+      <p class="note err" id="bcerr">${esc(C.error || (C.memo.length>20000 ? "Customer notes can contain up to 20,000 characters. Your draft has not been shortened." : ""))}</p>`;
     const close=wrap.querySelector(".sheet-close");if(close)close.disabled=C.busy||C.attempted;
     wrap.querySelector(".sheet-back").onclick=()=>{if(!C.busy&&!C.attempted)closeSheet();};
     const retry=wrap.querySelector("#bretrysetup");if(retry)retry.onclick=async()=>{retry.disabled=true;await loadSetup();paint();};
@@ -2238,7 +2240,7 @@ async function nativeComposerSheet(kind) {
     on("[data-btax2]", "change", (e) => { C.lines[Number(e.currentTarget.dataset.btax2)].taxable2 = e.currentTarget.checked; paintTotals(); }, body());
     on("[data-bterm]", "click", (e) => { C.termsDays = Number(e.currentTarget.dataset.bterm); C.termsTouched = true; paint(); }, body());
     on("[data-bvalid]", "click", (e) => { C.validDays = Number(e.currentTarget.dataset.bvalid); paint(); }, body());
-    wrap.querySelector("#bmemo").oninput = (e) => { C.memo = e.target.value; };
+    wrap.querySelector("#bmemo").oninput = (e) => { C.memo = e.target.value; paintTotals(); wrap.querySelector("#bcerr").textContent=C.memo.length>20000 ? "Customer notes can contain up to 20,000 characters. Your draft has not been shortened." : C.error; };
     const payhow = wrap.querySelector("#bpayhow");
     if (payhow) payhow.onclick = () => { closeSheet(); booksSettingsSheet(); };
     const taxreg = wrap.querySelector("#btaxreg");
