@@ -1788,6 +1788,7 @@ async function loadNativeInvoices() {
         <em>${chargesOn ? "MANAGE" : "SET UP"} &#8599;</em></button>
       <button class="opcard" data-op="bsettings"><span class="ic">&#9881;</span><b>Books settings</b>
         <span>Tax, invoice numbering, payment info</span><em>OPEN &#8599;</em></button>
+      <button class="opcard" data-op="barchive"><span class="ic">&#128230;</span><b>Complete Books archive</b><span>Quotes, approvals, messages and accounting records</span><em>DOWNLOAD &#8599;</em></button>
       <button class="opcard" data-op="bexport"><span class="ic">&#128228;</span><b>Export CSV</b>
         <span>Invoices, payments, customers</span><em>EXPORT &#8599;</em></button>
     </div>`;
@@ -1803,9 +1804,9 @@ async function loadNativeInvoices() {
     const op = e.currentTarget.dataset.op;
     if (op === "receipts") { S.financeLane = "receipts"; renderFinance(); }
     else if (op === "bsettings") booksSettingsSheet();
-    else if (op === "bexport") {
+    else if (op === "bexport" || op === "barchive") {
       try {
-        const ex = await booksApi({ action: "export" });
+        const ex = await booksApi({ action: op === "barchive" ? "archive" : "export" });
         downloadBooksExport(ex);
         toast("Export downloaded");
       } catch (err) { toast(err.message, "err"); }
@@ -1826,7 +1827,7 @@ function booksPaymentDate(payment,invoice) {
 function downloadBooksExport(ex) {
   if(ex.complete!==true||!ex.zip_base64)throw new Error("Your complete export is unavailable. Please retry.");
   const bytes=Uint8Array.from(atob(ex.zip_base64),c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:"application/zip"}));
-  const a=document.createElement("a");a.href=url;a.download="ledger-books-export.zip";a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
+  const a=document.createElement("a");a.href=url;a.download=ex.filename||"ledger-books-export.zip";a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
 async function sendNativeDocumentEmail(kind,id,to,force) {
   const key="ledger.pending-document-email."+kind+"."+id;
@@ -1839,6 +1840,17 @@ async function sendNativeDocumentEmail(kind,id,to,force) {
 function booksEmailHistoryMarkup(doc) {
   const labels={pending:"Sending — retry to recover",unknown:"Delivery needs verification",accepted:"Accepted for delivery",delivered:"Delivered",failed:"Delivery failed"};
   return (doc.email_history||[]).map(m=>`<p class="note">${m.deliberate_resend?"Resend · ":""}${esc(labels[m.state]||"Delivery needs verification")} · ${esc(m.recipient)}</p>`).join("");
+}
+
+
+async function booksHistorySheet(kind,id) {
+  const wrap=sheet(`<h2>Complete history</h2><button class="linkbtn" id="hback">Back to document</button><div class="seg"><button id="hemail" class="on">Emails</button><button id="haudit">Approvals & activity</button></div><div id="hrows"></div><p class="note err" id="herror"></p><button class="pillbtn" id="hmore">Load history</button>`);
+  let category="email",cursor=null,items=[],busy=false,hasMore=true;
+  const paint=()=>{wrap.querySelector("#hrows").innerHTML=items.map(m=>`<div class="card"><b>${esc(m.action?m.action.replace(/^books\./,"").replaceAll("."," · "):({accepted:"Accepted for delivery",delivered:"Delivered",failed:"Delivery failed",pending:"Sending — retry to recover",unknown:"Delivery needs verification"}[m.state]||"Delivery needs verification"))}</b><p class="note">${esc(m.recipient||"")} · ${esc(new Date(m.created_at).toLocaleString(undefined,{timeZone:S.businessTimezone||"America/Edmonton"}))}</p>${m.metadata?`<p class="note">${esc(m.metadata.number||"")} ${m.metadata.total!=null?money(m.metadata.total):""}</p>`:""}</div>`).join("")||(!busy?'<p class="note">No history recorded.</p>':"");const more=wrap.querySelector("#hmore");more.hidden=!hasMore;more.disabled=busy;more.textContent=busy?"Loading…":items.length?"Load older history":"Load history";};
+  const load=async()=>{if(busy)return;busy=true;wrap.querySelector("#herror").textContent="";paint();try{const r=await booksApi({action:"history",kind,id,category,cursor});if(!Array.isArray(r.items)||typeof r.has_more!=="boolean")throw Error("History is unavailable. Please retry.");items.push(...r.items);cursor=r.next_cursor;hasMore=r.has_more;}catch(e){wrap.querySelector("#herror").textContent=e.message;}finally{busy=false;paint();}};
+  wrap.querySelector("#hmore").onclick=load;wrap.querySelector("#hback").onclick=()=>kind==="estimate"?nativeEstimateSheet(id):nativeInvoiceSheet(id);
+  for(const [button,next] of [["hemail","email"],["haudit","audit"]])wrap.querySelector("#"+button).onclick=()=>{if(busy)return;category=next;cursor=null;items=[];hasMore=true;wrap.querySelector("#hemail").classList.toggle("on",category==="email");wrap.querySelector("#haudit").classList.toggle("on",category==="audit");load();};
+  await load();
 }
 
 async function nativeInvoiceSheet(id) {
@@ -1857,6 +1869,7 @@ async function nativeInvoiceSheet(id) {
         Issued ${esc(inv.issue_date)}${inv.due_date ? " · Due " + esc(inv.due_date) : ""}</p>
       <table class="dtable"><tbody>
         ${(inv.lines || []).map((l) => `<tr><td>${esc(l.name)} × ${l.quantity}</td><td style="text-align:right">${money(l.amount)}</td></tr>`).join("")}
+        ${inv.discount_kind && inv.discount_kind!=="none"?`<tr><td>Before discount</td><td style="text-align:right">${money(inv.gross_subtotal)}</td></tr><tr><td>Discount${inv.discount_kind==="percent"?" ("+Number(inv.discount_value)+"%)":""}</td><td style="text-align:right">−${money(inv.discount_total)}</td></tr>`:""}
         <tr><td>Subtotal</td><td style="text-align:right">${money(inv.subtotal)}</td></tr>
         ${(Array.isArray(inv.taxes) && inv.taxes.length ? inv.taxes : (Number(inv.tax_total) > 0 ? [{ name: inv.tax_name, total: inv.tax_total }] : []))
           .filter((t) => Number(t.total) > 0).map((t) => `<tr><td>${esc(t.name || "Tax")}</td><td style="text-align:right">${money(t.total)}</td></tr>`).join("")}
@@ -1868,7 +1881,7 @@ async function nativeInvoiceSheet(id) {
         `Paid ${money(p.amount)} · ${esc(p.method)} · ${esc(booksPaymentDate(p,inv))}`).join("<br>")}</p>` : ""}
       ${Number(inv.overpayment)>0 ? `<p class="note err">Overpayment ${money(inv.overpayment)} — review and arrange a refund with your payment provider. This is not extra sales.</p>` : ""}
       ${inv.email_enabled ? `<button class="pillbtn" id="bemail"><b>Email invoice</b></button>` : ""}
-      ${booksEmailHistoryMarkup(inv)}
+      ${booksEmailHistoryMarkup(inv)}<button class="pillbtn" id="invhistory">View complete history</button>
       ${!inv.email_history?.length && inv.email_sent_at ? `<p class="note">Emailed to ${esc(inv.email_sent_to)} · ${esc(String(inv.email_sent_at).slice(0, 10))}</p>` : ""}
       <button class="pillbtn" id="blink">Copy pay link</button>
       <button class="pillbtn" id="bopen">Open invoice page</button>
@@ -1882,6 +1895,7 @@ async function nativeInvoiceSheet(id) {
         <button class="pillbtn" id="bpay" style="margin-top:8px"><b>${pendingPayment ? "Recover payment" : "Record payment"}</b></button>${pendingPayment ? `<p class="note">A previous reply was interrupted. Recover the same payment before recording another.</p>` : ""}` : ""}
       ${inv.status === "sent" && !(inv.payments || []).length ? `<button class="linkbtn" id="bvoid" style="color:var(--red);margin-top:10px">Void this invoice</button>` : ""}
       <p class="note err" id="berr"></p>`;
+    wrap.querySelector("#invhistory").onclick=()=>booksHistorySheet("invoice",inv.id);
     const link = inv.link || "";
     wrap.querySelector("#blink").onclick = async () => {
       try { await navigator.clipboard.writeText(link); toast("Payment link copied"); }
@@ -1962,6 +1976,7 @@ async function nativeEstimateSheet(id) {
         Issued ${esc(est.issue_date)}${est.expiry_date ? " · Valid until " + esc(est.expiry_date) : " · No expiry"}</p>
       <table class="dtable"><tbody>
         ${(est.lines || []).map((l) => `<tr><td>${esc(l.name)} × ${l.quantity}</td><td style="text-align:right">${money(l.amount)}</td></tr>`).join("")}
+        ${est.discount_kind && est.discount_kind!=="none"?`<tr><td>Before discount</td><td style="text-align:right">${money(est.gross_subtotal)}</td></tr><tr><td>Discount${est.discount_kind==="percent"?" ("+Number(est.discount_value)+"%)":""}</td><td style="text-align:right">−${money(est.discount_total)}</td></tr>`:""}
         <tr><td>Subtotal</td><td style="text-align:right">${money(est.subtotal)}</td></tr>
         ${(Array.isArray(est.taxes) && est.taxes.length ? est.taxes : (Number(est.tax_total) > 0 ? [{ name: est.tax_name, total: est.tax_total }] : [])).filter((t) => Number(t.total) > 0).map((t) => `<tr><td>${esc(t.name || "Tax")}</td><td style="text-align:right">${money(t.total)}</td></tr>`).join("")}
         <tr><td><b>Total</b></td><td style="text-align:right"><b>${money(est.total)}</b></td></tr>
@@ -1969,7 +1984,7 @@ async function nativeEstimateSheet(id) {
       ${est.converted_invoice_number ? `<p class="note ok">Converted to invoice ${esc(est.converted_invoice_number)}</p>` : ""}
       ${est.status === "converted" ? `<button class="pillbtn" id="estconverted">Open converted invoice</button>` : ""}
       ${est.email_enabled && live ? `<button class="pillbtn" id="estemail"><b>Email estimate</b></button>` : ""}
-      ${booksEmailHistoryMarkup(est)}
+      ${booksEmailHistoryMarkup(est)}<button class="pillbtn" id="esthistory">View complete history</button>
       ${!est.email_history?.length && est.email_sent_at ? `<p class="note">Emailed to ${esc(est.email_sent_to)} · ${esc(String(est.email_sent_at).slice(0, 10))}</p>` : ""}
       ${est.link ? `<button class="pillbtn" id="estlink">Copy share link</button>
       <button class="pillbtn" id="estopen">Open estimate page</button>` : ""}
@@ -1984,6 +1999,7 @@ async function nativeEstimateSheet(id) {
         <span><b>Convert to invoice</b><span>Review quoted total and payment terms</span></span></button>` : ""}
       ${live ? `<button class="linkbtn" id="estvoid" style="color:var(--red);margin-top:10px">Void this estimate</button>` : ""}
       <p class="note err" id="esterr"></p>`;
+    wrap.querySelector("#esthistory").onclick=()=>booksHistorySheet("estimate",est.id);
     const err = (m) => { wrap.querySelector("#esterr").textContent = m; };
     const link = est.link || "";
     const lb = wrap.querySelector("#estlink");
@@ -2067,7 +2083,7 @@ async function nativeComposerSheet(kind) {
   // clientRef is minted once per open form: the server treats a repeat of the
   // same ref as the same document, so a nervous double-tap can never bill twice.
   const C = { customer: null, customers: [], query: "", lines: [{ name: "", quantity: 1, rate: 0, taxable2: true }], memo: "", termsDays: 0, validDays: 14, newCust: false, busy: false, shortcuts: [],
-    settings: null, setupError: "", termsTouched: false, attempted: false, error: "", tax: null, noWayToPay: false, noTaxNumber: false, clientRef: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`) };
+    discountKind:"none", discountValue:"0", settings: null, setupError: "", termsTouched: false, attempted: false, error: "", tax: null, noWayToPay: false, noTaxNumber: false, clientRef: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`) };
   const wrap = sheet(`<h2>${isEst ? "New Estimate" : "New Invoice"}</h2><div id="bcmp"><div class="skel"></div></div>`);
   const body = () => wrap.querySelector("#bcmp");
   const loadSetup = async () => {
@@ -2091,26 +2107,38 @@ async function nativeComposerSheet(kind) {
     if(String(l.description||"").length>5000) return "Descriptions can contain up to 5,000 characters. Your draft has not been shortened.";
     return "";
   };
-  const valid = () => C.memo.length<=20000 && !C.setupError && !!C.settings && C.lines.length>0 && C.lines.length<=30 && C.lines.every(l=>!problem(l));
+  const valid = () => !discountProblem() && C.memo.length<=20000 && !C.setupError && !!C.settings && C.lines.length>0 && C.lines.length<=30 && C.lines.every(l=>!problem(l));
   const dayPlus = days => { if(!C.settings) return ""; const d=new Date(C.settings.business_date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10); };
   const lineAmt = (l) => Math.round(Math.round(Number(l.quantity)*100) * Math.round(rounded(Number(l.rate))*100) / 100) / 100;
   const subtotal = () => rounded(C.lines.reduce((t, l) => t + lineAmt(l), 0));
   const hasTax2 = () => !!(C.tax && C.tax.second_name && Number(C.tax.second_rate) > 0);
   const pct = (r) => { const p = Math.round(Number(r) * 100000) / 1000; return p.toFixed(p % 1 === 0 ? 0 : (p * 100) % 1 === 0 ? 2 : 3) + "%"; };
-  // Same math as the server: tax 1 on every line, tax 2 only on lines that keep it.
+  const discountProblem = () => {
+    const value=Number(C.discountValue);
+    if(C.discountKind==="none")return "";
+    if(!String(C.discountValue).trim()||!Number.isFinite(value)||value<0||rounded(value)!==value)return "Enter a discount with up to two decimals.";
+    if(C.discountKind==="percent" && value>100)return "A percentage discount cannot exceed 100%.";
+    if(C.discountKind==="fixed" && value>subtotal())return "The discount cannot exceed the subtotal before tax.";
+    return "";
+  };
   const totals = () => {
-    const sub = subtotal();
-    const r1 = Number(C.tax?.rate || 0), r2 = hasTax2() ? Number(C.tax.second_rate) : 0;
-    const cents=rows=>rows.reduce((t,l)=>t+Math.round(lineAmt(l)*100),0);
-    const tax = (rows,r) => Number((BigInt(cents(rows))*BigInt(Math.round(r*1000000))+500000n)/1000000n)/100;
-    const t1 = tax(C.lines.filter(l=>l.taxable!==false),r1);
-    const t2 = tax(C.lines.filter(l=>l.taxable!==false && l.taxable2!==false),r2);
-    return { sub, t1, t2, total: Math.round((sub + t1 + t2) * 100) / 100 };
+    const gross=C.lines.map(l=>BigInt(Math.round(lineAmt(l)*100))),sum=gross.reduce((a,b)=>a+b,0n);
+    const value=BigInt(Math.round(Number(C.discountValue||0)*100));
+    const deduction=C.discountKind==="fixed"?value:C.discountKind==="percent"?(sum*value+5000n)/10000n:0n;
+    const allocated=gross.map(g=>sum?deduction*g/sum:0n);
+    let remaining=deduction-allocated.reduce((a,b)=>a+b,0n);
+    const order=gross.map((g,i)=>({i,r:sum?deduction*g%sum:0n})).sort((a,b)=>a.r===b.r?a.i-b.i:a.r>b.r?-1:1);
+    for(const row of order){if(!remaining)break;allocated[row.i]++;remaining--;}
+    const cents=predicate=>gross.reduce((a,g,i)=>a+(predicate(C.lines[i])?g-allocated[i]:0n),0n);
+    const tax=(base,r)=>Number((base*BigInt(Math.round(r*1000000))+500000n)/1000000n)/100;
+    const sub=Number(sum-deduction)/100,t1=tax(cents(l=>l.taxable!==false),Number(C.tax?.rate||0));
+    const t2=tax(cents(l=>l.taxable!==false && l.taxable2!==false),hasTax2()?Number(C.tax.second_rate):0);
+    return {sub,t1,t2,gross:Number(sum)/100,discount:Number(deduction)/100,total:rounded(sub+t1+t2)};
   };
   const totalsHtml = () => {
-    if(!valid()) return `<p class="note">Total available after setup and all lines are valid.</p>`;
+    if(!valid()) return `<p class="note">${esc(discountProblem()||"Total available after setup and all lines are valid.")}</p>`;
     const t = totals();
-    return `<div class="lanehead" style="margin-top:10px"><span class="eyebrow">Subtotal before tax</span><b>${money(t.sub)}</b></div>
+    return `${C.discountKind!=="none"?`<div class="lanehead"><span>Before discount</span><b>${money(t.gross)}</b></div><div class="lanehead"><span>Discount${C.discountKind==="percent"?" ("+Number(C.discountValue)+"%)":""}</span><b>−${money(t.discount)}</b></div>`:""}<div class="lanehead" style="margin-top:10px"><span class="eyebrow">Subtotal before tax</span><b>${money(t.sub)}</b></div>
       ${C.tax && Number(C.tax.rate) > 0 ? `<div class="lanehead" style="margin-top:4px"><span class="eyebrow">${esc(C.tax.name || "Tax")} ${pct(C.tax.rate)}</span><b>${money(t.t1)}</b></div>` : ""}
       ${hasTax2() ? `<div class="lanehead" style="margin-top:4px"><span class="eyebrow">${esc(C.tax.second_name)} ${pct(C.tax.second_rate)}</span><b>${money(t.t2)}</b></div>` : ""}
       <div class="lanehead" style="margin-top:4px"><span class="eyebrow">Total</span><b>${money(t.total)}</b></div>
@@ -2162,6 +2190,10 @@ async function nativeComposerSheet(kind) {
       </div>`).join("") || `<p class="note">Add what's being billed — free-form, priced by you.${C.shortcuts.length ? " Type a shortcut code to fill a line instantly." : ""}</p>`}
       ${hasTax2() && C.lines.length ? `<p class="note">${esc(C.tax.second_name)} usually applies to goods, not to most services — untick it on labour or service lines.</p>` : ""}
       <button class="pillbtn" id="baddline">+ Add line</button>
+      <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Discount before tax</span></div>
+      <div class="f"><select id="bdiscountkind" class="pillbtn" aria-label="Discount type">${[["none","No discount"],["fixed","Fixed amount"],["percent","Percentage"]].map(([k,label])=>`<option value="${k}" ${C.discountKind===k?"selected":""}>${label}</option>`).join("")}</select>
+      ${C.discountKind!=="none"?`<label>${C.discountKind==="percent"?"Percent":"Amount"}<input id="bdiscountvalue" aria-label="Discount value" class="cmpinput" type="number" min="0" step="0.01" value="${esc(C.discountValue)}"></label>`:""}</div>
+      <p class="note">Applies proportionally to all lines before tax. Original prices stay on the record.</p>
       ${isEst ? `
       <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Valid for</span></div>
       <div class="seg" id="bvalidseg">
@@ -2207,6 +2239,8 @@ async function nativeComposerSheet(kind) {
         C.customers.unshift(r.customer); C.customer = r.customer; if(!C.termsTouched)C.termsDays=C.customer.default_terms_days ?? C.settings?.default_terms_days ?? 0; C.newCust = false; paint();
       } catch (e) { wrap.querySelector("#bcerr").textContent = e.message; }
     };
+    wrap.querySelector("#bdiscountkind").onchange=e=>{C.discountKind=e.target.value;C.discountValue="0";paint();};
+    const discountInput=wrap.querySelector("#bdiscountvalue");if(discountInput)discountInput.oninput=e=>{C.discountValue=e.target.value;paintTotals();};
     wrap.querySelector("#baddline").onclick = () => { C.lines.push({ name: "", quantity: 1, rate: 0 }); paint(); };
     on("[data-bdel]", "click", (e) => { C.lines.splice(Number(e.currentTarget.dataset.bdel), 1); paint(); }, body());
     // Shortcut chips paint under the line being typed in — no full repaint, so
@@ -2250,7 +2284,7 @@ async function nativeComposerSheet(kind) {
       if (C.busy || !C.customer || !valid()) return;
       const kept = C.lines;
       // A $0 document is almost always a rate left blank. Ask once.
-      if (!allowZero && kept.length && subtotal() <= 0) {
+      if (!allowZero && kept.length && totals().sub <= 0) {
         if (!confirm(`This ${isEst ? "estimate" : "invoice"} is for $0.00. Create it anyway?`)) return;
         allowZero = true;
       }
@@ -2262,11 +2296,11 @@ async function nativeComposerSheet(kind) {
         let r, docId, docNumber;
         if (isEst) {
           r = await booksApi({ action: "estimate-create", customer_id: C.customer.id, lines: mappedLines,
-            memo: C.memo, expected_review, client_ref: C.clientRef, allow_zero: allowZero === true, valid_for_days: C.validDays });
+            memo: C.memo, discount:{kind:C.discountKind,value:C.discountKind==="none"?0:Number(C.discountValue)}, expected_review, client_ref: C.clientRef, allow_zero: allowZero === true, valid_for_days: C.validDays });
           docId = r.estimate.id; docNumber = r.estimate.number;
         } else {
           r = await booksApi({ action: "invoice-create", customer_id: C.customer.id, lines: mappedLines,
-            memo: C.memo, expected_review, terms_days: C.termsDays, client_ref: C.clientRef, allow_zero: allowZero === true,
+            memo: C.memo, discount:{kind:C.discountKind,value:C.discountKind==="none"?0:Number(C.discountValue)}, expected_review, terms_days: C.termsDays, client_ref: C.clientRef, allow_zero: allowZero === true,
             shortcut_codes: kept.map((l) => l.code).filter(Boolean), force: force === true });
           docId = r.invoice.id; docNumber = r.invoice.number;
         }
@@ -8968,7 +9002,7 @@ function lockView(seed) {
     ${inAndroidApp() ? `<p class="note">${SUBSCRIPTION_REQUIRED}</p>`
       : `<button class="btn" id="lk-pay">${expiredTrial ? "Subscribe now" : "Resume subscription"}</button>`}
     <p class="note" style="margin-top:10px">Cancel any time · your records stay exactly as you left them</p>
-    <p style="margin-top:22px;font-size:13px;line-height:2"><a href="#" id="lk-export" style="color:var(--cyan)">Export my data</a> &middot; <a href="#" id="lk-delete" style="color:var(--dim)">Delete my account</a> &middot; <a href="#" id="lk-out" style="color:var(--dim)">Sign out</a></p>
+    <p style="margin-top:22px;font-size:13px;line-height:2"><a href="#" id="lk-export" style="color:var(--cyan)">Download complete Books archive</a> &middot; <a href="#" id="lk-delete" style="color:var(--dim)">Delete my account</a> &middot; <a href="#" id="lk-out" style="color:var(--dim)">Sign out</a></p>
     <p style="margin-top:12px;font-size:12.5px"><a href="privacy.html" style="color:var(--dim)">Privacy</a> &middot; <a href="terms.html" style="color:var(--dim)">Terms</a> &middot; <a href="support.html" style="color:var(--dim)">Support</a></p></div>`;
   const lkPay = $("lk-pay");
   if (lkPay) lkPay.onclick = async (e) => {
@@ -8984,9 +9018,7 @@ function lockView(seed) {
   $("lk-export").onclick = async (e) => {
     e.preventDefault();
     try {
-      const ex = await api("/books", { action: "export" });
-      const rows = (csv) => Math.max(0, String(csv || "").trim().split("\n").length - 1);
-      if (!rows(ex.customers_csv) && !rows(ex.invoices_csv) && !rows(ex.payments_csv)) { toast("Nothing to export here — your books live in QuickBooks, which you still own.", "err"); return; }
+      const ex = await api("/books", { action: "archive" });
       downloadBooksExport(ex);
       toast("Export downloaded");
     } catch (err) { toast(err.message, "err"); }

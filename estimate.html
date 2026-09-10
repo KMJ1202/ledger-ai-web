@@ -98,9 +98,10 @@ function render(data, justResponded){
     <div class="head"><h1>Estimate ${esc(est.number)}</h1><span class="chip ${chip[0]}">${chip[1]}</span></div>
     <div class="meta">${est.customer ? esc(est.customer.name) + (est.customer.company ? " · " + esc(est.customer.company) : "") + " · " : ""}Issued ${esc(est.issue_date)}${est.expiry_date ? " · Valid until " + esc(est.expiry_date) : " · No expiry"}</div>
     <table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead><tbody>
-    ${est.lines.map((l) => `<tr><td>${esc(l.name)}${l.description ? `<div class="desc">${esc(l.description)}</div>` : ""}</td><td class="num">${esc(l.quantity)}</td><td class="num">${cur(l.rate, c)}</td><td class="num">${cur(l.amount, c)}</td></tr>`).join("")}
+    ${est.lines.map((l) => `<tr><td>${esc(l.name)}${l.description ? `<div class="desc">${esc(l.description)}</div>` : ""}${Number(l.discount_amount)>0?`<div class="desc">Original ${cur(l.gross_amount,c)} · Discount −${cur(l.discount_amount,c)}</div>`:""}</td><td class="num">${esc(l.quantity)}</td><td class="num">${cur(l.rate, c)}</td><td class="num">${cur(l.amount, c)}</td></tr>`).join("")}
     </tbody></table>
     <table class="totals"><tbody>
+      ${est.discount_kind && est.discount_kind!=="none"?`<tr><td>Before discount</td><td class="num">${cur(est.gross_subtotal,c)}</td></tr><tr><td>Discount${est.discount_kind==="percent"?" ("+Number(est.discount_value)+"%)":""}</td><td class="num">−${cur(est.discount_total,c)}</td></tr>`:""}
       <tr><td>Subtotal</td><td class="num">${cur(est.subtotal, c)}</td></tr>
       ${taxRows}
       <tr class="grand"><td>Total</td><td class="num">${cur(est.total, c)}</td></tr>

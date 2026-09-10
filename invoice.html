@@ -96,9 +96,10 @@ function render(data, justPaid){
     <div class="head"><h1>Invoice ${esc(inv.number)}</h1><span class="chip ${chip[0]}">${chip[1]}</span></div>
     <div class="meta">${inv.customer ? esc(inv.customer.name) + (inv.customer.company ? " · " + esc(inv.customer.company) : "") + " · " : ""}Issued ${esc(inv.issue_date)}${inv.terms ? " · " + esc(inv.terms) : ""}${inv.due_date ? " · Due " + esc(inv.due_date) : ""}</div>
     <table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead><tbody>
-    ${inv.lines.map((l) => `<tr><td>${esc(l.name)}${l.description ? `<div class="desc">${esc(l.description)}</div>` : ""}</td><td class="num">${esc(l.quantity)}</td><td class="num">${cur(l.rate, c)}</td><td class="num">${cur(l.amount, c)}</td></tr>`).join("")}
+    ${inv.lines.map((l) => `<tr><td>${esc(l.name)}${l.description ? `<div class="desc">${esc(l.description)}</div>` : ""}${Number(l.discount_amount)>0?`<div class="desc">Original ${cur(l.gross_amount,c)} · Discount −${cur(l.discount_amount,c)}</div>`:""}</td><td class="num">${esc(l.quantity)}</td><td class="num">${cur(l.rate, c)}</td><td class="num">${cur(l.amount, c)}</td></tr>`).join("")}
     </tbody></table>
     <table class="totals"><tbody>
+      ${inv.discount_kind && inv.discount_kind!=="none"?`<tr><td>Before discount</td><td class="num">${cur(inv.gross_subtotal,c)}</td></tr><tr><td>Discount${inv.discount_kind==="percent"?" ("+Number(inv.discount_value)+"%)":""}</td><td class="num">−${cur(inv.discount_total,c)}</td></tr>`:""}
       <tr><td>Subtotal</td><td class="num">${cur(inv.subtotal, c)}</td></tr>
       ${taxRows}
       <tr class="grand"><td>Total</td><td class="num">${cur(inv.total, c)}</td></tr>
