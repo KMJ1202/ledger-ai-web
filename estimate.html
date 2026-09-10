@@ -96,7 +96,7 @@ function render(data, justResponded){
   card.innerHTML = `
     <div class="biz">${biz.logo_url ? `<img src="${esc(biz.logo_url)}" alt="">` : ""}<div><div class="name">${esc(biz.name)}</div>${contact ? `<div class="bizmeta">${esc(contact)}</div>` : ""}</div></div>
     <div class="head"><h1>Estimate ${esc(est.number)}</h1><span class="chip ${chip[0]}">${chip[1]}</span></div>
-    <div class="meta">${est.customer ? esc(est.customer.name) + (est.customer.company ? " · " + esc(est.customer.company) : "") + " · " : ""}Issued ${esc(est.issue_date)}${est.expiry_date ? " · Valid until " + esc(est.expiry_date) : ""}</div>
+    <div class="meta">${est.customer ? esc(est.customer.name) + (est.customer.company ? " · " + esc(est.customer.company) : "") + " · " : ""}Issued ${esc(est.issue_date)}${est.expiry_date ? " · Valid until " + esc(est.expiry_date) : " · No expiry"}</div>
     <table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead><tbody>
     ${est.lines.map((l) => `<tr><td>${esc(l.name)}${l.description ? `<div class="desc">${esc(l.description)}</div>` : ""}</td><td class="num">${esc(l.quantity)}</td><td class="num">${cur(l.rate, c)}</td><td class="num">${cur(l.amount, c)}</td></tr>`).join("")}
     </tbody></table>

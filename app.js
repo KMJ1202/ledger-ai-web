@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 140;
+const APP_BUILD = 142;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -173,7 +173,7 @@ const SUBSCRIPTION_REQUIRED = "An active Ledger AI subscription is required.";
 // gates can never disagree about what a plan costs.
 const PLAN_BLURB = {
   solo: {
-    tag: "For one or two people",
+    tag: "One owner login · no crew tools",
     line: "The copilot on your live books, invoicing, estimates, payments, Receipt Radar, Client Hub, booking, leads, your business number and review replies.",
     extra: "$60/mo AI · $10/mo texting",
   },
@@ -2201,11 +2201,11 @@ async function nativeComposerSheet(kind) {
       try {
         const mappedLines = kept.map((l) => ({ name: l.name.trim(), description: l.description || undefined, quantity: Number(l.quantity), rate: rounded(Number(l.rate)), taxable: l.taxable !== false, taxable2: l.taxable2 !== false }));
         const t=totals();const expected_review={subtotal:t.sub,tax_total:t.t1,tax2_total:t.t2,total:t.total,issue_date:C.settings.business_date,
-          ...(isEst ? {expiry_date:dayPlus(C.validDays>0?C.validDays:14)} : {due_date:dayPlus(C.termsDays)})};
+          ...(isEst ? {expiry_date:C.validDays === 0 ? null : dayPlus(C.validDays)} : {due_date:dayPlus(C.termsDays)})};
         let r, docId, docNumber;
         if (isEst) {
           r = await booksApi({ action: "estimate-create", customer_id: C.customer.id, lines: mappedLines,
-            memo: C.memo, expected_review, client_ref: C.clientRef, allow_zero: allowZero === true, ...(C.validDays > 0 ? { valid_for_days: C.validDays } : {}) });
+            memo: C.memo, expected_review, client_ref: C.clientRef, allow_zero: allowZero === true, valid_for_days: C.validDays });
           docId = r.estimate.id; docNumber = r.estimate.number;
         } else {
           r = await booksApi({ action: "invoice-create", customer_id: C.customer.id, lines: mappedLines,
