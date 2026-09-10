@@ -62,6 +62,7 @@ body.modern .biz{margin:-22px -22px 18px;padding:20px 22px;border-radius:17px 17
 <body>
 <div class="wrap"><div class="card" id="card"><div class="err">Loading…</div></div>
 <div class="foot">Powered by Ledger AI</div></div>
+<script src="public-recovery.js?v=1"></script>
 <script>
 const FN = "https://lbzkyyehmgudlxmfpzzh.supabase.co/functions/v1/books";
 const params = new URLSearchParams(location.search);
@@ -70,7 +71,9 @@ const card = document.getElementById("card");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const cur = (n, c) => new Intl.NumberFormat("en-CA", {style:"currency", currency:c||"CAD"}).format(Number(n)||0);
 
+let lastData=null, loading=false, responding=false;
 function render(data, justResponded){
+  lastData=data;
   const est = data.estimate, biz = data.business;
   const c = est.currency;
   // Owner branding: template picks the shell, accent recolors the action
@@ -113,30 +116,34 @@ function render(data, justResponded){
     ${biz.footer_note ? `<div class="footnote">${esc(biz.footer_note)}</div>` : ""}
   `;
   const respond = async (choice, btn, other) => {
-    btn.disabled = true; other.disabled = true; btn.textContent = "Sending…";
-    try {
-      const r = await fetch(FN, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({action:"estimate-respond", token, response: choice})});
-      const d = await r.json();
-      if (d.responded) render({...data, estimate: d.estimate, can_respond: false}, d.status);
-      else { btn.textContent = d.error || "Something went wrong"; }
-    } catch { btn.disabled = false; other.disabled = false; btn.textContent = "Try again"; }
+    if(responding)return;responding=true;btn.disabled=true;other.disabled=true;btn.textContent="Sending…";
+    try{
+      const d=await LinkRecovery.request(FN,{action:"estimate-respond",token,response:choice});
+      if(!d.responded || !d.estimate)throw new Error("Your response could not be confirmed.");
+      render({...data,estimate:d.estimate,can_respond:false},d.status);
+    }catch(error){
+      // Re-read before offering either decision again: a lost success is terminal.
+      await loadEstimate("Checking whether your response was saved. "+LinkRecovery.message(error,"estimate"));
+    }finally{responding=false;}
   };
-  const a = document.getElementById("accept"), dBtn = document.getElementById("decline");
-  if (a && dBtn) {
-    a.onclick = () => respond("accept", a, dBtn);
-    dBtn.onclick = () => respond("decline", dBtn, a);
-  }
+  const a=document.getElementById("accept"),dBtn=document.getElementById("decline");
+  if(a&&dBtn){a.onclick=()=>respond("accept",a,dBtn);dBtn.onclick=()=>respond("decline",dBtn,a);}
 }
+async function loadEstimate(context=""){
+ if(loading)return;loading=true;
+ try{
+  const d=await LinkRecovery.request(`${FN}?action=public-estimate&t=${encodeURIComponent(token)}`);
+  if(!d.estimate || !d.business || !Array.isArray(d.estimate.lines))throw new Error("The estimate could not be read. Try again.");
+  render(d,null);
+  if(context && d.can_respond)card.insertAdjacentHTML("beforeend",'<p role="status">No response is saved yet. You can try again.</p>');
+ }catch(error){
+  if(lastData)render({...lastData,can_respond:false},null);else card.innerHTML="";
+  card.insertAdjacentHTML("beforeend",`<div class="err" role="status">${esc(context?"Your response is not confirmed. Check its status before choosing again. ":"")}${esc(LinkRecovery.message(error,"estimate"))}${lastData?" Previously loaded details are shown above.":""}${LinkRecovery.terminal(error)?"":'<button class="acceptbtn" id="loadretry" style="padding:14px;margin-top:14px">Check status again</button>'}</div>`);
+  const retry=document.getElementById("loadretry");if(retry)retry.onclick=()=>loadEstimate(context);
+ }finally{loading=false;}
+}
+loadEstimate();
 
-(async () => {
-  try {
-    const r = await fetch(`${FN}?action=public-estimate&t=${encodeURIComponent(token)}`);
-    if (!r.ok) throw new Error();
-    render(await r.json(), null);
-  } catch {
-    card.innerHTML = `<div class="err">This estimate link isn't valid anymore.</div>`;
-  }
-})();
 </script>
 </body>
 </html>

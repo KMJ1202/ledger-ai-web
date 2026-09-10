@@ -135,6 +135,7 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
   </div>
 </div>
 <p class="foot">Powered by <a href="https://heyledger.ai">Ledger AI</a></p>
+<script src="public-recovery.js?v=1"></script>
 <script>
 const FN = "https://lbzkyyehmgudlxmfpzzh.supabase.co/functions/v1/crew";
 const token = new URLSearchParams(location.search).get("t") || "";
@@ -296,28 +297,7 @@ function renderClock(clock) {
     }, 1000);
   }
   const punch = async (direction, btn) => {
-    if (busy) return;
-    busy = true; btn.disabled = true; btn.textContent = "…";
-    try {
-      const r = await fetch(FN, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "crew-link/clock", token, direction }),
-      });
-      const d = await r.json();
-      if (!r.ok) {
-        if (r.status === 404) { showExpired(d.error || "This link is no longer active."); busy = false; return; }
-        alert(d.error || "Couldn't update the clock — try again.");
-        busy = false; renderClock(clock); return;
-      }
-      busy = false;
-      staleNotice = d.staleClosed ? `${prettyDay(d.staleClosed)}'s shift is closed. The shop will set the real end time.` : "";
-      render(d);
-      return;
-    } catch (e) {
-      alert("Couldn't update the clock — check your connection.");
-      busy = false; renderClock(clock);
-    }
+    await crewMutation({action:"crew-link/clock",direction,entry_id:direction==="out"?(stale?.id||clock.entryId):undefined},btn);
   };
   $("clockbtn").onclick = () => punch(on ? "out" : "in", $("clockbtn"));
   const staleBtn = $("stalebtn");
@@ -404,32 +384,24 @@ function renderAvail(availability) {
 }
 
 async function sendAvailability(payload, btn) {
-  if (busy) return;
-  busy = true; btn.disabled = true;
-  const restore = btn.textContent;
-  btn.textContent = "…";
-  try {
-    const r = await fetch(FN, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "crew-link/availability", token, ...payload }),
-    });
-    const d = await r.json();
-    if (!r.ok) {
-      if (r.status === 404) { showExpired(d.error || "This link is no longer active."); busy = false; return; }
-      alert(d.error || "Couldn't update that — try again.");
-      busy = false; btn.disabled = false; btn.textContent = restore; return;
-    }
-    availOpen = false;
-    busy = false;
-    render(d);
-  } catch (e) {
-    alert("Couldn't update that — check your connection.");
-    busy = false; btn.disabled = false; btn.textContent = restore;
-  }
+  await crewMutation({action:"crew-link/availability",...payload},btn);
+}
+async function crewMutation(payload,btn){
+ if(busy||loadingJobs||stopped)return;busy=true;btn.disabled=true;
+ try{
+  const d=await LinkRecovery.request(FN,{...payload,token});
+  if(!d.closeOnly&&!Array.isArray(d.jobs))throw new Error("This change could not be confirmed.");
+  availOpen=false;render(d);
+ }catch(e){
+  // A lost success must be read back before another clock/status/availability action.
+  busy=false;await load(false);
+  if(!stopped&&!document.querySelector("#restricted"))retryPanel("The change was not confirmed. The latest available status is shown. "+LinkRecovery.message(e,"crew"));
+ }finally{busy=false;scheduleRefresh();}
 }
 
 function render(data) {
+  if(data.closeOnly){renderRestricted(data);return;}
+  lastData=data;
   renderClock(data.clock);
   renderAvail(data.availability);
   $("greeting").textContent = `Hi, ${data.crewMemberName || "there"}`;
@@ -460,68 +432,63 @@ function render(data) {
   });
 }
 
-async function load(showLoading) {
-  try {
-    const r = await fetch(FN, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "crew-link/jobs", token }),
-    });
-    const d = await r.json();
-    if (!r.ok) {
-      showExpired(d.error || "This link is no longer active.");
-      return;
-    }
-    $("loading").style.display = "none";
-    $("expired").style.display = "none";
-    $("app").style.display = "block";
-    render(d);
-  } catch (e) {
-    if (showLoading) $("loading").textContent = "Couldn't load your jobs — check your connection.";
-  }
+let loadingJobs=false, stopped=false, failures=0,lastData=null;
+function retryPanel(message){
+ const prior=$("retry-panel");if(prior)prior.remove();
+ const div=document.createElement("div");div.id="retry-panel";div.setAttribute("role","status");div.style.cssText="padding:18px;color:var(--amber);text-align:center";
+ div.innerHTML=`<p>${escapeHtml(message)}</p><button class="clockbtn in" id="retry-load">Retry</button>`;
+ $("app").before(div);$("retry-load").onclick=()=>load(false);
+}
+function renderRestricted(data){
+ if(clockTicker){clearInterval(clockTicker);clockTicker=null;}
+ $("loading").style.display="none";$("expired").style.display="none";$("app").style.display="none";
+ const prior=$("restricted");if(prior)prior.remove();
+ const div=document.createElement("div");div.id="restricted";div.style.cssText="padding:28px 12px;text-align:center";
+ div.innerHTML=`<h2>Crew tools paused</h2><p>${escapeHtml(data.error || "The shop needs an active Pro plan.")}</p>${data.openShift?'<p>You can still close your existing shift. This will not start another shift.</p><button class="clockbtn out" id="restricted-out">Close existing shift</button>':'<p>No open shift remains.</p>'}<p id="restricted-note" role="status"></p>`;
+ $("app").before(div);
+ const btn=$("restricted-out");if(btn)btn.onclick=async()=>{
+  if(busy)return;busy=true;btn.disabled=true;
+  try{const d=await LinkRecovery.request(FN,{action:"crew-link/clock",token,direction:"out",entry_id:data.openShift.id});renderRestricted(d);}
+  catch(e){$("restricted-note").textContent="Shift closure is not confirmed. Retry this same closure. "+LinkRecovery.message(e,"crew");btn.disabled=false;}
+  finally{busy=false;}
+ };
+}
+function scheduleRefresh(){
+ clearTimeout(refreshTimer);
+ if(!stopped&&!document.hidden)refreshTimer=setTimeout(()=>load(false),failures?Math.min(60000,5000*2**Math.min(failures-1,4)):60000);
+}
+async function load(showLoading){
+ if(stopped||loadingJobs||busy){scheduleRefresh();return;}loadingJobs=true;
+ try{
+  const d=await LinkRecovery.request(FN,{action:"crew-link/jobs",token});
+  if(!Array.isArray(d.jobs)||!d.clock)throw new Error("Your jobs could not be read. Try again.");
+  failures=0;$("app").inert=false;$("retry-panel")?.remove();$("restricted")?.remove();
+  $("loading").style.display="none";$("expired").style.display="none";$("app").style.display="block";render(d);
+ }catch(e){
+  if(LinkRecovery.terminal(e)){showExpired(LinkRecovery.message(e,"crew"));return;}
+  if(e.status===402){lastData=null;$("retry-panel")?.remove();if(e.data?.closeOnly)renderRestricted(e.data);else{ $("app").style.display="none";$("loading").style.display="none";retryPanel(LinkRecovery.message(e,"crew"));}}
+  else{failures++;$("loading").style.display="none";if(clockTicker){clearInterval(clockTicker);clockTicker=null;}if(lastData){$("app").inert=true;}
+   retryPanel(LinkRecovery.message(e,"crew")+(lastData?" Previously loaded details are shown; actions are paused until refresh.":""));}
+ }finally{loadingJobs=false;scheduleRefresh();}
+}
+function showExpired(msg){
+ stopped=true;$("loading").style.display="none";$("app").style.display="none";$("restricted")?.remove();$("retry-panel")?.remove();
+ $("expiredmsg").textContent=msg;$("expired").style.display="block";
+ clearTimeout(refreshTimer);if(clockTicker)clearInterval(clockTicker);
 }
 
-function showExpired(msg) {
-  $("loading").style.display = "none";
-  $("app").style.display = "none";
-  $("expiredmsg").textContent = msg;
-  $("expired").style.display = "block";
-  if (refreshTimer) clearInterval(refreshTimer);
-}
-
-async function setStatus(assignmentId, status, btn) {
-  if (busy) return;
-  busy = true;
-  const original = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = "Updating…";
-  try {
-    const r = await fetch(FN, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "crew-link/status", token, assignment_id: assignmentId, status }),
-    });
-    const d = await r.json();
-    if (!r.ok) {
-      if (r.status === 404) { showExpired(d.error || "This link is no longer active."); busy = false; return; }
-      btn.disabled = false; btn.textContent = original;
-      alert(d.error || "Couldn't update status — try again.");
-      busy = false;
-      return;
-    }
-    render(d);
-  } catch (e) {
-    btn.disabled = false; btn.textContent = original;
-    alert("Couldn't update status — check your connection.");
-  }
-  busy = false;
+async function setStatus(assignmentId,status,btn){
+ await crewMutation({action:"crew-link/status",assignment_id:assignmentId,status},btn);
 }
 
 if (!token) {
   showExpired("This link is missing its access token.");
 } else {
   load(true);
-  refreshTimer = setInterval(() => load(false), 60000);
+  scheduleRefresh();
 }
+document.addEventListener("visibilitychange",()=>{if(document.hidden){clearTimeout(refreshTimer);if(clockTicker)clearInterval(clockTicker);}else if(!stopped)load(false);});
+window.addEventListener("pagehide",()=>{stopped=true;clearTimeout(refreshTimer);if(clockTicker)clearInterval(clockTicker);});
+window.addEventListener("pageshow",e=>{if(e.persisted&&token){stopped=false;load(false);}});
 </script>
 </body></html>

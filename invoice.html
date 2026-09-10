@@ -57,16 +57,22 @@ body.modern .biz{margin:-22px -22px 18px;padding:20px 22px;border-radius:17px 17
 <body>
 <div class="wrap"><div class="card" id="card"><div class="err">Loading…</div></div>
 <div class="foot">Powered by Ledger AI</div></div>
+<script src="public-recovery.js?v=1"></script>
 <script>
 const FN = "https://lbzkyyehmgudlxmfpzzh.supabase.co/functions/v1/books";
 const params = new URLSearchParams(location.search);
 const token = params.get("t") || "";
-const sessionId = params.get("session_id") || "";
+let sessionId = params.get("session_id") || "";
 const card = document.getElementById("card");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const cur = (n, c) => new Intl.NumberFormat("en-CA", {style:"currency", currency:c||"CAD"}).format(Number(n)||0);
 
+let lastData=null,loading=false;
+const checkoutStorage="ledger.checkout."+token;
+let checkoutRef;
+try {checkoutRef=sessionStorage.getItem(checkoutStorage);if(!checkoutRef){checkoutRef=crypto.randomUUID();sessionStorage.setItem(checkoutStorage,checkoutRef);}}catch{checkoutRef=crypto.randomUUID();}
 function render(data, justPaid){
+  lastData=data;
   const inv = data.invoice, biz = data.business;
   const c = inv.currency;
   // Owner branding: template picks the shell, accent recolors the money
@@ -108,33 +114,39 @@ function render(data, justPaid){
   `;
   const btn = document.getElementById("pay");
   if (btn) btn.onclick = async () => {
-    btn.disabled = true; btn.textContent = "Opening secure checkout…";
+    if(btn.disabled)return;btn.disabled=true;btn.textContent="Opening secure checkout…";
     try {
-      const r = await fetch(FN, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({action:"pay", token})});
-      const d = await r.json();
-      if (d.url) location.href = d.url;
-      else { btn.textContent = d.error || "Payment unavailable"; }
-    } catch { btn.disabled = false; btn.textContent = "Try again"; }
+      const d=await LinkRecovery.request(FN,{action:"pay",token,request_ref:checkoutRef});
+      if(!d.url)throw new Error(d.error || "Checkout could not be opened. Try again.");
+      const url=new URL(d.url);if(url.protocol!=="https:" || url.hostname!=="checkout.stripe.com")throw new Error("Checkout could not be verified. Try again.");
+      location.href=url.href;
+    }catch(error){
+      const old=document.getElementById("payerror");if(old)old.remove();
+      btn.insertAdjacentHTML("beforebegin",`<p id="payerror" role="status">${esc(LinkRecovery.message(error,"invoice"))}</p>`);
+      btn.textContent="Retry secure checkout";btn.disabled=false;
+      if(error.status===409)await loadInvoice();
+    }
   };
 }
+async function loadInvoice(){
+ if(loading)return;loading=true;
+ try{
+  let paid=false;
+  if(sessionId){const confirmation=await LinkRecovery.request(FN,{action:"pay-confirm",token,session_id:sessionId});paid=confirmation.paid===true;sessionId="";history.replaceState(null,"",location.pathname+"?t="+encodeURIComponent(token));}
+  const d=await LinkRecovery.request(`${FN}?action=public&t=${encodeURIComponent(token)}`);
+  if(!d.invoice || !d.business || !Array.isArray(d.invoice.lines) || !Array.isArray(d.invoice.payments))throw new Error("The invoice could not be read. Try again.");
+  render(d,paid);
+ }catch(error){
+  if(lastData)render(lastData,false);
+  else card.innerHTML="";
+  const terminal=LinkRecovery.terminal(error);
+  const pay=document.getElementById("pay");if(pay)pay.disabled=true;
+  card.insertAdjacentHTML("beforeend",`<div class="err" role="status">${esc(LinkRecovery.message(error,"invoice"))}${lastData?" Previously loaded details are shown above.":""}${terminal?"":'<button class="paybtn" id="loadretry">Retry</button>'}</div>`);
+  const retry=document.getElementById("loadretry");if(retry)retry.onclick=loadInvoice;
+ }finally{loading=false;}
+}
+loadInvoice();
 
-(async () => {
-  try {
-    let justPaid = false;
-    if (sessionId) {
-      // Server-side confirmation — the return URL alone proves nothing.
-      const r = await fetch(FN, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({action:"pay-confirm", token, session_id: sessionId})});
-      const d = await r.json().catch(() => ({}));
-      justPaid = d.paid === true;
-      history.replaceState(null, "", location.pathname + "?t=" + encodeURIComponent(token));
-    }
-    const r = await fetch(`${FN}?action=public&t=${encodeURIComponent(token)}`);
-    if (!r.ok) throw new Error();
-    render(await r.json(), justPaid);
-  } catch {
-    card.innerHTML = `<div class="err">This invoice link isn't valid anymore.</div>`;
-  }
-})();
 </script>
 </body>
 </html>

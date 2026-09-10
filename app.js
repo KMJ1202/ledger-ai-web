@@ -1088,12 +1088,12 @@ async function homeBooksKpis() {
 /** Newest customers first, from whichever book is live. */
 async function homeCustomers() {
   if (S.booksProvider === undefined) {
-    try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
-    catch { S.booksProvider = "quickbooks"; }
+    S.booksProvider = (await booksApi({ action: "settings" })).provider;
   }
   if (S.booksProvider === "native") {
     if (!S.nativeCustomers) {
-      const rows = (await booksApi({ action: "customers" })).customers || [];
+      const rows = (await booksApi({ action: "customers" })).customers;
+      if(!Array.isArray(rows)) throw new Error("Your customer list could not be read. Try again.");
       S.nativeCustomers = rows.map((c) => ({
         ...c,
         name: [c.first_name, c.last_name].filter(Boolean).join(" ") || c.company || "\u2014",
@@ -3928,12 +3928,12 @@ async function loadRunSheetCover(todayTimed) {
   const el = $("rscover"); if (!el || !todayTimed.length) return;
   const today = dayKey(new Date());
   try {
-    const d = await api("/crew", { action: "dispatch", from: today, to: today });
+    const d = await api("/crew", { action: "dispatch", from: today, to: today }, "POST", { silentUpgrade: true });
     const rows = (d.days || []).flatMap((x) => x.assignments || []);
     const now = new Date();
     const uncovered = todayTimed.filter((e) => new Date(e.end || e.start) >= now
       && rows.some((a) => a.eventId === e.id && a.crewOff && a.status !== "done")).length;
-    const el2 = $("rscover"); if (!el2) return;
+    const el2 = $("rscover"); if (!el2 || el2 !== el) return;
     if (uncovered) { el2.textContent = `${uncovered} need${uncovered === 1 ? "s" : ""} cover`; el2.hidden = false; }
   } catch { /* no roster, or signed out — the run sheet simply carries no cover flag */ }
 }
@@ -3943,10 +3943,15 @@ async function loadEventCrew(sh, e) {
   const box = sh.querySelector("#evcrew"), tag = sh.querySelector("#evcrewtag"); if (!box) return;
   let assignments = [], roster = [];
   try {
-    const [a, r] = await Promise.all([api("/crew", { action: "for-event", event_id: e.id }), api("/crew", { action: "list" })]);
+    const [a, r] = await Promise.all([api("/crew", { action: "for-event", event_id: e.id }, "POST", { silentUpgrade: true }), api("/crew", { action: "list" }, "POST", { silentUpgrade: true })]);
     assignments = a.assignments || []; roster = (r.employees || []).filter((x) => x.active !== false);
-  } catch (err) { box.innerHTML = `<span class="note">${esc(err.message)}</span>`; return; }
-  if (!sh.contains(box)) return;
+  } catch (err) {
+    if (!sh.isConnected) return;
+    tag.textContent = "";
+    box.innerHTML = `<span class="note">${esc(err.status === 402 ? "Crew assignments are part of Pro. Your booking is available below." : err.message)}</span>${err.status === 402 ? "" : '<button class="btn ghost" id="crewretry">Retry crew details</button>'}`;
+    const retry=box.querySelector("#crewretry"); if(retry) retry.onclick=()=>loadEventCrew(sh,e); return;
+  }
+  if (!sh.isConnected) return;
   const off = assignments.filter((a) => a.crewOff && a.status !== "done").length;
   tag.textContent = !assignments.length ? "Nobody on it yet" : off ? "Someone on this job is off" : "";
   tag.style.color = (!assignments.length || off) ? "var(--orange)" : "";
@@ -3954,10 +3959,12 @@ async function loadEventCrew(sh, e) {
       ${assignments.map((a) => `<button type="button" class="chip on" data-evunassign="${esc(a.employeeId)}" title="Tap to take them off">${esc(a.employeeName || "Crew")}${a.crewOff && a.status !== "done" ? " · off that day — needs cover" : ""}</button>`).join("")}
       ${roster.filter((x) => !assignments.some((a) => a.employeeId === x.id)).map((x) => `<button type="button" class="chip" data-evassign="${esc(x.id)}">${esc(x.name)}</button>`).join("")}
     </div>
+    ${assignments.map(a=>`<button class="btn" data-dispatch="${esc(a.employeeId)}">Review email to ${esc(a.employeeName || "crew member")}${a.dispatchedAt ? " · previously sent" : ""}</button>`).join("")}
     <p class="note" style="margin-top:6px">${roster.length
       ? `Tap a name to put them on this job ${esc(dayLabel(e.start))}. Tap again to take them off.`
       : "No crew on the roster yet. Add crew members from the Crew card on the Calendar tab first."}</p>`;
   const rerun = () => loadEventCrew(sh, e);
+  box.querySelectorAll("[data-dispatch]").forEach(b=>b.onclick=()=>crewEmailDispatchSheet(e, b.dataset.dispatch));
   box.querySelectorAll("[data-evassign]").forEach((b) => b.onclick = async () => {
     b.disabled = true;
     try {
@@ -3975,24 +3982,56 @@ async function loadEventCrew(sh, e) {
 
 /** The Crew screen (iOS CrewCommandView): Track record, Time cards, Roster. */
 async function crewCommandSheet() {
-  let rec = [];
-  try { rec = (await api("/crew", { action: "track-record" })).track_record || []; } catch { rec = []; }
-  const jobsMonth = rec.reduce((t, r) => t + (r.thisMonth || 0), 0);
-  const row = (id, icon, title, sub) => `<button class="attnrow cyan" data-crewgo="${id}" style="width:100%"><span class="ic">${icon}</span><span class="m"><b>${title}</b><span>${sub}</span></span><span class="chev">&#8250;</span></button>`;
-  sheet(`<h2>Crew</h2>
-    <p class="sh-sub">Roster, time cards and who's on what${jobsMonth ? ` · ${jobsMonth} job${jobsMonth === 1 ? "" : "s"} this month` : ""}</p>
-    <div class="attn" style="margin-top:10px">
-      ${row("track", "&#127942;", "Track record", "Jobs per crew member — total, 7 days, this month")}
-      ${row("cards", "&#9201;", "Time cards", "Clock-in hours per crew member — payroll-ready totals")}
-      ${row("roster", "&#128101;", "Roster", "Crew Members — add, shifts, time off")}
-    </div>`, (sh) => {
-    on("[data-crewgo]", "click", (e) => {
-      const k = e.currentTarget.dataset.crewgo; closeSheet();
-      if (k === "track") crewTrackRecordSheet(rec);
-      else if (k === "cards") crewHoursSheet();
-      else crewRosterSheet();
-    }, sh);
-  });
+  const wrap = sheet('<h2>Crew</h2><div id="crewbody" class="note">Loading crew…</div>');
+  const box=wrap.querySelector("#crewbody");
+  const load=async()=>{
+    box.textContent="Loading crew…";
+    try {
+      const d=await api("/crew",{action:"track-record"},"POST",{silentUpgrade:true});
+      if(!Array.isArray(d.track_record)) throw new Error("Crew records could not be read. Try again.");
+      if(!wrap.isConnected) return;
+      const rec=d.track_record;
+      box.innerHTML='<p>Roster, time cards and who is on what.</p><button class="btn wide" id="crewtrack">Track record</button><button class="btn wide" id="crewc">Time cards</button><button class="btn wide" id="crewr">Roster</button>';
+      box.querySelector("#crewtrack").onclick=()=>crewTrackRecordSheet(rec);
+      box.querySelector("#crewc").onclick=()=>crewHoursSheet();
+      box.querySelector("#crewr").onclick=()=>crewRosterSheet();
+    } catch(err) {
+      if(!wrap.isConnected) return;
+      if(err.status===402 && err.data?.code==="upgrade_required") { upgradeHit(err.data); return; }
+      box.innerHTML=`<p>${esc(err.message)}</p><button class="btn" id="crewrtry">Retry</button>`;
+      box.querySelector("#crewrtry").onclick=load;
+    }
+  }; await load();
+}
+
+function crewEmailDispatchSheet(event, employeeId) {
+  const intent={employee_id:employeeId,event_id:event.id,details:"",request_ref:crypto.randomUUID()};
+  let preview=null,busy=false,started=false;
+  const wrap=sheet(`<h2>Email this job</h2><p class="note">Review the recipient and job before sending. Saving an assignment does not send it.</p><label class="fld" for="dispatchnote">Optional note</label><textarea class="cmpinput" id="dispatchnote" maxlength="2000"></textarea><div id="dispatchpreview"></div><div class="note" id="dispatchstatus" role="status"></div><button class="btn em wide" id="dispatchgo">Review email</button>`);
+  const q=id=>wrap.querySelector("#"+id), note=q("dispatchnote"),button=q("dispatchgo"),status=q("dispatchstatus");
+  note.oninput=()=>{preview=null;button.textContent="Review email";q("dispatchpreview").innerHTML="";};
+  button.onclick=async()=>{
+    if(busy)return;busy=true;button.disabled=true;status.textContent="";
+    try {
+      if(!preview){
+        intent.details=note.value.trim();const d=await api("/gmail/crew-dispatch-preview",intent);
+        if(!wrap.isConnected)return;preview=d.preview;if(!preview?.fingerprint)throw new Error("The email preview could not be loaded. Try again.");
+        q("dispatchpreview").innerHTML=`<div class="panel"><b>${esc(preview.employee)}</b><p>${esc(preview.to)}</p><b>${esc(preview.title)}</b><p>${esc(preview.date)} ${esc(preview.time)} · ${esc(preview.timezone)}</p><p>${esc(preview.location || "No location on this job")}</p><p style="white-space:pre-wrap">${esc(preview.details)}</p></div>`;
+        button.textContent="Send reviewed email";
+      } else {
+        started=true;note.disabled=true;button.textContent="Checking this send…";
+        const d=await api("/gmail/crew-dispatch",{...intent,review_hash:preview.fingerprint});
+        if(!wrap.isConnected)return;const result=d.dispatched;if(!result?.state)throw new Error("The send could not be confirmed.");
+        status.textContent=result.message+(result.error ? " "+result.error : "");
+        if(result.state==="sent"){button.textContent="Accepted by Gmail";button.dataset.done="true";}
+        else button.textContent=result.state==="failed"?"Retry this send":"Check this send again";
+      }
+    } catch(err) {
+      if(!wrap.isConnected)return;status.textContent=err.message;
+      if(err.data?.code==="review_changed"){preview=null;started=false;note.disabled=false;button.textContent="Review updated email";}
+      else button.textContent=started?"Check this send again":"Retry review";
+    } finally {busy=false;button.disabled=button.dataset.done==="true";}
+  };
 }
 
 function crewTrackRecordSheet(rec) {
@@ -6020,6 +6059,11 @@ function crewMemberSheet(emp) {
     <input id="cmName" class="cmpinput" value="${esc(emp?.name || "")}">
     <label class="fld" style="margin-top:10px">PHONE — WHERE THEIR TEXTS GO</label>
     <input id="cmPhone" class="cmpinput" inputmode="tel" value="${esc(emp?.phone || "")}">
+    <label class="fld" style="margin-top:10px" for="cmEmail">PERSONAL EMAIL</label>
+    <input id="cmEmail" class="cmpinput" type="email" value="${esc(emp?.email || "")}">
+    <label class="fld" style="margin-top:10px" for="cmWorkEmail">WORK EMAIL — USED FIRST FOR DISPATCH</label>
+    <input id="cmWorkEmail" class="cmpinput" type="email" value="${esc(emp?.workEmail || "")}">
+    <p class="note">Work email is preferred. Personal email is used when work email is blank. Crew links do not add an owner login.</p>
     <label class="fld" style="margin-top:12px">REGULAR SHIFT — DRIVES BOTH SHIFT TEXTS</label>
     <div class="timerow" style="margin-top:6px">
       <input type="time" id="cmStart" value="${esc(emp?.workStart || "")}">
@@ -6091,6 +6135,8 @@ function crewMemberSheet(emp) {
         action: emp ? "update" : "add",
         name,
         phone: sh.querySelector("#cmPhone").value.trim(),
+        email: sh.querySelector("#cmEmail").value.trim(),
+        work_email: sh.querySelector("#cmWorkEmail").value.trim(),
         work_start: sh.querySelector("#cmStart").value,
         work_end: sh.querySelector("#cmEnd").value,
         work_days: [...days],
@@ -6832,7 +6878,7 @@ async function loadDirectory() {
   // books_customers — the QuickBooks wall only belongs to QuickBooks shops.
   if (S.booksProvider === undefined) {
     try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
-    catch { S.booksProvider = "quickbooks"; }
+    catch { slot.innerHTML = pvretry("Could not load your customer settings."); wireRetry(slot, loadDirectory); return; }
   }
   if (S.booksProvider === "native") return loadNativeDirectory();
   try {
@@ -7004,9 +7050,10 @@ async function loadNativeDirectory() {
   try {
     const [cd, inv] = await Promise.all([
       booksApi({ action: "customers" }),
-      booksApi({ action: "invoices" }).catch(() => ({ invoices: [] })),
+      booksApi({ action: "invoices" }),
     ]);
-    const invoices = inv.invoices || [];
+    if (!Array.isArray(cd.customers) || !Array.isArray(inv.invoices)) throw new Error("Customer details could not be read. Try again.");
+    const invoices = inv.invoices;
     const balanceBy = {}, lastPaid = {}, lastInvoice = {}, invCount = {};
     const todayISO = localDay();
     const overdueIds = new Set();
@@ -7088,7 +7135,7 @@ async function loadNativeDirectory() {
       if (c) reviewSheet(c, asked.has(c.id));
     }, slot);
   } catch (e) {
-    slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+    slot.innerHTML = pvretry(e.message); wireRetry(slot, loadNativeDirectory);
   }
 }
 
