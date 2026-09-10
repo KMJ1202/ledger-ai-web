@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 145;
+const APP_BUILD = 148;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -1011,6 +1011,7 @@ async function loadHomePhone() {
 
 async function loadHomeFinance() {
   const slot = $("homefin"); if (!slot) return;
+  const current = nativeBooksViewRead(slot);
   let inner;
   try {
     const k = await homeSources().books();
@@ -1021,6 +1022,7 @@ async function loadHomeFinance() {
     ]) + (Number(k.outstanding) > 0
       ? `<p class="pvempty">${k.open_count || 0} invoice${(k.open_count || 0) === 1 ? "" : "s"} still unpaid.</p>` : "");
   } catch { inner = pvretry(S.booksProvider === "native" ? "Couldn't reach your books." : "Couldn't reach QuickBooks."); }
+  if (!current()) return;
   slot.innerHTML = pvcard("pvfin", "dollar", "Finance", "em", "Open Finance", inner);
   wirePv("pvfin", () => { S.financeLane = "invoices"; setTab("finance"); });
   wireRetry(slot, () => { S.qboStale = true; S.nativeSummary = null; S.nativeInvoiceList = null; homeSrc = null; loadHomeFinance(); });
@@ -1073,9 +1075,10 @@ async function homeBooksKpis() {
   if (S.booksProvider === "native") {
     // A fresh, complete server snapshot owns balances AND sales in the business
     // time zone. No retained invoice page can override half of this response.
+    const revision=nativeBooksRevision;
     const n=await booksApi({action:"summary"});
+    if (revision!==nativeBooksRevision) throw new Error("Your books changed. Please refresh.");
     if (![n.today_sales,n.month_sales,n.ytd_sales,n.open_balance,n.open_invoices].every(Number.isFinite)) throw new Error("Your complete financial summary is unavailable.");
-    S.nativeSummary=n;
     return {...n,outstanding:n.open_balance,open_count:n.open_invoices,today_profit:null,profit_margin:null};
   }
   if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
@@ -1550,15 +1553,39 @@ const FINANCE_CODE = { invoices: "INVOICES", profit: "PROFIT & LOSS", receipts: 
 // QBO. The Finance tab swaps its invoices lane for these screens; Profit (a QBO
 // P&L board) is hidden, Receipts stays — the receipt pipeline is native already.
 
+let nativeBooksRevision = 0;
+const nativeBooksReads = new WeakMap();
+// A response owns only the still-mounted view and request that started it.
+// Mutations invalidate reads even when their reply is lost after a commit.
+function nativeBooksViewRead(slot) {
+  const request = {}, revision = nativeBooksRevision;
+  nativeBooksReads.set(slot, request);
+  return () => revision === nativeBooksRevision && nativeBooksReads.get(slot) === request
+    && slot.isConnected && $(slot.id) === slot;
+}
 function invalidateNativeBooks() {
+  nativeBooksRevision++;
   S.nativeSummary=null; S.nativeInvoiceList=null; S.nativeCustomers=null; homeSrc=null;
 }
 async function booksApi(body) {
-  const result=await api("/books",body);
-  if (!result || typeof result!=="object") throw new Error("Your books are unavailable. Please retry.");
-  if (/^(payment-record|invoice-(create|void)|estimate-(create|convert|void|status)|settings-save|customer-save)$/.test(body.action)) invalidateNativeBooks();
-  if(result.timezone) S.businessTimezone=result.timezone;
-  return result;
+  const mutates = /^(payment-record|invoice-(create|void)|estimate-(create|convert|void|status)|settings-save|customer-save|provider-choose)$/.test(body.action);
+  if (mutates) invalidateNativeBooks();
+  try {
+    const result=await api("/books",body);
+    if (!result || typeof result!=="object") throw new Error("Your books are unavailable. Please retry.");
+    if(result.timezone) S.businessTimezone=result.timezone;
+    return result;
+  } finally {
+    if (mutates) {
+      invalidateNativeBooks();
+      // Refresh even for an ambiguous write outcome; retry still uses the
+      // same durable request, never another payment or document.
+      if (S.tab === "finance" && S.booksProvider === "native") {
+        if (S.financeLane === "estimates") void loadNativeEstimates();
+        else if (!S.financeLane || S.financeLane === "invoices") void loadNativeInvoices();
+      } else if (S.tab === "home") void loadHomeFinance();
+    }
+  }
 }
 
 // SALES INTELLIGENCE hero for native books — the web twin of iOS's Finance
@@ -1687,7 +1714,9 @@ function moneySeam(rows, issuedKey) {
 }
 
 async function loadNativeInvoices() {
+  if (S.tab !== "finance" || (S.financeLane && S.financeLane !== "invoices")) return;
   const slot = $("finbody"); if (!slot) return;
+  const current = nativeBooksViewRead(slot);
   let data, summary, connect, settings;
   try {
     [summary, connect, settings] = await Promise.all([
@@ -1696,9 +1725,11 @@ async function loadNativeInvoices() {
       booksApi({ action: "settings" }),
     ]);
   } catch (e) {
+    if (!current()) return;
     slot.innerHTML = `<div class="panel"><h3>Books unavailable</h3><p class="note">${esc(e.message)}</p><button class="pillbtn" id="booksretry">Retry</button></div>`;
     slot.querySelector("#booksretry").onclick=()=>loadNativeInvoices(); return;
   }
+  if (!current()) return;
   data={invoices:summary.invoices};
   if(!Array.isArray(data.invoices)) { slot.innerHTML=`<div class="empty">Complete invoice history unavailable. Refresh your books.</div>`; return; }
   S.nativeSummary=summary; S.nativeInvoiceList=data.invoices;
@@ -2482,7 +2513,9 @@ async function booksSettingsSheet() {
 
 const FINANCE_TITLE = { invoices: "Finance", estimates: "Estimates", profit: "Profit", receipts: "Receipts" };
 
+let financeRenderGeneration = 0;
 async function renderFinance() {
+  const generation=++financeRenderGeneration;
   // Which ledger this workspace runs on decides the whole tab: native books
   // hides the Profit lane (a QuickBooks P&L board) and swaps the invoice
   // screens. Cached for the session; a connect/disconnect reloads the app.
@@ -2490,6 +2523,7 @@ async function renderFinance() {
     try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
     catch { S.booksProvider = "quickbooks"; }
   }
+  if (generation!==financeRenderGeneration || S.tab!=="finance") return;
   const native = S.booksProvider === "native";
   const lane = ["profit", "receipts", "estimates"].includes(S.financeLane) ? S.financeLane : "invoices";
   view().innerHTML = `<div class="sect">
@@ -2558,10 +2592,13 @@ function wireEstimateSearch(reload) {
 }
 
 async function loadNativeEstimates() {
+  if (S.tab !== "finance" || S.financeLane !== "estimates") return;
   const slot = $("finbody"); if (!slot) return;
+  const current = nativeBooksViewRead(slot);
   let estData;
   try { estData = await booksApi({ action: "estimates" }); }
-  catch (e) { slot.innerHTML = `<div class="empty"><b>Estimates unavailable</b><p>${esc(e.message)}</p><button class="btn ghost" id="estimateRetry">Retry</button></div>`; $("estimateRetry").onclick = loadNativeEstimates; return; }
+  catch (e) { if (!current()) return; slot.innerHTML = `<div class="empty"><b>Estimates unavailable</b><p>${esc(e.message)}</p><button class="btn ghost" id="estimateRetry">Retry</button></div>`; $("estimateRetry").onclick = loadNativeEstimates; return; }
+  if (!current()) return;
   const estimates = sortEstimates(estData.estimates || []);
   slot.innerHTML = estimatesLaneHTML(estimates, (x) => `
     <button class="item" data-best="${esc(x.id)}">
