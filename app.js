@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 144;
+const APP_BUILD = 145;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -1806,12 +1806,7 @@ async function loadNativeInvoices() {
     else if (op === "bexport") {
       try {
         const ex = await booksApi({ action: "export" });
-        const blob = new Blob([
-          "== CUSTOMERS ==\n" + ex.customers_csv + "\n\n== INVOICES ==\n" + ex.invoices_csv +
-          "\n\n== LINES ==\n" + ex.lines_csv + "\n\n== PAYMENTS ==\n" + ex.payments_csv,
-        ], { type: "text/csv" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob); a.download = "ledger-books-export.csv"; a.click();
+        downloadBooksExport(ex);
         toast("Export downloaded");
       } catch (err) { toast(err.message, "err"); }
     } else if (op === "stripe") {
@@ -1821,6 +1816,29 @@ async function loadNativeInvoices() {
       } catch (err) { toast(err.message, "err"); }
     }
   }, slot);
+}
+
+function booksPaymentDate(payment,invoice) {
+  if(payment.business_date)return payment.business_date;
+  const date=new Date(payment.received_at);if(!Number.isFinite(date.getTime()))return "Date unavailable";
+  return new Intl.DateTimeFormat("en-CA",{timeZone:invoice.timezone||S.businessTimezone||"America/Edmonton",year:"numeric",month:"2-digit",day:"2-digit"}).format(date);
+}
+function downloadBooksExport(ex) {
+  if(ex.complete!==true||!ex.zip_base64)throw new Error("Your complete export is unavailable. Please retry.");
+  const bytes=Uint8Array.from(atob(ex.zip_base64),c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:"application/zip"}));
+  const a=document.createElement("a");a.href=url;a.download="ledger-books-export.zip";a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
+}
+async function sendNativeDocumentEmail(kind,id,to,force) {
+  const key="ledger.pending-document-email."+kind+"."+id;
+  let pending=JSON.parse(localStorage.getItem(key)||"null");
+  if(pending&&pending.to.toLowerCase()!==to.toLowerCase())throw new Error("Recover the interrupted email to "+pending.to+" before changing its recipient.");
+  if(!pending){pending={action:kind+"-send",id,to,force,client_ref:crypto.randomUUID()};localStorage.setItem(key,JSON.stringify(pending));}
+  try{const result=await booksApi(pending);localStorage.removeItem(key);return result;}
+  catch(e){if(/already emailed|No valid email/i.test(e.message))localStorage.removeItem(key);throw e;}
+}
+function booksEmailHistoryMarkup(doc) {
+  const labels={pending:"Sending — retry to recover",unknown:"Delivery needs verification",accepted:"Accepted for delivery",delivered:"Delivered",failed:"Delivery failed"};
+  return (doc.email_history||[]).map(m=>`<p class="note">${m.deliberate_resend?"Resend · ":""}${esc(labels[m.state]||"Delivery needs verification")} · ${esc(m.recipient)}</p>`).join("");
 }
 
 async function nativeInvoiceSheet(id) {
@@ -1847,9 +1865,11 @@ async function nativeInvoiceSheet(id) {
           ? `<tr><td>Balance due</td><td style="text-align:right">${money(inv.balance)}</td></tr>` : ""}
       </tbody></table>
       ${(inv.payments || []).length ? `<p class="note">${inv.payments.map((p) =>
-        `Paid ${money(p.amount)} · ${esc(p.method)} · ${esc(String(p.received_at).slice(0, 10))}`).join("<br>")}</p>` : ""}
+        `Paid ${money(p.amount)} · ${esc(p.method)} · ${esc(booksPaymentDate(p,inv))}`).join("<br>")}</p>` : ""}
+      ${Number(inv.overpayment)>0 ? `<p class="note err">Overpayment ${money(inv.overpayment)} — review and arrange a refund with your payment provider. This is not extra sales.</p>` : ""}
       ${inv.email_enabled ? `<button class="pillbtn" id="bemail"><b>Email invoice</b></button>` : ""}
-      ${inv.email_sent_at ? `<p class="note">Emailed to ${esc(inv.email_sent_to)} · ${esc(String(inv.email_sent_at).slice(0, 10))}</p>` : ""}
+      ${booksEmailHistoryMarkup(inv)}
+      ${!inv.email_history?.length && inv.email_sent_at ? `<p class="note">Emailed to ${esc(inv.email_sent_to)} · ${esc(String(inv.email_sent_at).slice(0, 10))}</p>` : ""}
       <button class="pillbtn" id="blink">Copy pay link</button>
       <button class="pillbtn" id="bopen">Open invoice page</button>
       ${Number(inv.balance) > 0 || pendingPayment ? `
@@ -1874,9 +1894,9 @@ async function nativeInvoiceSheet(id) {
       if (!to) return;
       emailBtn.disabled = true;
       const send = async (force) => {
-        const r = await booksApi({ action: "invoice-send", id: inv.id, to, ...(force ? { force: true } : {}) });
-        toast(`Invoice emailed to ${r.to}`);
-        inv = { ...inv, email_sent_at: new Date().toISOString(), email_sent_to: r.to };
+        const r = await sendNativeDocumentEmail("invoice",inv.id,to,force);
+        toast(`Invoice accepted for delivery to ${r.to}`);
+        inv = (await booksApi({action:"invoice-get",id:inv.id})).invoice;
         paint();
       };
       try { await send(false); }
@@ -1949,7 +1969,8 @@ async function nativeEstimateSheet(id) {
       ${est.converted_invoice_number ? `<p class="note ok">Converted to invoice ${esc(est.converted_invoice_number)}</p>` : ""}
       ${est.status === "converted" ? `<button class="pillbtn" id="estconverted">Open converted invoice</button>` : ""}
       ${est.email_enabled && live ? `<button class="pillbtn" id="estemail"><b>Email estimate</b></button>` : ""}
-      ${est.email_sent_at ? `<p class="note">Emailed to ${esc(est.email_sent_to)} · ${esc(String(est.email_sent_at).slice(0, 10))}</p>` : ""}
+      ${booksEmailHistoryMarkup(est)}
+      ${!est.email_history?.length && est.email_sent_at ? `<p class="note">Emailed to ${esc(est.email_sent_to)} · ${esc(String(est.email_sent_at).slice(0, 10))}</p>` : ""}
       ${est.link ? `<button class="pillbtn" id="estlink">Copy share link</button>
       <button class="pillbtn" id="estopen">Open estimate page</button>` : ""}
       ${est.status === "open" ? `
@@ -1978,9 +1999,9 @@ async function nativeEstimateSheet(id) {
       if (!to) return;
       emailBtn.disabled = true;
       const doSend = async (force) => {
-        const r = await booksApi({ action: "estimate-send", id: est.id, to, ...(force ? { force: true } : {}) });
-        toast(`Estimate emailed to ${r.to}`);
-        est = { ...est, email_sent_at: new Date().toISOString(), email_sent_to: r.to };
+        const r = await sendNativeDocumentEmail("estimate",est.id,to,force);
+        toast(`Estimate accepted for delivery to ${r.to}`);
+        est = (await booksApi({action:"estimate-get",id:est.id})).estimate;
         paint();
       };
       try { await doSend(false); }
@@ -8964,8 +8985,7 @@ function lockView(seed) {
       const ex = await api("/books", { action: "export" });
       const rows = (csv) => Math.max(0, String(csv || "").trim().split("\n").length - 1);
       if (!rows(ex.customers_csv) && !rows(ex.invoices_csv) && !rows(ex.payments_csv)) { toast("Nothing to export here — your books live in QuickBooks, which you still own.", "err"); return; }
-      const blob = new Blob(["== CUSTOMERS ==\n" + ex.customers_csv + "\n\n== INVOICES ==\n" + ex.invoices_csv + "\n\n== LINES ==\n" + ex.lines_csv + "\n\n== PAYMENTS ==\n" + ex.payments_csv], { type: "text/csv" });
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "ledger-books-export.csv"; a.click();
+      downloadBooksExport(ex);
       toast("Export downloaded");
     } catch (err) { toast(err.message, "err"); }
   };
