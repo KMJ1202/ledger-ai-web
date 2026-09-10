@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 143;
+const APP_BUILD = 144;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -111,7 +111,7 @@ const CONNECTOR_PATHS = [
 ];
 const CONNECTOR_PASSTHROUGH = /\/(start|callback|disconnect|status|oauth)/;
 function knownDisconnected(path) {
-  if (!S.connMap || CONNECTOR_PASSTHROUGH.test(path) || /^\/gmail\/(photo-receipt|receipt-photo)(?:\?|$)/.test(path)) return null;
+  if (!S.connMap || CONNECTOR_PASSTHROUGH.test(path) || /^\/gmail\/(photo-receipt|receipt-photo|receipts|categorize|set-amount|dismiss)(?:\?|$)/.test(path)) return null;
   const hit = CONNECTOR_PATHS.find(([prefix]) => path.startsWith(prefix));
   return hit && !S.connMap[hit[1]] ? hit[2] : null;
 }
@@ -869,7 +869,7 @@ function homeBanner(state, msg) {
       <button class="retry" id="homeretry">Retry</button></div>`;
   else el.innerHTML = "";
   const r = $("homeretry");
-  if (r) r.onclick = () => { S.qboStale = true; S.nativeSummary = null; S.profitStale = true; renderHome(); };
+  if (r) r.onclick = () => { S.qboStale = true; S.nativeSummary = null; S.nativeInvoiceList = null; S.profitStale = true; renderHome(); };
 }
 
 /** Count badge on a Go-to tile (iOS LedgerShortcutTile.badge). */
@@ -1023,7 +1023,7 @@ async function loadHomeFinance() {
   } catch { inner = pvretry(S.booksProvider === "native" ? "Couldn't reach your books." : "Couldn't reach QuickBooks."); }
   slot.innerHTML = pvcard("pvfin", "dollar", "Finance", "em", "Open Finance", inner);
   wirePv("pvfin", () => { S.financeLane = "invoices"; setTab("finance"); });
-  wireRetry(slot, () => { S.qboStale = true; S.nativeSummary = null; homeSrc = null; loadHomeFinance(); });
+  wireRetry(slot, () => { S.qboStale = true; S.nativeSummary = null; S.nativeInvoiceList = null; homeSrc = null; loadHomeFinance(); });
 }
 
 async function loadHomeCustomers() {
@@ -1068,29 +1068,15 @@ async function loadHomeCustomers() {
 /** Today's numbers from whichever book the workspace runs on. */
 async function homeBooksKpis() {
   if (S.booksProvider === undefined) {
-    try { S.booksProvider = (await booksApi({ action: "settings" })).provider; }
-    catch { S.booksProvider = "quickbooks"; }
+    S.booksProvider = (await booksApi({ action: "settings" })).provider;
   }
   if (S.booksProvider === "native") {
-    if (!S.nativeSummary) S.nativeSummary = await booksApi({ action: "summary" });
-    const n = S.nativeSummary?.summary || S.nativeSummary || {};
-    if (!S.nativeInvoiceList) S.nativeInvoiceList = (await booksApi({ action: "invoices" })).invoices || [];
-    const live = S.nativeInvoiceList.filter((i) => i.status !== "void");
-    const day = localDay();
-    const sum = (rows) => rows.reduce((t, i) => t + (Number(i.total) || 0), 0);
-    return {
-      today_sales: n.today_sales ?? sum(live.filter((i) => (i.issue_date || "").slice(0, 10) === day)),
-      month_sales: n.month_sales ?? sum(live.filter((i) => (i.issue_date || "").slice(0, 7) === day.slice(0, 7))),
-      ytd_sales: n.ytd_sales ?? sum(live.filter((i) => (i.issue_date || "").slice(0, 4) === day.slice(0, 4))),
-      outstanding: n.outstanding ?? n.open_balance ?? 0,
-      open_count: n.open_count ?? n.open_invoices ?? 0,
-      next_invoice: n.next_invoice ?? null,
-      // The books P&L is monthly, so there is no honest "today's profit" yet —
-      // Home shows a dash rather than a made-up number.
-      today_profit: n.today_profit ?? null,
-      profit_margin: n.profit_margin ?? null,
-      missing_cost_count: n.missing_cost_count ?? 0,
-    };
+    // A fresh, complete server snapshot owns balances AND sales in the business
+    // time zone. No retained invoice page can override half of this response.
+    const n=await booksApi({action:"summary"});
+    if (![n.today_sales,n.month_sales,n.ytd_sales,n.open_balance,n.open_invoices].every(Number.isFinite)) throw new Error("Your complete financial summary is unavailable.");
+    S.nativeSummary=n;
+    return {...n,outstanding:n.open_balance,open_count:n.open_invoices,today_profit:null,profit_margin:null};
   }
   if (!S.qbo || S.qboStale) { S.qbo = await get("/quickbooks-data"); S.qboStale = false; }
   return S.qbo?.qbo?.kpis || {};
@@ -1564,7 +1550,16 @@ const FINANCE_CODE = { invoices: "INVOICES", profit: "PROFIT & LOSS", receipts: 
 // QBO. The Finance tab swaps its invoices lane for these screens; Profit (a QBO
 // P&L board) is hidden, Receipts stays — the receipt pipeline is native already.
 
-async function booksApi(body) { return api("/books", body); }
+function invalidateNativeBooks() {
+  S.nativeSummary=null; S.nativeInvoiceList=null; S.nativeCustomers=null; homeSrc=null;
+}
+async function booksApi(body) {
+  const result=await api("/books",body);
+  if (!result || typeof result!=="object") throw new Error("Your books are unavailable. Please retry.");
+  if (/^(payment-record|invoice-(create|void)|estimate-(create|convert|void|status)|settings-save|customer-save)$/.test(body.action)) invalidateNativeBooks();
+  if(result.timezone) S.businessTimezone=result.timezone;
+  return result;
+}
 
 // SALES INTELLIGENCE hero for native books — the web twin of iOS's Finance
 // Overview card. Every figure comes from the live invoice rows (voids
@@ -1695,13 +1690,18 @@ async function loadNativeInvoices() {
   const slot = $("finbody"); if (!slot) return;
   let data, summary, connect, settings;
   try {
-    [data, summary, connect, settings] = await Promise.all([
-      booksApi({ action: "invoices" }),
+    [summary, connect, settings] = await Promise.all([
       booksApi({ action: "summary" }),
       booksApi({ action: "connect-status" }),
       booksApi({ action: "settings" }),
     ]);
-  } catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  } catch (e) {
+    slot.innerHTML = `<div class="panel"><h3>Books unavailable</h3><p class="note">${esc(e.message)}</p><button class="pillbtn" id="booksretry">Retry</button></div>`;
+    slot.querySelector("#booksretry").onclick=()=>loadNativeInvoices(); return;
+  }
+  data={invoices:summary.invoices};
+  if(!Array.isArray(data.invoices)) { slot.innerHTML=`<div class="empty">Complete invoice history unavailable. Refresh your books.</div>`; return; }
+  S.nativeSummary=summary; S.nativeInvoiceList=data.invoices;
   const invoices = data.invoices || [];
   const over30Cut = businessDay(new Date(), -30);
   const todayISO = businessDay();
@@ -1717,9 +1717,9 @@ async function loadNativeInvoices() {
   const chargesOn = connect?.charges_enabled === true;
   const live = invoices.filter((i) => i.status !== "void");
   const todayKey = businessDay();
-  const todaySales = live.filter((i) => (i.issue_date || "").slice(0, 10) === todayKey)
+  const todaySales = summary.today_sales ?? live.filter((i) => (i.issue_date || "").slice(0, 10) === todayKey)
     .reduce((s, i) => s + (Number(i.total) || 0), 0);
-  const ytdSales = live.filter((i) => (i.issue_date || "").slice(0, 4) === todayKey.slice(0, 4))
+  const ytdSales = summary.ytd_sales ?? live.filter((i) => (i.issue_date || "").slice(0, 4) === todayKey.slice(0, 4))
     .reduce((s, i) => s + (Number(i.total) || 0), 0);
   const openCount = summary.open_invoices ?? live.filter((i) => Number(i.balance) > 0).length;
   // Kyle 2026-09-07: Outstanding and Overdue are two different questions.
@@ -1773,7 +1773,7 @@ async function loadNativeInvoices() {
     </div>
     <div class="lanehead" style="margin:16px 0 9px"><span class="eyebrow" style="color:var(--dim)">${S.invoiceSearch ? "Matching invoices" : "Recent invoices"}</span>
       <span class="note">${filtered.length}</span></div>
-    ${filtered.length ? `<div class="list">${filtered.slice(0, 120).map((i) => `
+    ${filtered.length ? `<div class="list">${filtered.slice(0, S.invoiceVisible || 120).map((i) => `
       <button class="item" data-binv="${esc(i.id)}">
         <div class="main"><div class="ttl">${esc(i.customer || "—")}</div>
           <div class="sub">${esc(i.number)} · ${esc(dateShort(i.issue_date))}</div></div>
@@ -1781,6 +1781,7 @@ async function loadNativeInvoices() {
           <small><span class="tag ${i.status === "paid" ? "paid" : i.status === "void" ? "" : "open"}">${esc(nativeStatusLabel(i))}</span></small></div>
       </button>`).join("")}</div>`
       : `<div class="empty">${S.invoiceSearch ? "No matches." : "No invoices yet — create your first, or ask Ledger in chat."}</div>`}
+    ${filtered.length>(S.invoiceVisible||120) ? `<button class="pillbtn wide" id="invoiceMore">Show more invoices · ${Math.min(S.invoiceVisible||120,filtered.length)} of ${filtered.length}</button>` : ""}
     <div class="opsgrid">
       <button class="opcard ${chargesOn ? "em" : "purple"}" data-op="stripe"><span class="ic">&#128179;</span>
         <b>Card payments</b><span>${chargesOn ? "ON — customers can pay online" : "Set up Stripe to get paid online"}</span>
@@ -1792,6 +1793,7 @@ async function loadNativeInvoices() {
     </div>`;
   $("newinv").onclick = () => nativeComposerSheet();
   $("newest").onclick = () => nativeComposerSheet("estimate");
+  if($("invoiceMore")) $("invoiceMore").onclick=()=>{S.invoiceVisible=(S.invoiceVisible||120)+120;loadNativeInvoices();};
   const search = $("invsearch");
   if (search) search.oninput = () => { S.invoiceSearch = search.value.trim().toLowerCase(); loadNativeInvoices(); };
   on("[data-if]", "click", (e) => { S.invoiceFilter = e.currentTarget.dataset.if; loadNativeInvoices(); }, slot);
@@ -1824,6 +1826,8 @@ async function loadNativeInvoices() {
 async function nativeInvoiceSheet(id) {
   const wrap = sheet(`<h2>Invoice</h2><div id="binvbody"><div class="skel"></div><div class="skel"></div></div>`);
   const body = () => wrap.querySelector("#binvbody");
+  const paymentKey="ledger.pending-payment."+id;
+  let pendingPayment=JSON.parse(localStorage.getItem(paymentKey)||"null");
   let inv;
   try { inv = (await booksApi({ action: "invoice-get", id })).invoice; }
   catch (e) { body().innerHTML = `<p class="note err">${esc(e.message)}</p>`; return; }
@@ -1848,14 +1852,14 @@ async function nativeInvoiceSheet(id) {
       ${inv.email_sent_at ? `<p class="note">Emailed to ${esc(inv.email_sent_to)} · ${esc(String(inv.email_sent_at).slice(0, 10))}</p>` : ""}
       <button class="pillbtn" id="blink">Copy pay link</button>
       <button class="pillbtn" id="bopen">Open invoice page</button>
-      ${Number(inv.balance) > 0 ? `
+      ${Number(inv.balance) > 0 || pendingPayment ? `
         <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Record a payment</span></div>
         <div class="f" style="display:flex;gap:8px">
-          <input id="bamt" type="number" min="0.01" max="${inv.balance}" step="0.01" class="cmpinput" style="flex:1" value="${inv.balance}">
-          <select id="bmethod" class="pillbtn"><option value="etransfer">E-transfer</option><option value="cash">Cash</option>
+          <input id="bamt" type="number" min="0.01" max="${inv.balance}" step="0.01" class="cmpinput" style="flex:1" value="${pendingPayment?.amount ?? inv.balance}" ${pendingPayment ? "disabled" : ""}>
+          <select id="bmethod" class="pillbtn" ${pendingPayment ? "disabled" : ""}><option value="etransfer">E-transfer</option><option value="cash">Cash</option>
             <option value="cheque">Cheque</option><option value="other">Other</option></select>
         </div>
-        <button class="pillbtn" id="bpay" style="margin-top:8px"><b>Mark paid</b></button>` : ""}
+        <button class="pillbtn" id="bpay" style="margin-top:8px"><b>${pendingPayment ? "Recover payment" : "Record payment"}</b></button>${pendingPayment ? `<p class="note">A previous reply was interrupted. Recover the same payment before recording another.</p>` : ""}` : ""}
       ${inv.status === "sent" && !(inv.payments || []).length ? `<button class="linkbtn" id="bvoid" style="color:var(--red);margin-top:10px">Void this invoice</button>` : ""}
       <p class="note err" id="berr"></p>`;
     const link = inv.link || "";
@@ -1886,17 +1890,28 @@ async function nativeInvoiceSheet(id) {
       }
     };
     const pay = wrap.querySelector("#bpay");
+    if (pendingPayment && wrap.querySelector("#bmethod")) wrap.querySelector("#bmethod").value=pendingPayment.method;
     if (pay) pay.onclick = async () => {
       pay.disabled = true;
       try {
-        const amount = Number(wrap.querySelector("#bamt").value);
+        const amount = pendingPayment?.amount ?? Number(wrap.querySelector("#bamt").value);
+        if(!Number.isFinite(amount)||amount<=0) throw new Error("Enter a positive payment amount.");
         // The books refuse an over-payment too; catching it here saves a round trip.
-        if (amount > Number(inv.balance) + 0.005) throw new Error(`That is more than the ${money(inv.balance)} still owing. Record up to ${money(inv.balance)}.`);
-        const r = await booksApi({ action: "payment-record", invoice_id: inv.id, amount, method: wrap.querySelector("#bmethod").value });
+        if (!pendingPayment && amount > Number(inv.balance) + 0.005) throw new Error(`That is more than the ${money(inv.balance)} still owing. Record up to ${money(inv.balance)}.`);
+        if(!pendingPayment) {
+          pendingPayment={action:"payment-record",invoice_id:inv.id,amount,method:wrap.querySelector("#bmethod").value,client_ref:crypto.randomUUID()};
+          localStorage.setItem(paymentKey,JSON.stringify(pendingPayment));
+        }
+        const r = await booksApi(pendingPayment);
+        if(!r.invoice?.id) throw new Error("Payment reply was incomplete. Recover the same payment.");
+        localStorage.removeItem(paymentKey); pendingPayment=null;
         inv = { ...inv, ...r.invoice, link };
         toast(r.invoice.status === "paid" ? "Invoice paid in full" : "Payment recorded");
         paint(); loadNativeInvoices();
-      } catch (e) { wrap.querySelector("#berr").textContent = e.message; pay.disabled = false; }
+      } catch (e) {
+        if ([400,404,409].includes(e.status) && !/different details/i.test(e.message)) { localStorage.removeItem(paymentKey);pendingPayment=null; }
+        paint(); wrap.querySelector("#berr").textContent=e.message;
+      }
     };
     const voidBtn = wrap.querySelector("#bvoid");
     if (voidBtn) voidBtn.onclick = async () => {
@@ -1932,6 +1947,7 @@ async function nativeEstimateSheet(id) {
         <tr><td><b>Total</b></td><td style="text-align:right"><b>${money(est.total)}</b></td></tr>
       </tbody></table>
       ${est.converted_invoice_number ? `<p class="note ok">Converted to invoice ${esc(est.converted_invoice_number)}</p>` : ""}
+      ${est.status === "converted" ? `<button class="pillbtn" id="estconverted">Open converted invoice</button>` : ""}
       ${est.email_enabled && live ? `<button class="pillbtn" id="estemail"><b>Email estimate</b></button>` : ""}
       ${est.email_sent_at ? `<p class="note">Emailed to ${esc(est.email_sent_to)} · ${esc(String(est.email_sent_at).slice(0, 10))}</p>` : ""}
       ${est.link ? `<button class="pillbtn" id="estlink">Copy share link</button>
@@ -1942,9 +1958,9 @@ async function nativeEstimateSheet(id) {
           <button class="pillbtn" id="estaccept" style="flex:1"><b>Mark accepted</b></button>
           <button class="pillbtn" id="estdecline" style="flex:1">Mark declined</button>
         </div>` : ""}
-      ${est.status === "accepted" ? `<button class="cta" id="estconvert" style="margin-top:12px">
+      ${live ? `<button class="cta" id="estconvert" style="margin-top:12px">
         <span class="ic">&#8594;</span>
-        <span><b>Convert to invoice</b><span>Numbered invoice + payment link, tax applied</span></span></button>` : ""}
+        <span><b>Convert to invoice</b><span>Review quoted total and payment terms</span></span></button>` : ""}
       ${live ? `<button class="linkbtn" id="estvoid" style="color:var(--red);margin-top:10px">Void this estimate</button>` : ""}
       <p class="note err" id="esterr"></p>`;
     const err = (m) => { wrap.querySelector("#esterr").textContent = m; };
@@ -1986,11 +2002,18 @@ async function nativeEstimateSheet(id) {
     };
     const acc = wrap.querySelector("#estaccept"); if (acc) acc.onclick = setStatus("accepted");
     const dec = wrap.querySelector("#estdecline"); if (dec) dec.onclick = setStatus("declined");
+    const converted=wrap.querySelector("#estconverted");
+    if(converted) converted.onclick=async()=>{converted.disabled=true;try{const r=await booksApi({action:"estimate-convert",id:est.id});closeSheet();nativeInvoiceSheet(r.invoice.id);}catch(e){err(e.message);converted.disabled=false;}};
     const conv = wrap.querySelector("#estconvert");
     if (conv) conv.onclick = async () => {
       conv.disabled = true;
       try {
-        const r = await booksApi({ action: "estimate-convert", id: est.id });
+        const preview=await booksApi({action:"estimate-convert-preview",id:est.id});
+        const v=preview.review;
+        if(!v || !Number.isFinite(v.total)) throw new Error("Conversion review is unavailable.");
+        const taxes=[`${v.tax_name||"Tax"}: ${money(v.tax_total)}`,v.tax2_name ? `${v.tax2_name}: ${money(v.tax2_total)}` : ""].filter(Boolean).join("\n");
+        if(!confirm(`Review invoice from ${est.number}\nSubtotal: ${money(v.subtotal)}\n${taxes}\nTotal: ${money(v.total)}\nTerms: ${v.terms} · Due ${v.due_date}\n${preview.tax_settings_changed ? "Tax settings changed. This invoice keeps the quoted taxes.\n" : ""}Create this invoice?`)) { conv.disabled=false;return; }
+        const r = await booksApi({ action: "estimate-convert", id: est.id, expected_review:v });
         toast(`Invoice ${r.invoice.number} created from ${est.number}`);
         closeSheet(); loadNativeInvoices(); nativeInvoiceSheet(r.invoice.id);
       } catch (e) { err(e.message); conv.disabled = false; }
@@ -2297,23 +2320,31 @@ async function booksSettingsSheet() {
   let s;
   try { s = await booksApi({ action: "settings" }); }
   catch (e) { body().innerHTML = `<p class="note err">${esc(e.message)}</p>`; return; }
-  let shortcuts = [];
-  try { shortcuts = (await booksApi({ action: "shortcuts" })).shortcuts || []; } catch {}
+  let shortcuts = [], shortcutError=null;
+  const fetchShortcuts=async()=>{try{shortcuts=(await booksApi({action:"shortcuts"})).shortcuts;shortcutError=null;}catch(e){shortcutError=e.message;}};
+  await fetchShortcuts();
   const br = s.branding || {};
   const template = { v: br.template || "classic" };
   const termsDefault = { v: Number(s.default_terms_days) || 0 };
   const paintShortcuts = () => {
     const box = wrap.querySelector("#sclist");
     if (!box) return;
+    if(shortcutError) {
+      box.innerHTML=`<p class="note err">Shortcuts unavailable: ${esc(shortcutError)}</p><button class="pillbtn" id="scretry">Retry</button>`;
+      box.querySelector("#scretry").onclick=async()=>{await fetchShortcuts();paintShortcuts();};return;
+    }
     box.innerHTML = shortcuts.length ? shortcuts.map((sc) => `
       <div class="cmpline"><div class="t">
         <span style="flex:1"><b>${esc(sc.code)}</b> ${esc(sc.name)} · ${money(sc.rate)}</span>
         <button class="del" data-scdel="${esc(sc.id)}">&#128465;</button></div></div>`).join("")
       : `<p class="note">No shortcuts yet — you'll be offered one after each invoice with a new line item.</p>`;
     box.querySelectorAll("[data-scdel]").forEach((btn) => btn.onclick = async () => {
-      await booksApi({ action: "shortcut-delete", id: btn.dataset.scdel }).catch(() => {});
-      shortcuts = shortcuts.filter((x) => x.id !== btn.dataset.scdel);
-      paintShortcuts();
+      btn.disabled=true;
+      try {
+        const result=await booksApi({action:"shortcut-delete",id:btn.dataset.scdel});
+        if(result.deleted!==true) throw new Error("Deletion could not be confirmed.");
+        shortcuts=shortcuts.filter(x=>x.id!==btn.dataset.scdel);paintShortcuts();
+      } catch(e) {btn.disabled=false;toast(e.message,"err");}
     });
   };
   body().innerHTML = `
@@ -2449,8 +2480,9 @@ function estimatesLaneHTML(estimates, row) {
       <input id="estsearch" placeholder="Customer, estimate number or status" value="${esc(q)}"></div>
     <div class="lanehead" style="margin:16px 0 9px"><span class="eyebrow" style="color:var(--dim)">Estimates</span>
       <span class="note">${shown.length}</span></div>
-    ${shown.length ? `<div class="list">${shown.slice(0, 120).map(row).join("")}</div>`
-      : `<div class="empty">${q ? "No matches." : "No estimates yet — start one above, or ask Ledger in chat."}</div>`}`;
+    ${shown.length ? `<div class="list">${shown.slice(0, S.estimateVisible || 120).map(row).join("")}</div>`
+      : `<div class="empty">${q ? "No matches." : "No estimates yet — start one above, or ask Ledger in chat."}</div>`}
+    ${shown.length>(S.estimateVisible||120) ? `<button class="pillbtn wide" id="estimateMore">Show more estimates · ${Math.min(S.estimateVisible||120,shown.length)} of ${shown.length}</button>` : ""}`;
 }
 
 // Live quotes first, settled ones after — the same order both apps use.
@@ -2462,6 +2494,7 @@ function sortEstimates(rows) {
 }
 
 function wireEstimateSearch(reload) {
+  if($("estimateMore")) $("estimateMore").onclick=()=>{S.estimateVisible=(S.estimateVisible||120)+120;reload();};
   const search = $("estsearch");
   if (!search) return;
   search.oninput = () => { S.estSearch = search.value.trim().toLowerCase(); reload(); };
@@ -4453,6 +4486,8 @@ const CATEGORIES = {
 async function loadReceipts() {
   const slot = $("finbody"); if (!slot) return;
   try {
+    if(S.booksProvider===undefined) S.booksProvider=(await booksApi({action:"settings"})).provider;
+    const native=S.booksProvider==="native";
     const d = await get("/gmail/receipts");
     S.receipts = d.receipts || [];
     const ready = S.receipts.filter((r) => !r.qbo_purchase_id && r.category && r.category !== "Personal" && r.total);
@@ -4469,12 +4504,12 @@ async function loadReceipts() {
       <div class="fintiles" style="grid-template-columns:1fr 1fr 1.35fr">
         <div class="fintile"><span class="tic" style="background:rgba(58,200,245,.15);color:var(--cyan)">&#128246;</span><small>ON RADAR</small><b>${S.receipts.length}</b><i>shot + emailed</i></div>
         <div class="fintile em"><span class="tic" style="background:rgba(47,224,160,.15);color:var(--emerald)">&#10004;</span><small>READY</small><b>${ready.length}</b><i>priced &amp; filed</i></div>
-        <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#8987;</span><small>UNPOSTED</small><b>${money(unpostedValue)}</b><i>${unposted.length === 1 ? "1 waiting" : unposted.length + " waiting"}</i></div>
+        <div class="fintile warn"><span class="tic" style="background:rgba(251,146,60,.15);color:var(--orange)">&#8987;</span><small>${native ? "FILED RECEIPTS" : "UNPOSTED"}</small><b>${money(native ? queueTotal : unpostedValue)}</b><i>${native ? "receipt value · not profit" : unposted.length + " waiting"}</i></div>
       </div>
       <div class="lanehead"><span class="eyebrow">Intake</span><span class="note">camera · library</span></div>
       <div class="panel">
         <h3>&#9635; Capture a receipt</h3>
-        <p class="sub">Shoot it and Ledger reads the vendor, total and tax, then files it for QuickBooks.</p>
+        <p class="sub">${native ? "Shoot it and Ledger reads the vendor, total and tax, then saves the receipt to your records." : "Shoot it and Ledger reads the vendor, total and tax, then files it for QuickBooks."}</p>
         <div class="rowbtns" style="margin-top:12px">
           <button class="cta" id="rcptshoot" style="flex:1;margin:0">
             <span class="ic">&#128247;</span>
@@ -4491,13 +4526,13 @@ async function loadReceipts() {
               `<option value="${esc(c)}" ${S.preClassify === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</optgroup>`).join("")}
           </select>
         </label>
-      <button class="queue" id="batchqueue">
+      ${native ? `<p class="note">Categorize and check each receipt here. Materials count against a job when their use is recorded in Job costs.</p>` : `<button class="queue" id="batchqueue">
         <div class="ic">&#128229;</div>
         <div class="m"><small>QuickBooks batch queue</small>
           <b>${ready.length} queued · ${money(queueTotal)}</b>
           <span>Categorised receipts waiting to post as expenses.</span></div>
         <div class="chev">&#8250;</div>
-      </button>
+      </button>`}
         <input type="file" id="rcptcam" accept="image/*" capture="environment" hidden>
         <input type="file" id="rcptlib" accept="image/*" hidden>
         <p class="note" id="rcptcamnote" style="margin-top:8px"></p>
@@ -4511,7 +4546,7 @@ async function loadReceipts() {
             ${Array.from({ length: 24 }, (_, h) => `<option value="${h}" ${h === (d.scan_hour ?? 18) ? "selected" : ""}>Daily at ${hourLabel(h)}</option>`).join("")}
           </select>
           <button class="btn em" id="scannow" style="background:linear-gradient(140deg,rgba(248,113,113,.85),rgba(251,146,60,.85));color:#fff;border:0">&#8635; Scan now</button>
-          ${ready.length >= 2 ? `<button class="btn em" id="batch">Post all ready (${ready.length})</button>` : ""}
+          ${!native && ready.length >= 2 ? `<button class="btn em" id="batch">Post all ready (${ready.length})</button>` : ""}
         </div>
         <p class="note" style="margin-top:8px">${d.last_scan_at ? "Last scan " + esc(new Date(d.last_scan_at).toLocaleString()) : "Not scanned yet"}</p>
       </div>
@@ -4529,7 +4564,7 @@ async function loadReceipts() {
             <small>${r.image_path ? '<span class="tag grey">Photo</span> ' : ""}${r.qbo_purchase_id ? '<span class="tag paid">In QuickBooks</span>'
               : r.category === "Personal" ? '<span class="tag grey">Personal</span>'
               : !r.total ? '<span class="tag open">Add amount</span>'
-              : r.category ? (S.booksProvider === "native" ? '<span class="tag new">Counted</span>' : '<span class="tag new">Post to QuickBooks</span>')
+              : r.category ? (S.booksProvider === "native" ? '<span class="tag new">Filed</span>' : '<span class="tag new">Post to QuickBooks</span>')
               : '<span class="tag open">Needs category</span>'}</small></div>
         </button>`).join("")}</div>`
         : `<div class="empty">${rq ? "No receipts match that search." : "No receipts found yet.<br>Run a scan, or forward one to your inbox."}</div>`}`;
@@ -4546,7 +4581,7 @@ async function loadReceipts() {
       catch (err) { toast(err.message, "err"); loadReceipts(); }
     };
     if ($("batch")) $("batch").onclick = () => batchPost(ready);
-    $("batchqueue").onclick = () => batchQueueSheet(ready, queueTotal);
+    if ($("batchqueue")) $("batchqueue").onclick = () => batchQueueSheet(ready, queueTotal);
     $("scanhour").onchange = async (e) => {
       const hour = Number(e.target.value);
       try { await api("/gmail/set-schedule", { hour }); toast("Daily scan set to " + hourLabel(hour)); }
@@ -4695,6 +4730,7 @@ function receiptSheet(r, suggestedCategory) {
   if (!r) return;
   // A photo arrives uncategorised on purpose; pre-select Ledger's read so it is
   // one tap to accept and still a deliberate choice, not an automatic one.
+  const native=S.booksProvider==="native";
   const picked = r.category || suggestedCategory || "";
   const opts = Object.entries(CATEGORIES).map(([group, items]) =>
     `<optgroup label="${esc(group)}">${items.map((i) => `<option ${picked === i ? "selected" : ""}>${esc(i)}</option>`).join("")}</optgroup>`).join("");
@@ -4712,7 +4748,7 @@ function receiptSheet(r, suggestedCategory) {
       <button class="btn ghost" id="rdismiss">Dismiss</button>
       <button class="btn primary" id="rsave">Save</button>
     </div>
-    ${r.qbo_purchase_id ? `<p class="note ok" style="margin-top:10px">Already in QuickBooks.</p>`
+    ${native ? `<p class="note">Saved in your receipt records. No QuickBooks posting is needed. Record material use in Job costs when it is used.</p>` : r.qbo_purchase_id ? `<p class="note ok" style="margin-top:10px">Already in QuickBooks.</p>`
       : `<button class="btn em wide" style="margin-top:9px" id="rpost">Post to QuickBooks</button>`}
     <div class="note" id="rnote" style="margin-top:9px"></div>`, (sh) => {
     const note = sh.querySelector("#rnote");
