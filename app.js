@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 142;
+const APP_BUILD = 143;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -69,6 +69,14 @@ const on = (sel, ev, fn, scope) => (scope || document).querySelectorAll(sel).for
 function localDay(d) {
   const dt = d instanceof Date ? d : new Date();
   return dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
+}
+
+// Business finance dates are civil dates, not the browser's travel location.
+function businessDay(date = new Date(), offset = 0) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: S.businessTimezone || "America/Edmonton", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const part = (name) => parts.find((p) => p.type === name).value;
+  const civil = new Date(Date.UTC(Number(part("year")), Number(part("month")) - 1, Number(part("day")) + offset));
+  return civil.toISOString().slice(0, 10);
 }
 
 function dayLabel(iso) {
@@ -135,6 +143,7 @@ async function api(path, body, method = "POST", opts = {}) {
     if (r.status === 402 && d.code === "upgrade_required" && !opts.silentUpgrade) upgradeHit(d);
     throw err;
   }
+  if (d.timezone && (path === "/stripe-billing/status" || (path === "/books" && body?.action === "settings"))) S.businessTimezone = d.timezone;
   return d;
 }
 const get = (path) => api(path, null, "GET");
@@ -578,12 +587,14 @@ function applyLaunchIntent() {
   if (state === "success") {
     history.replaceState({}, "", location.pathname);
     api("/stripe-billing/status", {}).then((s) => {
+      const confirmed = s.billing_source === "stripe" && s.card_on_file && ["active", "trialing"].includes(s.subscription_status) && s.access !== "locked";
+      if (!confirmed) { openChat(); sys("Checkout returned, but your subscription is not confirmed yet. Refresh billing in Settings; do not purchase again."); return; }
       const when = s.trial_ends_at ? dateShort(s.trial_ends_at) : null;
       const msg = s.subscription_status === "trialing" && when
-        ? `✅ Card added. Your free trial runs until ${when} — nothing is charged before then.`
-        : "✅ You're subscribed — thank you. Manage it any time under Business profile & settings.";
-      openChat(); sys(msg); toast("Card saved");
-    }).catch(() => { openChat(); sys("✅ Payment received — thank you."); });
+        ? `Card added. Your free trial runs until ${when}.`
+        : "You're subscribed. Manage it any time under Business profile & settings.";
+      openChat(); sys(msg); toast("Subscription confirmed");
+    }).catch(() => { openChat(); sys("Billing confirmation is temporarily unavailable. Refresh billing in Settings; do not purchase again."); });
     return;
   }
   if (state === "cancelled") {
@@ -1572,7 +1583,7 @@ function nativeStatusLabel(doc) {
 }
 
 function salesIntelNative(invoices) {
-  const now = new Date();
+  const now = new Date(businessDay() + "T00:00:00Z");
   const sales = invoices.filter((i) => i.status !== "void");
   const dayTotal = (key) => sales.filter((i) => (i.issue_date || "").slice(0, 10) === key)
     .reduce((s, i) => s + (Number(i.total) || 0), 0);
@@ -1580,35 +1591,35 @@ function salesIntelNative(invoices) {
     const d = (i.issue_date || "").slice(0, 10);
     return d >= from && d <= to;
   }).reduce((s, i) => s + (Number(i.total) || 0), 0);
-  const iso = (d) => localDay(d);
+  const iso = (d) => d.toISOString().slice(0, 10);
   const ym = iso(now).slice(0, 7);
   const month = sales.filter((i) => (i.issue_date || "").slice(0, 7) === ym);
   const mtd = month.reduce((s, i) => s + (Number(i.total) || 0), 0);
   const avg = month.length ? mtd / month.length : 0;
-  const elapsed = now.getDate();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const elapsed = now.getUTCDate();
+  const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
   // A run rate off one or two invoices in the first days of a month reads as
   // broken ("$24,727 from one sale"). Show it once there is a week of data or
   // five invoices — whichever comes first.
   const forecastReady = elapsed >= 7 || month.length >= 5;
   const forecast = elapsed ? mtd / elapsed * daysInMonth : 0;
   // Same elapsed span, one month back / one year back.
-  const prevM = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevMEnd = new Date(prevM.getFullYear(), prevM.getMonth(),
-    Math.min(elapsed, new Date(prevM.getFullYear(), prevM.getMonth() + 1, 0).getDate()));
+  const prevM = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const prevMEnd = new Date(Date.UTC(prevM.getUTCFullYear(), prevM.getUTCMonth(),
+    Math.min(elapsed, new Date(Date.UTC(prevM.getUTCFullYear(), prevM.getUTCMonth() + 1, 0)).getUTCDate())));
   const momBase = rangeTotal(iso(prevM), iso(prevMEnd));
-  const ytd = rangeTotal(now.getFullYear() + "-01-01", iso(now));
-  const prevY = new Date(now); prevY.setFullYear(now.getFullYear() - 1);
-  const yoyBase = rangeTotal((now.getFullYear() - 1) + "-01-01", iso(prevY));
+  const ytd = rangeTotal(now.getUTCFullYear() + "-01-01", iso(now));
+  const prevY = new Date(now); prevY.setUTCFullYear(now.getUTCFullYear() - 1);
+  const yoyBase = rangeTotal((now.getUTCFullYear() - 1) + "-01-01", iso(prevY));
   // Year over year on this card means the same month a year ago, so it can sit
   // beside "This month" honestly — same rule as the QuickBooks card.
-  const lastYearMonthStart = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+  const lastYearMonthStart = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), 1));
   const yoyMonthBase = rangeTotal(iso(lastYearMonthStart), iso(prevY));
   const growth = (cur, base) => base > 0
     ? `${cur >= base ? "+" : "−"}${Math.abs(Math.round((cur - base) / base * 100))}%` : "—";
   const days = [];
   for (let d = 13; d >= 0; d--) {
-    const t = new Date(now); t.setDate(now.getDate() - d);
+    const t = new Date(now); t.setUTCDate(now.getUTCDate() - d);
     days.push({ key: iso(t), total: dayTotal(iso(t)) });
   }
   const max = Math.max(1, ...days.map((d) => d.total));
@@ -1639,8 +1650,8 @@ function salesIntelNative(invoices) {
 // deck. iPhone twin: `FinanceMoneySeam` in CommandDashboardView.swift — same
 // bands, same rules, same words.
 function moneySeam(rows, issuedKey) {
-  const today = localDay();
-  const cut = localDay(new Date(Date.now() - 30 * 86400000));
+  const today = businessDay();
+  const cut = businessDay(new Date(), -30);
   let current = 0, late = 0, over30 = 0;
   for (const i of rows) {
     const bal = Number(i.balance) || 0;
@@ -1688,12 +1699,12 @@ async function loadNativeInvoices() {
       booksApi({ action: "invoices" }),
       booksApi({ action: "summary" }),
       booksApi({ action: "connect-status" }),
-      booksApi({ action: "settings" }).catch(() => null),
+      booksApi({ action: "settings" }),
     ]);
   } catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   const invoices = data.invoices || [];
-  const over30Cut = localDay(new Date(Date.now() - 30 * 86400000));
-  const todayISO = localDay();
+  const over30Cut = businessDay(new Date(), -30);
+  const todayISO = businessDay();
   const filtered = invoices
     .filter((i) => S.invoiceFilter === "all" || !S.invoiceFilter ? true
       : S.invoiceFilter === "open" ? (i.status !== "void" && Number(i.balance) > 0)
@@ -1705,7 +1716,7 @@ async function loadNativeInvoices() {
       (i.customer + " " + i.number).toLowerCase().includes(S.invoiceSearch));
   const chargesOn = connect?.charges_enabled === true;
   const live = invoices.filter((i) => i.status !== "void");
-  const todayKey = localDay();
+  const todayKey = businessDay();
   const todaySales = live.filter((i) => (i.issue_date || "").slice(0, 10) === todayKey)
     .reduce((s, i) => s + (Number(i.total) || 0), 0);
   const ytdSales = live.filter((i) => (i.issue_date || "").slice(0, 4) === todayKey.slice(0, 4))
@@ -2460,7 +2471,7 @@ async function loadNativeEstimates() {
   const slot = $("finbody"); if (!slot) return;
   let estData;
   try { estData = await booksApi({ action: "estimates" }); }
-  catch (e) { slot.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  catch (e) { slot.innerHTML = `<div class="empty"><b>Estimates unavailable</b><p>${esc(e.message)}</p><button class="btn ghost" id="estimateRetry">Retry</button></div>`; $("estimateRetry").onclick = loadNativeEstimates; return; }
   const estimates = sortEstimates(estData.estimates || []);
   slot.innerHTML = estimatesLaneHTML(estimates, (x) => `
     <button class="item" data-best="${esc(x.id)}">
@@ -2507,8 +2518,8 @@ async function loadInvoices() {
   {
     const all = S.qbo?.qbo?.invoices || [];
     const k = S.qbo?.qbo?.kpis || {};
-    const over30Cut = localDay(new Date(Date.now() - 30 * 86400000));
-    const todayISO = localDay();
+    const over30Cut = businessDay(new Date(), -30);
+    const todayISO = businessDay();
     // Kyle 2026-09-07: Overdue is the slice of Outstanding already past its due
     // date. Counted off the full snapshot, never the filtered/searched list.
     const overdueRows = all.filter((i) => Number(i.balance) > 0 && i.status !== "paid" && i.status !== "void" && i.due_date && i.due_date < todayISO);
@@ -4288,7 +4299,7 @@ function eventSheet(e, back) {
     <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Crew</span><span class="note" id="evcrewtag"></span></div>
     <div id="evcrew"><span class="note">Loading…</span></div>
     ${isAuto() ? `<button class="btn primary wide" style="margin-top:14px" id="evscan">&#128663; Scan vehicle &amp; close job</button>
-    <p class="note" style="margin-top:6px">Scan the VIN and door placard, type the kilometres, and the completion message is ready to send. Nothing is invoiced.</p>` : ""}
+    <p class="note" style="margin-top:6px">Scan the VIN and door placard, type the kilometres, and the completion message is ready to send. Nothing is invoiced.</p>` : `<button class="btn primary wide" style="margin-top:14px" id="evcomplete">Complete job</button>`}
     <div class="rowbtns" style="margin-top:12px">
       <button class="btn ghost" id="evdel">Delete</button>
       <button class="btn ghost" id="evedit" ${e.all_day ? "disabled" : ""}>Edit</button>
@@ -4299,6 +4310,7 @@ function eventSheet(e, back) {
     if (back) sh.querySelector("#evback").onclick = () => back();
     const evscan = sh.querySelector("#evscan");
     if (evscan) evscan.onclick = () => vehicleScanSheet(e, () => eventSheet(e, back));
+    const complete = sh.querySelector("#evcomplete"); if (complete) complete.onclick = () => completeJobSheet(e, () => eventSheet(e, back));
     loadEventCrew(sh, e);
     sh.querySelector("#evedit").onclick = () => bookingSheet(evDayKey(e.start), e);
     sh.querySelector("#evdel").onclick = async (ev) => {
@@ -9469,6 +9481,14 @@ function vinScannerSheet() {
     });
   };
   draw();
+}
+
+function completeJobSheet(e, back) {
+  sheet(`<h2>Complete job</h2><p class="sh-sub">${esc(e.title)} · ${esc(timeLabel(e.start))}</p><p class="note">Confirm the work is finished. Ledger will prepare the invoice for your review; nothing is billed or sent to the customer here.</p><button class="btn primary wide" id="jobCompleteReview">Done — review with Ledger</button>`, (sh) => {
+    sh.querySelector("#jobCompleteReview").onclick = () => {
+      closeSheet(); openChat(); $("box").value = `The ${timeLabel(e.start)} appointment is done. Job: ${e.title}`; send();
+    };
+  });
 }
 
 function vehicleScanSheet(e, back) {
