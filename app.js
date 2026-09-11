@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 151;
+const APP_BUILD = 152;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -4919,11 +4919,12 @@ function formatE164(n) {
 }
 
 async function renderPhone(cachedBoard = null) {
+  if (phonePendingSave) cachedBoard = S.phone || cachedBoard;
   const request = S.phoneRequest = (S.phoneRequest || 0) + 1;
   if (!cachedBoard && !S.phone) skeleton(3);
   try {
     const d = cachedBoard || await api("/phone", { action: "board" });
-    if (request !== S.phoneRequest || S.tab !== "phone") return;
+    if (request !== S.phoneRequest || S.tab !== "phone" || (phonePendingSave && !cachedBoard)) return;
     S.phone = d;
     tabBadge("phone", (d.needsYou || []).length);
     view().innerHTML = `<div class="sect phone-command-center phone-os">
@@ -5800,7 +5801,8 @@ function phoneAutopilotLane(d) {
  return `<div class="pcc-section-title"><div><span class="pcc-kicker">AUTOPILOT</span><h3>Your commands</h3></div><span class="pcc-count">${rows.filter(r=>r.enabled).length} active</span></div>
  <div class="pcc-command-grid">${rows.map(x=>`<article class="pcc-command ${x.enabled?'is-on':''} ${x.key==='google-review-request'?'is-review':''}">
    <div class="pcc-command-top"><button class="pcc-command-open" data-auto="${esc(x.key)}"><span class="pcc-glyph" aria-hidden="true">${phoneCommandIcon(x.key)}</span><strong>${esc(x.title)}</strong></button>
-   <button class="pswx${x.enabled?' on':''}" data-autotoggle="${esc(x.key)}" role="switch" aria-checked="${!!x.enabled}" aria-label="${esc(x.title)}"><i></i></button></div>
+   <button class="pswx${(phonePendingSave?.key===x.key?phonePendingSave.enabled:x.enabled)?' on':''}" data-autotoggle="${esc(x.key)}" role="switch" aria-checked="${!!(phonePendingSave?.key===x.key?phonePendingSave.enabled:x.enabled)}" aria-label="${esc(x.title)}" ${phonePendingSave?'disabled':''} ${phonePendingSave?.key===x.key?'aria-busy="true"':''}><i></i></button></div>
+   ${phonePendingSave?.key===x.key?'<span class="command-save-status" role="status">Saving…</span>':''}
    <button class="pcc-command-detail" data-auto="${esc(x.key)}"><span>${esc(x.result).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}</span>
    <div class="pcc-command-bottom"><small><i class="${x.enabled?'active':''}"></i>${esc(x.impact?.headline || (x.enabled?'On':'Off'))}</small>${phoneSpark(x.series,'var(--cyan)')}<span aria-hidden="true">↗</span></div></button>
  </article>`).join('')}</div>${phoneAutopilotFeed(d)}`;
@@ -5948,54 +5950,73 @@ function openAutomation(d, key) {
 // the automation's own sheet have to do exactly the same thing, including the
 // two follow-up prompts — a switch that behaves differently depending on where
 // you touched it is a bug waiting for the day you touch the other one.
-async function toggleAutomation(d, key) {
-  const row = (d.automations || []).find((x) => x.key === key);
-  if (key === "google-review-request") {
-    if (!row?.enabled && !d.reviewRequests?.url) return reviewRequestSheet(d);
-    const buttons=[...document.querySelectorAll('[data-autotoggle="google-review-request"]')];buttons.forEach(b=>b.disabled=true);
-    try { await api("/phone",{action:"review-settings-save",reviewRequestsEnabled:!row?.enabled});toast(row?.enabled?"Review requests are off":"Review requests are on");await renderPhone(); }
-    catch(e){toast(e.message,"err");buttons.forEach(b=>b.disabled=false);}
-    return;
-  }
-  if (key === "frontdesk") return toggleFrontDesk(d);
-  if (key === "reminders") return toggleApptReminders(d);
-  if (key === "crew-reminders") {
-    const turningOn = d.crewReminderEnabled !== true;
-    try {
-      await api("/phone", { action: "settings-save", crewReminderEnabled: turningOn });
-      toast(turningOn ? "Crew reminders are on" : "Crew reminders are off");
-      renderPhone();
-      // Turning it on with nobody's shift hours set would run silently
-      // forever — send the owner straight to where the hours live.
-      if (turningOn) {
-        const roster = await api("/crew", { action: "list" });
-        const withShift = (roster.employees || []).filter((e) => e.active !== false && e.workEnd);
-        if (!withShift.length) { toast("Set shift hours on the roster so Ledger knows when shifts end"); crewRosterSheet(); }
-      }
-    } catch (err) { toast(err.message, "err"); }
-    return;
-  }
-  if (key === "dispatcher") {
-    const turningOn = !(row ? row.enabled : d.dispatcherEnabled === true);
-    try {
-      await api("/phone", { action: "settings-save", dispatcherEnabled: turningOn });
-      toast(turningOn ? "Dispatcher is on" : "Dispatcher is off");
-      renderPhone();
-      // Kyle 2026-08-30: flipping it on with 2+ crew immediately asks for
-      // the standing dispatch order — the machine always knows who's first.
-      if (turningOn) {
-        const roster = await api("/crew", { action: "list" });
-        const dispatchable = (roster.employees || []).filter((e) => e.active !== false && (e.phone || "").trim());
-        if (dispatchable.length >= 2) dispatchOrderSheet(dispatchable);
-      }
-    } catch (err) { toast(err.message, "err"); }
-    return;
+// One outstanding automation save per board. Paint immediately, reuse the saved
+// response, and invalidate reads started before the user's mutation.
+let phonePendingSave = null;
+async function savePhoneSwitch(d, key, enabled, payload) {
+  if (phonePendingSave) return false;
+  const pending = phonePendingSave = {key, enabled};
+  S.phoneRequest = (S.phoneRequest || 0) + 1;
+  const buttons = [...document.querySelectorAll('[data-autotoggle]')];
+  const button = buttons.find(b => b.dataset.autotoggle === key);
+  const previous = button?.getAttribute('aria-checked');
+  buttons.forEach(b => b.disabled = true);
+  let status;
+  if (button) {
+    button.classList.toggle('on', enabled); button.setAttribute('aria-checked', String(enabled));
+    button.setAttribute('aria-busy','true');
+    status = document.createElement('span'); status.className='command-save-status'; status.setAttribute('role','status');
+    status.textContent='Saving…'; button.closest('.pcc-command').append(status);
   }
   try {
-    await api("/phone", { action: "settings-save", autoReplyEnabled: d.autoReplyEnabled === false });
-    toast(d.autoReplyEnabled === false ? "Auto text-back is on" : "Auto text-back is off");
-    renderPhone();
-  } catch (err) { toast(err.message); }
+    const saved = await api('/phone', payload);
+    S.phoneRequest = (S.phoneRequest || 0) + 1;
+    S.phone = saved;
+    phonePendingSave = null;
+    if (S.tab === 'phone') {
+      const scroller = view(); const y = scroller?.scrollTop || 0;
+      await renderPhone(saved);
+      if (scroller) scroller.scrollTop = y;
+    }
+    return true;
+  } catch (error) {
+    if (button?.isConnected) { button.classList.toggle('on', previous === 'true'); button.setAttribute('aria-checked',previous); }
+    toast("Couldn't confirm the change. " + error.message, 'err');
+    return false;
+  } finally {
+    if (phonePendingSave === pending) phonePendingSave = null;
+    buttons.forEach(b => b.disabled = false); button?.removeAttribute('aria-busy'); status?.remove();
+    if (S.tab === 'phone') document.querySelectorAll('[data-autotoggle]').forEach(b=>{
+      b.disabled=false; b.removeAttribute('aria-busy');
+      const enabled=(S.phone?.automations||[]).find(r=>r.key===b.dataset.autotoggle)?.enabled===true;
+      b.classList.toggle('on',enabled); b.setAttribute('aria-checked',String(enabled));
+    });
+    document.querySelectorAll('.command-save-status').forEach(e=>e.remove());
+  }
+}
+
+async function toggleAutomation(d, key) {
+  if (phonePendingSave) return;
+  d = S.phone || d;
+  const row = (d.automations || []).find(x => x.key === key);
+  if (key === 'frontdesk') return toggleFrontDesk(d);
+  if (key === 'reminders') return toggleApptReminders(d);
+  const enabled = !(row?.enabled ?? (key === 'crew-reminders' ? d.crewReminderEnabled === true : key === 'dispatcher' ? d.dispatcherEnabled === true : d.autoReplyEnabled !== false));
+  if (key === 'google-review-request' && enabled && !d.reviewRequests?.url) return reviewRequestSheet(d);
+  const field = {'google-review-request':'reviewRequestsEnabled','crew-reminders':'crewReminderEnabled',dispatcher:'dispatcherEnabled',autoreply:'autoReplyEnabled'}[key];
+  if (!field) return;
+  const saved = await savePhoneSwitch(d,key,enabled,{action:key === 'google-review-request' ? 'review-settings-save' : 'settings-save',[field]:enabled});
+  if (!saved) return;
+  toast((row?.title || 'Command') + (enabled ? ' is on' : ' is off'));
+  if (enabled && ['dispatcher','crew-reminders'].includes(key)) {
+    try {
+      const roster = await api('/crew',{action:'list'});
+      if (S.tab !== 'phone' || phonePendingSave || (S.phone?.automations || []).find(x=>x.key===key)?.enabled !== true) return;
+      const crew = (roster.employees || []).filter(e=>e.active !== false);
+      if (key === 'dispatcher' && crew.filter(e=>(e.phone||'').trim()).length >= 2) dispatchOrderSheet(crew.filter(e=>(e.phone||'').trim()));
+      if (key === 'crew-reminders' && !crew.some(e=>e.workEnd)) { toast('Set shift hours on the roster so Ledger knows when shifts end'); crewRosterSheet(); }
+    } catch (error) { toast('Saved. Could not check the crew roster — open Crew to check dispatch order and shift hours.','err'); }
+  }
 }
 
 function reviewRequestSheet(d) {
@@ -6579,11 +6600,8 @@ async function toggleApptReminders(d) {
     const ok = confirm(`Turn on appointment reminders?\n\nEvery day at ${apptPrettyTime(r.time || "18:00")}, Ledger will text everyone booked in for the next day from your business number, asking them to reply Y to confirm or C to change it.\n\nEach customer is texted once per appointment, ever. Nobody is texted twice.\n\nIf you haven't already, check "See tonight's list" first — it shows you exactly who would get a text and exactly what it says, and sends nothing.\n\nYou can turn this off any time.`);
     if (!ok) return;
   }
-  try {
-    await api("/phone", { action: "settings-save", reminderEnabled: r.enabled !== true });
+  if (await savePhoneSwitch(d, 'reminders', r.enabled !== true, {action:'settings-save', reminderEnabled:r.enabled !== true}))
     toast(r.enabled !== true ? "Reminders are on" : "Reminders are off");
-    renderPhone();
-  } catch (err) { toast(err.message); }
 }
 
 function apptReminderSheet(d) {
@@ -6652,11 +6670,8 @@ async function toggleFrontDesk(d) {
     const ok = confirm("Turn on Front Desk?\n\nFrom now on, when someone calls, misses you, and texts back, Ledger will reply to them on its own — quoting your real QuickBooks prices and booking real times on your calendar. No one has to approve each message.\n\nIt can never invoice, take payment, or discuss a bill, and anything it's unsure about it hands straight to you.\n\nYou can turn this off any time.");
     if (!ok) return;
   }
-  try {
-    await api("/phone", { action: "settings-save", frontDeskEnabled: fd.enabled !== true });
+  if (await savePhoneSwitch(d, 'frontdesk', fd.enabled !== true, {action:'settings-save', frontDeskEnabled:fd.enabled !== true}))
     toast(fd.enabled !== true ? "Front Desk is on" : "Front Desk is off");
-    renderPhone();
-  } catch (e) { toast(e.message); }
 }
 
 function frontDeskSheet(d) {
@@ -10126,4 +10141,11 @@ function wirePhoneOS(d){
 }
 function phoneComposeSheet(d){const wrap=sheet('<h2>New text</h2><p class="sh-sub">Send from your business number.</p><label class="field"><span>To</span><input id="pos-to" type="tel" placeholder="+1 555 555 0123"></label><label class="field"><span>Message</span><textarea id="pos-new-body" rows="4" placeholder="Write a message…"></textarea></label><p class="note err" id="pos-send-error"></p><button class="btn primary" id="pos-send-new">Send text</button>');wrap.querySelector('#pos-send-new').onclick=async e=>{const to=wrap.querySelector('#pos-to').value.trim(),body=wrap.querySelector('#pos-new-body').value.trim();if(!to||!body){wrap.querySelector('#pos-send-error').textContent='Enter a phone number and a message.';return;}e.currentTarget.disabled=true;try{await api('/phone',{action:'reply',to_number:to,body});closeSheet();S.phoneInboxRows=null;await renderPhone();}catch(ex){wrap.querySelector('#pos-send-error').textContent=ex.message;e.target.disabled=false;smsSendFailed(ex);}};}
 
-setInterval(()=>{if(S.tab!=="phone"||document.hidden||document.querySelector("#sheetwrap")||document.activeElement?.id==="pos-search"||view()?.scrollTop>100)return;api("/phone",{action:"board"}).then(d=>{if(S.tab!=="phone"||document.querySelector("#sheetwrap")||document.activeElement?.id==="pos-search")return;renderPhone(d);}).catch(()=>{});},20000);
+setInterval(async()=>{
+ if(S.tab!=="phone"||phonePendingSave||document.hidden||document.querySelector("#sheetwrap")||document.activeElement?.id==="pos-search"||view()?.scrollTop>100)return;
+ const revision=S.phoneRequest;
+ try { const d=await api("/phone",{action:"board"});
+  if(S.tab!=="phone"||phonePendingSave||revision!==S.phoneRequest||document.querySelector("#sheetwrap")||document.activeElement?.id==="pos-search"||view()?.scrollTop>100)return;
+  await renderPhone(d);
+ } catch (_) {}
+},20000);

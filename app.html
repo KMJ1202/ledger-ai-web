@@ -1744,8 +1744,14 @@ nav#tabs button .cnt{position:absolute;top:4px;right:18%;min-width:17px;height:1
 .phone-os{width:100%;min-width:0;box-sizing:border-box}.phone-os-content{min-width:0}.pos-header{padding:0;flex-shrink:0}.pos-brand{min-width:0}.pos-header h1{text-align:left}.pos-circle{flex-shrink:0}.pos-back{align-self:flex-start;padding:5px 0;min-height:36px;color:#9ec8ff;background:none;border:0;font-size:12px;cursor:pointer}.pos-dock{bottom:calc(var(--bot) + 16px)}body:has(.phone-os) nav#tabs{display:none}body:has(.phone-os) main{padding-bottom:calc(var(--bot) + 20px)}.phone-os{padding-bottom:130px}
 
 .pos-header{gap:10px;margin-top:5px}.pos-header .pos-back{font-size:34px;width:24px;min-height:44px;margin:0;padding:0;align-self:center;flex-shrink:0}.pos-header-actions{display:flex;align-items:center;gap:9px;margin-left:auto}.pos-header .pos-brand{flex:1}.pos-header .pos-compose{width:40px;height:40px}.pos-header .pos-circle{width:40px;height:40px}.pos-header h1{font-size:27px}.pos-status{padding-bottom:10px}.pos-search{margin-top:3px}.pos-header .pos-eyebrow{font-size:8px;letter-spacing:1.5px}
+/* Keep business text out of large offscreen backdrop-filter textures. */
+.panel,.console,.glass{backdrop-filter:none;-webkit-backdrop-filter:none}
+button,a,input,select,[role="switch"]{touch-action:manipulation}
+.command-save-status{display:block;color:var(--cyan);font-size:12px;padding-top:8px}
+.pswx[aria-busy="true"]{opacity:1}
+@media (hover:none) and (pointer:coarse){#root::before,#root::after{animation:none}}
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=151"></script>
+<script type="module" src="app.js?v=152"></script>
 </body></html>
