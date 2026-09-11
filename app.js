@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 149;
+const APP_BUILD = 150;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -4918,21 +4918,20 @@ function formatE164(n) {
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : (n || "");
 }
 
-async function renderPhone() {
-  skeleton(3);
+async function renderPhone(cachedBoard = null) {
+  if (!cachedBoard) skeleton(3);
   try {
-    const d = await api("/phone", { action: "board" });
+    const d = cachedBoard || await api("/phone", { action: "board" });
     S.phone = d;
     tabBadge("phone", (d.needsYou || []).length);
-    view().innerHTML = `<div class="sect">
+    view().innerHTML = `<div class="sect phone-command-center">
       ${pageHead("Phone")}
       ${d.hasNumber ? "" : requestNumberCard(d.pendingRequest, d.numberLocked)}
       ${/* The number and its setup guide sit ABOVE the lane switcher, not in a
             lane. Call forwarding is the thing that has to be working before any
             of this tab means anything, and a setup guide found at the bottom of
             a third sub-tab is a setup guide nobody reads. */""}
-      ${d.hasNumber ? phoneSilentStrip(d) : ""}
-      ${d.hasNumber ? phoneNowCard(d) : ""}
+      ${d.hasNumber ? phoneCommandHero(d) : ""}
       ${d.hasNumber ? phoneLaneSwitcher(d) : ""}
       ${d.hasNumber ? phoneLaneBody(d) : ""}
     </div>`;
@@ -4942,13 +4941,13 @@ async function renderPhone() {
     if (d.hasNumber) {
       if ($("phsetup")) $("phsetup").onclick = () => phoneSetupSheet(d);
       if ($("phsettings")) $("phsettings").onclick = () => phoneSettingsSheet(d);
-      on("[data-plane]", "click", (e) => { S.phoneLane = e.currentTarget.dataset.plane; renderPhone(); });
+      on("[data-plane]", "click", (e) => { S.phoneLane = e.currentTarget.dataset.plane; renderPhone(d); });
       if ($("parm")) $("parm").onclick = () => phoneArmLine(d);
       on("[data-pnowtext]", "click", (e) => phoneTextNumber(d, e.currentTarget.dataset.pnowtext));
       on("[data-pnowbook]", "click", (e) => phoneBookNumber(e.currentTarget.dataset.pnowbook));
       on("[data-needscall]", "click", (e) => e.stopPropagation());
       on("[data-needsdel]", "click", (e) => { e.stopPropagation(); phoneNeedsDelete(d, e.currentTarget.dataset.needsdel); });
-      if ($("pjump")) $("pjump").onclick = () => { S.phoneLane = "autopilot"; renderPhone(); };
+      if ($("pjump")) $("pjump").onclick = () => { S.phoneLane = "autopilot"; renderPhone(d); };
       on("[data-pcell]", "click", (e) => {
         const k = e.currentTarget.dataset.pcell;
         S.phoneDayCell = S.phoneDayCell === k ? null : k;
@@ -5432,21 +5431,39 @@ async function playVoicemail(eventId) {
 // (Kyle 2026-09-06, Phone tab parity): Needs You · Today · Auto. Work first,
 // settings last. The Needs You badge rides in the bar, so nothing waiting can
 // hide behind the landing choice.
-const PHONE_LANES = [["inbox", "Needs You"], ["activity", "Today"], ["autopilot", "Auto"]];
+const PHONE_LANES = [["inbox", "Inbox"], ["activity", "Today"], ["autopilot", "Commands"]];
 const PHONE_LANE_HINT = {
   inbox: "Calls, texts and voicemail waiting on you",
   activity: "Today's jobs, your lead pipeline and the call feed",
-  autopilot: "The five things Ledger can answer for you",
+  autopilot: "Your business, on autopilot. You choose what runs.",
 };
 function phoneLane() { return PHONE_LANES.some(([k]) => k === S.phoneLane) ? S.phoneLane : "inbox"; }
 
+function phoneCommandHero(d) {
+  const rows=d.automations||[], active=rows.filter(r=>r.enabled).length;
+  const waiting=d.needsYouTotal ?? (d.needsYou||[]).length;
+  return `<section class="pcc-hero" aria-label="Phone command center">
+    <div class="pcc-orbit" aria-hidden="true"><i></i><i></i><i></i><span>${segIc("autopilot")}</span></div>
+    <div class="pcc-kicker"><span class="pcc-dot"></span> BUSINESS COMMUNICATIONS</div>
+    <h2>Command center<span>Your business. In sync.</span></h2>
+    <div class="pcc-line">${esc(formatE164(d.number?.e164))}<span>${d.openNow ? "Open now" : "After hours"}</span></div>
+    <div class="pcc-metrics">
+      <button data-plane="inbox" class="${waiting?'attention':''}"><strong>${waiting}</strong><span>Need you</span></button>
+      <button data-plane="activity"><strong>${d.metrics?.callsToday??0}</strong><span>Calls today</span></button>
+      <button data-plane="autopilot"><strong>${active}<small>/${rows.length}</small></strong><span>Commands on</span></button>
+    </div>
+  </section>`;
+}
+function phoneCommandIcon(key){return {frontdesk:"✦",autoreply:"↗",reminders:"◷",dispatcher:"⇄","crew-reminders":"◴","google-review-request":"☆"}[key]||"✦";}
+const PHONE_COMMAND_ORDER=["frontdesk","autoreply","reminders","google-review-request","dispatcher","crew-reminders"];
+
 function phoneLaneSwitcher(d) {
   const lane = phoneLane();
-  const need = (d.needsYou || []).length;
+  const need = d.needsYouTotal ?? (d.needsYou || []).length;
   const rows = d.automations || [];
   const armed = rows.filter((r) => r.enabled).length;
   return `<div class="plane">${PHONE_LANES.map(([k, label]) => `
-    <button class="${lane === k ? "on" : ""}" data-plane="${k}">${segIc(k)}${label}${k === "inbox" && need ? `<i class="badge">${need} waiting</i>` : ""}${k === "autopilot" && rows.length ? `<i class="badge dim">${armed}/${rows.length}</i>` : ""}</button>`).join("")}</div>
+    <button class="${lane === k ? "on" : ""}" data-plane="${k}">${segIc(k)}${label}${k === "inbox" && need ? `<i class="badge">${need}</i>` : ""}${k === "autopilot" && rows.length ? `<i class="badge dim">${armed}/${rows.length}</i>` : ""}</button>`).join("")}</div>
   <p class="pdesc">${esc(PHONE_LANE_HINT[lane])}</p>`;
 }
 
@@ -5648,6 +5665,7 @@ function phoneInboxLane(d) {
   const appt = (d.needsYou || []).find((i) => i.kind === "unconfirmed");
   const total = d.needsYouTotal || 0;
   return `
+    ${phoneNowCard(d)}
     ${items.length ? `<div class="panel flush">${items.map((it) => `
       <div class="prow" data-needs="${esc(it.id)}">
         <span class="needsdot" style="background:${NEEDS_TONE[it.tone] || "var(--cyan)"}"></span>
@@ -5778,35 +5796,14 @@ function phoneSpark(series, tone) {
 }
 
 function phoneAutopilotLane(d) {
-  const render = (text) => esc(text).replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--gold)">$1</b>');
-  const rows = phoneRankedAutomations(d);
-  const costing = rows.filter((r) => r.impact?.tone === "cost").length;
-  if (!rows.length) {
-    return `<p class="zonehead">THIS WEEK, WITHOUT YOU TOUCHING IT</p>
-      <div class="panel"><p class="sub" style="margin:0">Nothing is running yet. Turn on Front Desk, reminders or auto text-back and this is where they report in.</p></div>
-      ${phoneAutopilotFeed(d)}`;
-  }
-  return `
-    ${phoneArmature(d)}
-    <p class="zonehead${costing ? " cost" : ""}">${costing
-      ? `${costing} SWITCH${costing === 1 ? " IS" : "ES ARE"} COSTING YOU`
-      : "THIS WEEK, WITHOUT YOU TOUCHING IT"}</p>
-    <div class="panel flush">${rows.map((x) => {
-      const tone = PHONE_TONE_VAR[x.impact?.tone] || "#39424f";
-      return `<div class="prow autorow" data-auto="${esc(x.key)}" style="--tone:${tone}">
-        <span class="autorail"></span>
-        <div style="flex:1;min-width:0">
-          <div class="needst">${esc(x.title)}${x.impact?.headline
-            ? `<span class="pihead">${esc(x.impact.headline)}</span>` : ""}</div>
-          <div class="needsm">${render(x.result)}</div>
-        </div>
-        ${phoneSpark(x.series, tone)}
-        <button class="pswx${x.enabled ? " on" : ""}" data-autotoggle="${esc(x.key)}"
-          role="switch" aria-checked="${x.enabled ? "true" : "false"}"
-          aria-label="${esc(x.title)}"><i></i></button>
-      </div>`;
-    }).join("")}</div>
-    ${phoneAutopilotFeed(d)}`;
+ const rows=(d.automations||[]).slice().sort((a,b)=>PHONE_COMMAND_ORDER.indexOf(a.key)-PHONE_COMMAND_ORDER.indexOf(b.key));
+ return `<div class="pcc-section-title"><div><span class="pcc-kicker">AUTOPILOT</span><h3>Your commands</h3></div><span class="pcc-count">${rows.filter(r=>r.enabled).length} active</span></div>
+ <div class="pcc-command-grid">${rows.map(x=>`<article class="pcc-command ${x.enabled?'is-on':''} ${x.key==='google-review-request'?'is-review':''}">
+   <div class="pcc-command-top"><button class="pcc-command-open" data-auto="${esc(x.key)}"><span class="pcc-glyph" aria-hidden="true">${phoneCommandIcon(x.key)}</span><strong>${esc(x.title)}</strong></button>
+   <button class="pswx${x.enabled?' on':''}" data-autotoggle="${esc(x.key)}" role="switch" aria-checked="${!!x.enabled}" aria-label="${esc(x.title)}"><i></i></button></div>
+   <button class="pcc-command-detail" data-auto="${esc(x.key)}"><span>${esc(x.result).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}</span>
+   <div class="pcc-command-bottom"><small><i class="${x.enabled?'active':''}"></i>${esc(x.impact?.headline || (x.enabled?'On':'Off'))}</small>${phoneSpark(x.series,'var(--cyan)')}<span aria-hidden="true">↗</span></div></button>
+ </article>`).join('')}</div>${phoneAutopilotFeed(d)}`;
 }
 
 // THE PROOF TICKER. Grouped by day, newest first, and every line is a sentence
@@ -5906,6 +5903,7 @@ function openNeedsYou(d, id) {
 // and its own settings. The switch has to live here now that the two fat cards
 // that used to carry it are gone.
 function openAutomation(d, key) {
+  if(key === "google-review-request") return reviewRequestSheet(d);
   const a = (d.automations || []).find((x) => x.key === key);
   if (!a) return;
   const render = (text) => esc(text).replace(/\*\*(.+?)\*\*/g, '<b style="color:var(--gold)">$1</b>');
@@ -5952,6 +5950,13 @@ function openAutomation(d, key) {
 // you touched it is a bug waiting for the day you touch the other one.
 async function toggleAutomation(d, key) {
   const row = (d.automations || []).find((x) => x.key === key);
+  if (key === "google-review-request") {
+    if (!row?.enabled && !d.reviewRequests?.url) return reviewRequestSheet(d);
+    const buttons=[...document.querySelectorAll('[data-autotoggle="google-review-request"]')];buttons.forEach(b=>b.disabled=true);
+    try { await api("/phone",{action:"review-settings-save",reviewRequestsEnabled:!row?.enabled});toast(row?.enabled?"Review requests are off":"Review requests are on");await renderPhone(); }
+    catch(e){toast(e.message,"err");buttons.forEach(b=>b.disabled=false);}
+    return;
+  }
   if (key === "frontdesk") return toggleFrontDesk(d);
   if (key === "reminders") return toggleApptReminders(d);
   if (key === "crew-reminders") {
@@ -5991,6 +5996,25 @@ async function toggleAutomation(d, key) {
     toast(d.autoReplyEnabled === false ? "Auto text-back is on" : "Auto text-back is off");
     renderPhone();
   } catch (err) { toast(err.message); }
+}
+
+function reviewRequestSheet(d) {
+ const r=d.reviewRequests||{};
+ sheet(`<div class="pcc-kicker">REPUTATION · ON AUTOPILOT</div><h2>Google Review Request</h2>
+ <p class="sub">A thoughtful follow-up, without another thing on your list.</p>
+ <div class="pcc-journey"><span>Invoice paid</span><b>→</b><span>Thank-you text</span><b>→</b><span>Google review</span></div>
+ <p class="note">After a Ledger or QuickBooks invoice is fully paid, Ledger texts the customer once from your business number. Future payments only. Sends between 8am and 8pm in your business’s time zone, using your texting allowance. Customers can reply STOP.</p>
+ <label class="pcc-field">Your Google review link<input id="review-url" type="url" value="${esc(r.url||'')}" placeholder="Paste your Google ‘Ask for reviews’ link" autocomplete="off"></label>
+ <p class="sub">${r.url?'Your business’s link is ready.':'In Google Business Profile, choose Ask for reviews → Copy link.'}</p>
+ ${r.preview?`<details class="pcc-preview"><summary>Message preview</summary><p>${esc(r.preview)}</p></details>`:''}
+ ${r.error?`<p class="note" role="alert">${esc(r.error)}</p>`:''}
+ <div class="rowbtns"><button class="btn em" id="review-save">${r.enabled?'Save link':'Save & turn on'}</button>${r.enabled?'<button class="btn" id="review-off">Turn off</button>':''}</div>
+ <h3 style="margin-top:24px">Recent requests</h3>
+ <p class="sub">${r.sentWeek||0} sent this week · ${r.queued||0} waiting</p>
+ ${(r.recent||[]).map(x=>`<div class="pcc-history"><strong>${esc(x.customer_name||'Customer')} · ${esc(x.invoice_number||'Invoice')}</strong><span>${esc({sent:'Sent',queued:'Waiting',sending:'Sending',skipped:'Skipped',needs_check:'Check delivery'}[x.status]||x.status)} · ${x.source==='native'?'Ledger invoices':'QuickBooks'}</span>${x.reason?`<small>${esc(x.reason)}</small>`:''}</div>`).join('')||'<p class="sub">Your first request will appear here after a future payment. No old invoices will be texted.</p>'}`,sh=>{
+ const save=sh.querySelector('#review-save');save.onclick=async()=>{save.disabled=true;save.textContent='Saving…';try{await api('/phone',{action:'review-settings-save',reviewURL:sh.querySelector('#review-url').value,reviewRequestsEnabled:true});closeSheet();toast('Google Review Request is on');renderPhone();}catch(e){toast(e.message,'err');save.disabled=false;save.textContent=r.enabled?'Save link':'Save & turn on';}};
+ const off=sh.querySelector('#review-off');if(off)off.onclick=async()=>{off.disabled=true;try{await api('/phone',{action:'review-settings-save',reviewRequestsEnabled:false});closeSheet();toast('Review requests are off');renderPhone();}catch(e){toast(e.message,'err');off.disabled=false;}};
+ });
 }
 
 // Dispatcher: standing dispatch order. 1 = first call. Arrows, not drag —
