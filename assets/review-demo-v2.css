@@ -1,0 +1,16 @@
+/* Actual-footage Google Reviews demo — isolated marketing component. */
+.review-demo{margin:42px auto 30px;text-align:left;max-width:1100px;position:relative}
+.review-demo .demo-kicker{font-weight:700;font-size:11px;line-height:1.5;letter-spacing:.16em;text-transform:uppercase;color:#58c7ff;margin:0 0 10px}
+.review-demo h2{font-size:clamp(24px,4vw,38px);line-height:1.15;margin:0 0 12px;letter-spacing:-.035em;color:#f3f7ff}
+.review-demo .demo-intro{font-size:16px;line-height:1.65;color:#a8bad0;margin:0 0 23px}
+.review-demo .demo-frame{position:relative;padding:2px;border-radius:20px;overflow:hidden;isolation:isolate;background:#203d53;box-shadow:0 20px 75px #0008,0 0 45px #259bff15}
+.review-demo .demo-frame:before{content:"";position:absolute;z-index:-1;inset:-90%;background:conic-gradient(from 0deg,transparent 15%,#55caff 28%,transparent 38%,transparent 63%,#8872ec 76%,transparent 88%);animation:review-orbit 14s linear infinite}
+.review-demo video{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:contain;border-radius:18px;background:#050a12}
+.review-demo .demo-caption{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;line-height:1.5;color:#a8bad0;margin:12px 2px 0}
+.review-demo .demo-caption a{color:#6ecfff;text-decoration:underline;text-underline-offset:3px}
+.review-demo .demo-transcript{font-size:13px;line-height:1.6;color:#a8bad0;margin-top:12px}
+.review-demo .demo-transcript summary{cursor:pointer;width:fit-content}
+.review-demo .demo-transcript p{margin:10px 0}
+@keyframes review-orbit{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.review-demo .demo-frame:before{animation:none}}
+@media(max-width:600px){.review-demo{margin-top:32px}.review-demo .demo-intro{font-size:14px}.review-demo .demo-frame{border-radius:12px}.review-demo video{border-radius:10px}}
