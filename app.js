@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 148;
+const APP_BUILD = 149;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -530,7 +530,7 @@ function appView() {
     sys("Hi — I'm Ledger. Ask me anything about your business: sales, who owes you, your week ahead.");
     // Say what is actually connected instead of promising live books on an empty workspace.
     connectionStates().then(async (map) => {
-      if (map.quickbooks || map.google_calendar) return;
+      if (S.connError || map.quickbooks || map.google_calendar) return;
       if (S.booksProvider === undefined) {
         try { S.booksProvider = (await booksApi({ action: "settings" })).provider; } catch { S.booksProvider = "quickbooks"; }
       }
@@ -1211,10 +1211,14 @@ async function loadHomeSetup() {
     ]);
   } catch {}
   if (!$("homesetup")) return;
+  if (S.connError || !bill || !bs) {
+    slot.innerHTML = '<div class="panel"><p class="note">Setup status is temporarily unavailable. Your saved settings are unchanged.</p><button class="btn ghost" id="setupretry">Retry setup status</button></div>';
+    slot.querySelector("#setupretry").onclick = loadHomeSetup; return;
+  }
   // Step 1 is a CHOICE, not a QuickBooks nag (2026-09-05): QuickBooks connected
   // or built-in books picked on purpose both count as done.
   const books = !!map.quickbooks || !!bs?.chosen;
-  const cal = !!map.google_calendar;
+  const cal = !!map.google_calendar && map.google_calendar.last_error_code !== "needs_reconnect";
   // A card on file during the trial IS the card step done — offering "Add
   // card" again opened a second Checkout (sim bug 1, double-billing risk).
   const paid = !!bill && (["active", "past_due"].includes(bill.subscription_status) || !!bill.card_on_file);
@@ -6036,7 +6040,7 @@ async function dispatchOrderSheet(preloaded) {
 
 const CREW_DAY_LABELS = [["mon", "M"], ["tue", "T"], ["wed", "W"], ["thu", "T"], ["fri", "F"], ["sat", "S"], ["sun", "S"]];
 const crewH = (sec) => `${(Math.round((sec || 0) / 360) / 10).toFixed(1)}h`;
-const crewT = (iso) => iso ? new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "—";
+const crewT = (iso) => iso ? new Date(iso).toLocaleTimeString(undefined, { timeZone: S.businessTimezone || "UTC", hour: "numeric", minute: "2-digit" }) : "—";
 
 function crewShiftLabel(e) {
   if (!e.workStart && !e.workEnd) return "No shift set";
@@ -6045,17 +6049,24 @@ function crewShiftLabel(e) {
 }
 
 function crewRangeDates(range) {
-  const day = (d) => d.toLocaleDateString("en-CA");
-  const today = new Date();
-  if (range === "today") return [day(today), day(today)];
-  const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-  if (range === "week") { const sun = new Date(monday); sun.setDate(monday.getDate() + 6); return [day(monday), day(sun)]; }
-  if (range === "last-week") {
-    const lm = new Date(monday); lm.setDate(monday.getDate() - 7);
-    const ls = new Date(monday); ls.setDate(monday.getDate() - 1);
-    return [day(lm), day(ls)];
+  const day = businessDay();
+  const today = new Date(day + "T12:00:00Z");
+  const shift = (by) => { const d = new Date(today); d.setUTCDate(d.getUTCDate() + by); return d.toISOString().slice(0, 10); };
+  const monday = -((today.getUTCDay() + 6) % 7);
+  if (range === "today") return [day, day];
+  if (range === "week") return [shift(monday), shift(monday + 6)];
+  if (range === "last-week") return [shift(monday - 7), shift(monday - 1)];
+  return [day.slice(0, 8) + "01", day];
+}
+function crewCsv(d) {
+  const cell = (v) => { let text = String(v ?? ""); if (/^[\s]*[=+@-]/.test(text)) text = "'" + text; return '"' + text.replace(/"/g, '""') + '"'; };
+  const local = (v) => v ? new Date(v).toLocaleString("en-CA", {timeZone:d.timezone || "UTC",hour12:false}) : "";
+  const rows = [["Employee","Date","Clock in","Clock out","Hours","Regular hours","Overtime hours","Status","Corrected","Note","Timezone"]];
+  for (const c of d.cards || []) {
+    for (const day of c.days || []) for (const p of day.punches || []) rows.push([c.name,day.date,local(p.in),local(p.out),p.needs_review || !p.out ? "" : (p.seconds / 3600).toFixed(4),"","",p.needs_review ? "Needs correction" : !p.out ? "On the clock — provisional" : "Complete",p.corrected ? "yes" : "",p.review_note || p.note || "",d.timezone]);
+    rows.push([c.name,"TOTAL","","",(c.total_seconds/3600).toFixed(4),(c.regular_seconds/3600).toFixed(4),(c.ot_seconds/3600).toFixed(4),c.needs_review ? "Needs correction" : c.on_clock ? "Provisional" : "Complete","","",d.timezone]);
   }
-  return [day(new Date(today.getFullYear(), today.getMonth(), 1)), day(today)];
+  return rows.map(r=>r.map(cell).join(",")).join("\r\n");
 }
 
 const CREW_RANGES = [["today", "Today"], ["week", "This week"], ["last-week", "Last week"], ["month", "Month"]];
@@ -6065,7 +6076,8 @@ async function crewHoursSheet(range = "week") {
   let d;
   try { d = await api("/crew", { action: "timecards", from, to }); }
   catch (err) { toast(err.message, "err"); return; }
-  const cards = (d.cards || []).filter((c) => c.total_seconds > 0 || c.on_clock || c.active);
+  if (d.timezone) S.businessTimezone = d.timezone;
+  const cards = (d.cards || []).filter((c) => c.total_seconds > 0 || c.on_clock || c.active || c.needs_review);
   const otBits = [];
   if (d.ot_daily_hours != null) otBits.push(`over ${d.ot_daily_hours}h/day`);
   if (d.ot_weekly_hours != null) otBits.push(`over ${d.ot_weekly_hours}h/week`);
@@ -6082,7 +6094,7 @@ async function crewHoursSheet(range = "week") {
         <p class="note" style="margin-top:2px">Regular ${crewH(c.regular_seconds)}${c.ot_seconds > 0 ? ` · <b style="color:var(--gold)">OT ${crewH(c.ot_seconds)}</b>` : " · no OT"}</p>
         ${(c.days || []).map((day) => `
           <div class="kv" style="margin-top:6px"><span>${esc(day.date)}</span><span>${crewH(day.seconds)}</span></div>
-          ${(day.punches || []).map((p) => `<p class="note" style="margin:2px 0 0 4px">${crewT(p.in)} → ${p.out ? crewT(p.out) : "<b>still on the clock</b>"}${p.corrected ? " · corrected" : ""}${p.note ? " · " + esc(p.note) : ""}</p>`).join("")}
+          ${(day.punches || []).map((p) => `<p class="note" style="margin:2px 0 0 4px">${crewT(p.in)} → ${p.needs_review ? "<b>needs correction — hours not counted</b>" : p.out ? crewT(p.out) : "<b>still on the clock — provisional</b>"}${p.corrected ? " · corrected" : ""}${p.review_note || p.note ? " · " + esc(p.review_note || p.note) : ""}</p>`).join("")}
         `).join("") || '<p class="note" style="margin-top:6px">No punches in this range.</p>'}
       </div>`).join("")
       : '<div class="panel" style="margin-top:12px;text-align:center"><p class="sub" style="margin:0">No crew members yet — add them under Roster &amp; shifts.</p></div>'}
@@ -6097,12 +6109,7 @@ async function crewHoursSheet(range = "week") {
     sh.querySelector("#crewot").onclick = () => { closeSheet(); crewOtSheet(d, range); };
     const csv = sh.querySelector("#crewcsv");
     if (csv) csv.onclick = () => {
-      const rows = [["Employee", "Date", "In", "Out", "Hours", "Corrected", "Note"]];
-      for (const c of cards) for (const day of c.days || []) for (const p of day.punches || []) {
-        rows.push([c.name, day.date, p.in || "", p.out || "", "", p.corrected ? "yes" : "", p.note || ""]);
-      }
-      for (const c of cards) rows.push([c.name, "TOTAL", "", "", crewH(c.total_seconds), c.ot_seconds > 0 ? `OT ${crewH(c.ot_seconds)}` : "", ""]);
-      const blob = new Blob([rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")], { type: "text/csv" });
+      const blob = new Blob([crewCsv(d)], { type: "text/csv;charset=utf-8" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob); a.download = `crew-hours-${from}-to-${to}.csv`; a.click();
       URL.revokeObjectURL(a.href);
@@ -7330,6 +7337,7 @@ function nativeProfileSheet(c) {
     </div>` : ""}
     <button class="btn primary wide" style="margin-top:9px" id="cask">&#10022; Ask Ledger about ${esc((c.name || "").split(" ")[0] || c.name)}</button>
 
+    <div id="hubslot" style="margin-top:12px"></div>
     <div class="kpis" style="margin-top:14px">
       <div class="kpi cyan"><small>Lifetime sales</small><b>${money0(lifetime)}</b></div>
       <div class="kpi em"><small>Average sale</small><b>${money0(avg)}</b></div>
@@ -7383,6 +7391,7 @@ function nativeProfileSheet(c) {
       <button class="btn ghost" id="crev">&#11088; Ask for review</button>
       <button class="btn primary" id="cinv">New invoice</button>
     </div>`, (sh) => {
+    clientHubCard(sh.querySelector("#hubslot"), c);
     sh.querySelector("#cask").onclick = () => {
       closeSheet(); openChat();
       $("box").value = `Full briefing on ${c.name}: current balance, open and overdue invoices, purchase history, and anything I should know before I contact them.`;
@@ -8412,14 +8421,29 @@ const CONNECTORS = [
 async function connectionStates() {
   try {
     const t = await token();
-    const r = await fetch(`${SUPA_URL}/rest/v1/connector_accounts?status=eq.connected&select=connector,display_name,last_verified_at&order=updated_at.desc`,
+    const r = await fetch(`${SUPA_URL}/rest/v1/connector_accounts?status=eq.connected&select=connector,display_name,last_verified_at,last_error_code&order=updated_at.desc`,
       { headers: { apikey: SUPA_KEY, Authorization: "Bearer " + t } });
+    if (!r.ok) throw new Error("Connection status is temporarily unavailable.");
     const rows = await r.json();
+    if (!Array.isArray(rows)) throw new Error("Connection status is temporarily unavailable.");
     const map = {};
-    if (Array.isArray(rows)) rows.forEach((row) => { if (!map[row.connector]) map[row.connector] = row; });
-    if (Array.isArray(rows)) S.connMap = map;
+    rows.forEach(row => { if (!map[row.connector]) map[row.connector] = row; });
+    S.connMap = map; S.connError = false;
     return map;
-  } catch { return {}; }
+  } catch { S.connError = true; return S.connMap || {}; }
+}
+function connectionStatus(row) {
+  return S.connError ? "Unable to check" : row?.last_error_code === "needs_reconnect" ? "Reconnect needed" : row ? "Connected" : "Not connected";
+}
+function renderConnectionRows(slot, map) {
+  slot.innerHTML = (S.connError ? '<p class="note err">Connection status is temporarily unavailable. Your saved connections have not been removed.</p><button class="btn ghost" data-conn-retry>Retry status</button>' : "") + CONNECTORS.map(c => {
+    const row = map[c.key], status = connectionStatus(row);
+    const disconnect = row && c.key === "quickbooks" ? '<button class="btn ghost" data-qbo-disconnect="1">Disconnect</button>' : "";
+    return `<div class="kv"><span>${esc(c.name)}<br><small style="color:var(--dim)">${esc(row?.display_name || c.detail)}</small></span><span style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap"><button class="btn ghost" data-connect="${c.start}" ${S.connError ? "disabled" : ""}>${status === "Connected" ? '<span style="color:var(--emerald)">Connected</span> · Reconnect' : status === "Not connected" ? "Connect" : esc(status)}</button>${disconnect}</span></div>`;
+  }).join("");
+  wireConnect(slot); wireDisconnectQuickBooks(slot);
+  const retry = slot.querySelector("[data-conn-retry]");
+  if (retry) retry.onclick = async () => { retry.disabled = true; const latest = await connectionStates(); if (slot.isConnected) renderConnectionRows(slot, latest); };
 }
 
 // Inventory & pricing — the catalog the assistant sells from. Two boxes on
@@ -8687,18 +8711,7 @@ async function businessSheet() {
       } catch (err) { btn.disabled = false; btn.textContent = "Upload logo"; toast(err.message, "err"); }
     };
     connectionStates().then((map) => {
-      const slot = sh.querySelector("#connslot"); if (!slot) return;
-      slot.innerHTML = CONNECTORS.map((c) => {
-        const row = map[c.key];
-        const live = !!row;
-        const disconnect = live && c.key === "quickbooks"
-          ? `<button class="btn ghost" data-qbo-disconnect="1" style="padding:6px 11px;font-size:12px;color:var(--red)">Disconnect</button>` : "";
-        return `<div class="kv"><span>${esc(c.name)}<br><small style="color:var(--dim)">${esc(row?.display_name || c.detail)}</small></span>
-          <span style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap"><button class="btn ghost" data-connect="${c.start}" style="padding:6px 11px;font-size:12px">
-            ${live ? `<span style="color:var(--emerald)">&#9679; Live</span> · Reconnect` : "Connect"}</button>${disconnect}</span></div>`;
-      }).join("");
-      wireConnect(slot);
-      wireDisconnectQuickBooks(slot);
+      const slot = sh.querySelector("#connslot"); if (slot?.isConnected) renderConnectionRows(slot, map);
     });
     renderCatalog(sh);
     // Online booking — public link customers use with no account; requests
@@ -8864,10 +8877,18 @@ async function businessSheet() {
       const me = (t.members || []).find((m) => (m.email || "").toLowerCase() === S.email);
       if (me) S.profile.role = me.role;
       const slot = sh.querySelector("#teamslot");
-      slot.innerHTML = `${(t.members || []).map((m) => `<div class="kv"><span>${esc(m.email)}</span><span>${esc(m.role)}</span></div>`).join("")}
-        ${(t.invites || []).map((i) => `<div class="kv"><span>${esc(i.email)}</span><span style="color:var(--gold)">invited</span></div>`).join("")}
+      slot.innerHTML = `${(t.members || []).map((m) => `<div class="kv"><span>${esc(m.email)}</span><span>${esc(m.role)} ${me?.role === "owner" && m.role !== "owner" ? `<button class="btn ghost" data-team-remove="${esc(m.userId)}">Remove</button>` : ""}</span></div>`).join("")}
+        ${(t.invites || []).map((i) => `<div class="kv"><span>${esc(i.email)}</span><span style="color:var(--gold)">${i.locked ? "Locked" : i.expired ? "Expired" : "Waiting to join"} ${me?.role === "owner" ? `<button class="btn ghost" data-team-revoke="${esc(i.id)}">Revoke</button>` : ""}</span></div>`).join("")}
         ${(S.profile?.role || (S.team?.members || []).find((m) => (m.email || "").toLowerCase() === S.email)?.role) === "owner" ? `<div style="margin-top:10px"><input id="invmail" type="email" placeholder="teammate@business.com">
           ${inAndroidApp() ? "" : `<button class="btn ghost wide" style="margin-top:8px" id="invgo">Invite — $299/mo per seat</button>`}</div>` : ""}`;
+      const manage = async (button, action, key, prompt) => {
+        if (!confirm(prompt)) return;
+        button.disabled = true;
+        try { await api("/team", { action, [key]: action === "remove" ? button.dataset.teamRemove : button.dataset.teamRevoke }); closeSheet(); businessSheet(); }
+        catch (error) { button.disabled = false; toast(error.message, "err"); }
+      };
+      slot.querySelectorAll("[data-team-remove]").forEach(button => button.onclick = () => manage(button, "remove", "user_id", "Remove this teammate's access and paid seat?"));
+      slot.querySelectorAll("[data-team-revoke]").forEach(button => button.onclick = () => manage(button, "revoke", "invite_id", "Revoke this invitation? Its join code will stop working."));
       const go = slot.querySelector("#invgo");
       if (go) go.onclick = async () => {
         go.disabled = true;
@@ -9347,7 +9368,7 @@ async function boot() {
 function clientHubCard(slot, c) {
   if (!slot || !c?.id) return;
   const paint = (link, err) => {
-    if (err) { slot.innerHTML = `<div class="note">Client Hub: ${esc(err)}</div>`; return; }
+    if (err) { slot.innerHTML = `<div class="note">Client Hub: ${esc(err)}</div><button class="btn ghost" id="hubretry">Retry client link</button>`; slot.querySelector("#hubretry").onclick = () => clientHubCard(slot, c); return; }
     if (!link) { slot.innerHTML = `<div class="note">Client Hub link: loading…</div>`; return; }
     slot.innerHTML = `<div style="padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--card)">
       <div class="eyebrow">CLIENT HUB</div>

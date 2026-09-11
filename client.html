@@ -162,7 +162,7 @@ function render(data) {
   const pending = (data.quotes || []).filter((q) => !q.approvedAt && !/^(accepted|closed)$/i.test(q.qboStatus || ""));
   const approved = (data.quotes || []).filter((q) => q.approvedAt || /^(accepted|closed)$/i.test(q.qboStatus || ""));
   if (pending.length) {
-    html += kicker("Quotes for your approval", "var(--purple)");
+    html += kicker("Quotes", "var(--purple)");
     html += pending.map((q, i) => `<div class="card"><div class="in">
       <div class="row-top">
         <div>
@@ -173,7 +173,7 @@ function render(data) {
         <div class="statuspill" style="background:rgba(168,85,247,.12);color:var(--purple)">AWAITING YOU</div>
       </div>
       ${linesHtml(q, `q${i}`)}
-      <button class="approvebtn" data-est="${escapeHtml(q.id)}" data-num="${escapeHtml(q.docNumber || "")}" data-total="${q.total}">✓ Approve this quote</button>
+      ${q.documentUrl ? `<a class="approvebtn" style="display:block;text-align:center;text-decoration:none" href="${escapeHtml(q.documentUrl)}">Review quote</a>` : `<button class="approvebtn" data-est="${escapeHtml(q.id)}" data-num="${escapeHtml(q.docNumber || "")}" data-total="${q.total}">✓ Approve this quote</button>`}
     </div></div>`).join("");
   }
 
@@ -192,6 +192,7 @@ function render(data) {
         <div class="statuspill" style="background:${overdue ? "rgba(251,191,36,.12)" : "rgba(34,211,238,.12)"};color:${overdue ? "var(--amber)" : "var(--cyan)"}">${overdue ? "OVERDUE" : "OPEN"}</div>
       </div>
       ${linesHtml(inv, `o${i}`)}
+      ${inv.documentUrl ? `<a class="approvebtn" style="display:block;text-align:center;text-decoration:none" href="${escapeHtml(inv.documentUrl)}">View invoice &amp; payment options</a>` : ""}
     </div></div>`;
     }).join("");
   } else {
@@ -216,7 +217,7 @@ function render(data) {
     html += kicker("Approved quotes", "var(--emerald)");
     html += approved.map((q) => `<div class="historyrow" style="cursor:default">
       <div class="hleft"><div class="hnum">Quote ${escapeHtml(q.docNumber || "")}</div>
-      <div class="hdate">${q.approvedAt ? `Approved ${fmtDate(q.approvedAt)}` : "Accepted"}</div></div>
+      <div class="hdate">${q.approvedAt ? `Approved ${fmtDate(q.approvedAt)}` : "Accepted"}</div>${q.documentUrl ? `<a href="${escapeHtml(q.documentUrl)}">View approved quote</a>` : ""}</div>
       <div><span class="hamt">${money(q.total)}</span><span class="paidchip">✓ APPROVED</span></div>
     </div>`).join("");
   }
@@ -230,7 +231,7 @@ function render(data) {
         <div class="hdate">${fmtDate(inv.date)}</div></div>
         <div><span class="hamt">${money(inv.total)}</span><span class="paidchip">✓ PAID</span></div>
       </div>
-      <div class="card" id="hcard-h${i}" style="display:${openLines.has("h" + i) ? "block" : "none"}"><div class="in">${linesHtml(inv, `h${i}`)}</div></div>`).join("");
+      <div class="card" id="hcard-h${i}" style="display:${openLines.has("h" + i) ? "block" : "none"}"><div class="in">${linesHtml(inv, `h${i}`)}${inv.documentUrl ? `<a href="${escapeHtml(inv.documentUrl)}">View paid invoice</a>` : ""}</div></div>`).join("");
   }
 
   $("content").innerHTML = html;
