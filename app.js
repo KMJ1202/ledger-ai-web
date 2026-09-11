@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 150;
+const APP_BUILD = 151;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -4919,29 +4919,24 @@ function formatE164(n) {
 }
 
 async function renderPhone(cachedBoard = null) {
-  if (!cachedBoard) skeleton(3);
+  const request = S.phoneRequest = (S.phoneRequest || 0) + 1;
+  if (!cachedBoard && !S.phone) skeleton(3);
   try {
     const d = cachedBoard || await api("/phone", { action: "board" });
+    if (request !== S.phoneRequest || S.tab !== "phone") return;
     S.phone = d;
     tabBadge("phone", (d.needsYou || []).length);
-    view().innerHTML = `<div class="sect phone-command-center">
-      ${pageHead("Phone")}
-      ${d.hasNumber ? "" : requestNumberCard(d.pendingRequest, d.numberLocked)}
-      ${/* The number and its setup guide sit ABOVE the lane switcher, not in a
-            lane. Call forwarding is the thing that has to be working before any
-            of this tab means anything, and a setup guide found at the bottom of
-            a third sub-tab is a setup guide nobody reads. */""}
-      ${d.hasNumber ? phoneCommandHero(d) : ""}
-      ${d.hasNumber ? phoneLaneSwitcher(d) : ""}
-      ${d.hasNumber ? phoneLaneBody(d) : ""}
+    view().innerHTML = `<div class="sect phone-command-center phone-os">
+      ${d.hasNumber ? phoneOSHeader(d) + '<div class="phone-os-content">' + phoneLaneBody(d) + '</div>' + phoneOSDock(d) : pageHead("Phone") + requestNumberCard(d.pendingRequest, d.numberLocked)}
     </div>`;
     if (!d.hasNumber) wireRequestNumber(d.pendingRequest, d.numberLocked);
-    if (d.hasNumber) on("[data-pevt]", "click", (e) => phoneEventSheet(d.events.find((ev) => ev.id === e.currentTarget.dataset.pevt)));
-    if (d.hasNumber) on("[data-pthread]", "click", (e) => phoneThreadSheet((d.threads || []).find((t) => t.id === e.currentTarget.dataset.pthread)));
+    if (d.hasNumber && phoneLane() === "activity") on("[data-pevt]", "click", (e) => phoneEventSheet(d.events.find((ev) => ev.id === e.currentTarget.dataset.pevt)));
+
     if (d.hasNumber) {
       if ($("phsetup")) $("phsetup").onclick = () => phoneSetupSheet(d);
       if ($("phsettings")) $("phsettings").onclick = () => phoneSettingsSheet(d);
       on("[data-plane]", "click", (e) => { S.phoneLane = e.currentTarget.dataset.plane; renderPhone(d); });
+      wirePhoneOS(d);
       if ($("parm")) $("parm").onclick = () => phoneArmLine(d);
       on("[data-pnowtext]", "click", (e) => phoneTextNumber(d, e.currentTarget.dataset.pnowtext));
       on("[data-pnowbook]", "click", (e) => phoneBookNumber(e.currentTarget.dataset.pnowbook));
@@ -4998,8 +4993,7 @@ async function renderPhone(cachedBoard = null) {
       // one-shot pattern as the iOS onboarding interview's @AppStorage flag.
       const seenKey = "ledger.phoneSetupSeen." + d.number.id;
       if (!localStorage.getItem(seenKey)) { localStorage.setItem(seenKey, "1"); phoneSetupSheet(d); }
-      if (phoneLane() === "inbox") loadVoicemails(d);
-      if (phoneLane() === "activity") loadPhoneLeads();
+      if (phoneLane() === "activity") loadVoicemails(d);
     }
   } catch (e) {
     view().innerHTML = `<div class="sect">${pageHead("Phone")}<div class="empty">${esc(e.message)}</div></div>`;
@@ -5190,6 +5184,7 @@ async function phoneThreadSheet(t) {
       <a class="btn ghost" href="tel:${esc(t.peerNumber)}">Call</a>
       <button class="btn ghost" id="phdone">${status === "done" ? "Reopen" : "Mark done"}</button>
     </div>`);
+  let historyMore = false, oldestMessage = null;
   const chat = wrap.querySelector("#phchat");
   const err = wrap.querySelector("#pherr");
   const showErr = (msg) => { err.style.display = "block"; err.className = "note err"; err.textContent = msg; };
@@ -5198,17 +5193,26 @@ async function phoneThreadSheet(t) {
     try {
       const d = await api("/phone", { action: "thread", conversation_id: t.id });
       status = (d.thread && d.thread.status) || status;
+      historyMore = !!d.hasMore; oldestMessage = d.messages?.[0] || null;
       chat.innerHTML = (d.messages || []).length
         ? d.messages.map(phoneBubble).join("")
         : `<div class="empty">No messages in this thread yet.</div>`;
+      wireOlder();
       chat.scrollTop = chat.scrollHeight;
       err.style.display = "none";
-    } catch (e) { showErr(e.message); chat.innerHTML = ""; }
+    } catch (e) { showErr(e.message); chat.innerHTML = ""; return; }
     // Opening a thread IS reading it — fired after the history lands so a
     // failed read never leaves the sheet blank. Mirrored into Quo server-side.
     if (markRead && (t.unreadCount || 0) > 0) {
       try { await api("/phone", { action: "thread-read", conversation_id: t.id }); renderPhone(); } catch (e) { /* non-fatal */ }
     }
+  }
+
+  function wireOlder() {
+    chat.querySelector("#pholder")?.remove();
+    if(!historyMore || !oldestMessage)return;
+    const button=document.createElement("button");button.id="pholder";button.className="btn ghost";button.textContent="Load older messages";chat.prepend(button);
+    button.onclick=async()=>{button.disabled=true;const height=chat.scrollHeight,top=chat.scrollTop;try{const d=await api("/phone",{action:"thread",conversation_id:t.id,before_at:oldestMessage.occurredAt,before_id:oldestMessage.id});historyMore=!!d.hasMore;oldestMessage=d.messages?.[0]||oldestMessage;button.remove();chat.insertAdjacentHTML("afterbegin",(d.messages||[]).map(phoneBubble).join(""));wireOlder();chat.scrollTop=top+chat.scrollHeight-height;}catch(e){showErr(e.message);button.disabled=false;}};
   }
 
   wrap.querySelector("#phsend").onclick = async (e) => {
@@ -5431,14 +5435,9 @@ async function playVoicemail(eventId) {
 // (Kyle 2026-09-06, Phone tab parity): Needs You · Today · Auto. Work first,
 // settings last. The Needs You badge rides in the bar, so nothing waiting can
 // hide behind the landing choice.
-const PHONE_LANES = [["inbox", "Inbox"], ["activity", "Today"], ["autopilot", "Commands"]];
-const PHONE_LANE_HINT = {
-  inbox: "Calls, texts and voicemail waiting on you",
-  activity: "Today's jobs, your lead pipeline and the call feed",
-  autopilot: "Your business, on autopilot. You choose what runs.",
-};
+const PHONE_LANES = [["activity", "Missed Calls"], ["inbox", "Texts"], ["autopilot", "Commands"], ["notifications", "Notifications"]];
+const PHONE_LANE_HINT = {inbox:"Every conversation, in one place", activity:"Missed calls and voicemail", autopilot:"You choose what runs", notifications:"Understand what happened on your line"};
 function phoneLane() { return PHONE_LANES.some(([k]) => k === S.phoneLane) ? S.phoneLane : "inbox"; }
-
 function phoneCommandHero(d) {
   const rows=d.automations||[], active=rows.filter(r=>r.enabled).length;
   const waiting=d.needsYouTotal ?? (d.needsYou||[]).length;
@@ -5651,8 +5650,9 @@ function phoneTodayCard(d) {
 function phoneLaneBody(d) {
   const lane = phoneLane();
   if (lane === "autopilot") return phoneAutopilotLane(d);
-  if (lane === "activity") return phoneActivityLane(d);
-  return phoneInboxLane(d);
+  if (lane === "activity") return phoneCallsDashboard(d);
+  if (lane === "notifications") return phoneNotificationsDashboard(d);
+  return phoneTextsDashboard(d);
 }
 
 function heroStrip(cells) {
@@ -10051,3 +10051,79 @@ function exportDataSheet() {
     };
   });
 }
+
+// Phone OS — conversations first; the dock is stable while content changes.
+function phoneOSIcon(key) {
+ const paths={activity:'<path d="M8 3H4v4c0 7 6 13 13 13h4v-4l-5-2-2 2c-3-1-5-3-6-6l2-2z"/><path d="M15 3l6 6m0-6v6h-6"/>',inbox:'<path d="M21 11a9 9 0 0 1-9 9H4l-3 2 2-7a9 9 0 1 1 18-4Z"/><path d="M7 10h10M7 14h6"/>',autopilot:'<path d="M5 3v18M12 3v18M19 3v18"/><rect x="2" y="6" width="6" height="4" rx="2"/><rect x="9" y="14" width="6" height="4" rx="2"/><rect x="16" y="7" width="6" height="4" rx="2"/>',notifications:'<path d="M18 8a6 6 0 0 0-12 0c0 8-3 8-3 10h18c0-2-3-2-3-10M9 21h6"/>',search:'<circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/>',compose:'<path d="M12 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-7M10 14l1-5 9-8 3 3-9 9z"/>',settings:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/>'};
+ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[key]||paths.notifications}</svg>`;
+}
+function phoneMissed(d) { return (d.events||[]).filter(e=>e.direction!=="outgoing"&&!e.answered); }
+function phoneNoticeRows(d) {
+ const rows=(d.events||[]).map(e=>({id:'call:'+e.id,at:e.occurredAt,title:e.voicemailUrl?'Voicemail received':e.answered?'Call answered':'Missed call',detail:e.callerName||formatE164(e.callerNumber),kind:'activity',event:e}));
+ for(const f of d.autopilotFeed||[]) if(!f.id.startsWith('ev:')&&!f.id.startsWith('review:')) rows.push({id:'auto:'+f.id,at:f.at,title:f.text,detail:({frontdesk:'Front Desk',reminders:'Appointment reminder',dispatcher:'Crew dispatch','crew-reminders':'Crew reminder'})[f.key]||'Automatic activity',kind:'autopilot',feed:f});
+ for(const t of d.threads||[]) if(t.lastMessageDirection==='incoming')rows.push({id:'text:'+t.id+':'+t.lastMessageAt,at:t.lastMessageAt,title:'New text message',detail:t.peerName||formatE164(t.peerNumber),kind:'inbox',thread:t});
+ for(const r of d.reviewRequests?.recent||[])rows.push({id:'review:'+r.id+':'+r.status,at:r.sent_at||r.created_at,title:'Google review request',detail:(r.customer_name||'Customer')+' · '+({sent:'Sent',queued:'Waiting',sending:'Sending',skipped:'Skipped',needs_check:'Check delivery'}[r.status]||r.status),kind:'autopilot',review:r});
+ return rows.sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0));
+}
+function phoneNoticeUnread(d,n){return !(d.notificationReadIds||[]).includes(n.id);}
+function phoneOSHeader(d) {
+ const label=PHONE_LANES.find(([k])=>k===phoneLane())[1];
+ return `<header class="pos-header"><button class="pos-back" id="pos-exit" aria-label="Back to Ledger">‹</button><div class="pos-brand"><div><span class="pos-eyebrow">PHONE DASHBOARD</span><h1>${label}</h1></div></div><div class="pos-header-actions">${phoneLane()==='inbox'?`<button class="pos-compose" id="pos-compose" aria-label="New text">${phoneOSIcon('compose')}</button>`:''}<button class="pos-circle" id="phsetup" aria-label="Line setup and forwarding">${phoneOSIcon('settings')}</button></div></header>
+ <div class="pos-status"><span class="pos-status-dot"></span><span>${esc(formatE164(d.number?.e164))}</span><span class="pos-hours">${d.openNow?'Business hours':'After hours'}</span><button id="pos-refresh" aria-label="Refresh Phone">↻</button></div>`;
+}
+
+function phoneOSDock(d){
+ const badges={activity:phoneMissed(d).length,inbox:d.inboxCounts?.unread??(d.threads||[]).filter(t=>t.status!=='done'&&t.unreadCount>0).length,notifications:phoneNoticeRows(d).filter(n=>phoneNoticeUnread(d,n)).length};
+ return `<nav class="pos-dock" aria-label="Phone sections">${PHONE_LANES.map(([k,label])=>`<button data-plane="${k}" class="${phoneLane()===k?'selected':''}" aria-current="${phoneLane()===k?'page':'false'}" aria-label="${label}${badges[k]?', '+badges[k]+' unread':''}"><span class="pos-app-icon ${k}">${phoneOSIcon(k)}${badges[k]?`<b class="pos-badge">${badges[k]>99?'99+':badges[k]}</b>`:''}</span><span>${label}</span></button>`).join('')}</nav>`;
+}
+function phoneTextsDashboard(d){
+ const f=S.phoneFilter||'all';const threads=d.threads||[];const counts={all:d.inboxCounts?.all??threads.filter(t=>t.status!=='done').length,unread:d.inboxCounts?.unread??threads.filter(t=>t.status!=='done'&&t.unreadCount>0).length,missed:phoneMissed(d).length,done:d.inboxCounts?.done??threads.filter(t=>t.status==='done').length};
+ return ` <label class="pos-search">${phoneOSIcon('search')}<input id="pos-search" type="search" autocomplete="off" placeholder="Search names, numbers or messages" value="${esc(S.phoneSearch||'')}" aria-label="Search conversations"></label>
+ <div class="pos-filters" role="tablist" aria-label="Conversation filters">${[['all','All'],['unread','Unread'],['missed','Missed Calls'],['done','Done']].map(([k,v])=>`<button role="tab" data-pfilter="${k}" aria-selected="${f===k}">${v}${counts[k]?`<span>${counts[k]}</span>`:''}</button>`).join('')}</div>
+ <div id="pos-threads">${phoneConversationRows(d)}</div>`;
+}
+function phoneAvatar(name,number){const words=(name||'').trim().split(/\s+/);return `<span class="pos-avatar ${name?'named':''}">${name?esc(words.map(w=>w[0]).slice(0,2).join('').toUpperCase()):'<svg viewBox="0 0 40 40" fill="currentColor" aria-hidden="true"><circle cx="20" cy="14" r="7"/><path d="M6 36a14 14 0 0 1 28 0"/></svg>'}</span>`;}
+function phoneConversationRows(d){
+ const filter=S.phoneFilter||'all',q=(S.phoneSearch||'').toLowerCase();
+ if(filter==='missed')return phoneCallRows(d,q);
+ const rows=(S.phoneInboxRows||d.threads||[]).filter(t=>(filter==='done'?t.status==='done':t.status!=='done')&&(filter!=='unread'||t.unreadCount>0)&&[t.peerName,t.caller?.name,t.peerNumber,t.lastMessagePreview].join(' ').toLowerCase().includes(q));
+ return rows.length?`<div class="pos-conversations">${rows.map(t=>{const name=t.caller?.name||t.peerName;const unread=t.unreadCount>0&&t.status!=='done';return `<button class="pos-conversation ${unread?'unread':''}" data-pthread="${esc(t.id)}">${phoneAvatar(name,t.peerNumber)}<span class="pos-conversation-body"><span class="pos-conversation-top"><strong>${esc(name||formatE164(t.peerNumber))}</strong><time>${esc(t.lastMessageAt?dayLabel(t.lastMessageAt)==='Today'?timeLabel(t.lastMessageAt):dayLabel(t.lastMessageAt):'')}</time></span><span class="pos-preview">${esc((t.lastMessageDirection==='outgoing'?(t.answeredBy==='front-desk'?'Ledger: ':t.answeredBy==='user'?'You: ':t.answeredBy?'Auto: ':'Sent: '):'')+(t.lastMessagePreview||'No messages yet'))}</span><span class="pos-conversation-state">${t.status==='done'?'✓ Done':t.answeredBy==='front-desk'?'✦ Ledger replied':unread?'Needs your attention':''}</span></span>${unread?`<b class="pos-count">${t.unreadCount}</b>`:'<span class="pos-chevron">›</span>'}</button>`}).join('')}</div>${S.phoneInboxMore?'<button class="btn ghost" id="pos-more">Load more conversations</button>':''}`:`<div class="pos-empty">${phoneOSIcon('inbox')}<h3>${q?'No matching conversations':filter==='done'?'No completed conversations':filter==='unread'?'You’re all caught up':'Your conversations start here'}</h3><p>${q?'Try another name, number or message.':filter==='done'?'Mark a conversation Done once it’s handled. A new customer message brings it back.':filter==='unread'?'New unread messages will appear here.':'Texts to your business number appear here. Open a conversation to read the full history and reply.'}</p></div>`;
+}
+function phoneCallRows(d,q=''){
+ const rows=phoneMissed(d).filter(e=>[e.callerName,e.callerNumber].join(' ').toLowerCase().includes(q));
+ return rows.length?`<div class="pos-conversations">${rows.map(e=>`<button class="pos-conversation" data-pevt="${esc(e.id)}">${phoneAvatar(e.callerName,e.callerNumber)}<span class="pos-conversation-body"><span class="pos-conversation-top"><strong>${esc(e.callerName||formatE164(e.callerNumber))}</strong><time>${esc(timeLabel(e.occurredAt))}</time></span><span class="pos-missed">↙ ${e.voicemailUrl?'Voicemail':'Missed call'}</span><span class="pos-preview">${esc(dayLabel(e.occurredAt))} · ${e.autoReplySent?'Automatic text-back sent':'No automatic text-back sent'}</span></span><span class="pos-chevron">›</span></button>`).join('')}</div>`:'<div class="pos-empty"><h3>No missed calls</h3><p>Missed calls that reach your Ledger line will appear here, with the outcome and a callback shortcut.</p></div>';
+}
+function phoneCallsDashboard(d){return `<div class="pos-section-title"><h2>Missed Calls <span>${phoneMissed(d).length}</span></h2><p>See who called and what happened next.${(d.events||[]).length>=100?' Showing the latest 100 calls.':''}</p></div>${phoneCallRows(d)}<div id="vmlane"></div>`;}
+function phoneNotificationsDashboard(d){const all=phoneNoticeRows(d),rows=S.phoneNotificationFilter==='unread'?all.filter(n=>phoneNoticeUnread(d,n)):all;return `<button class="pos-explainer" id="pos-how"><span class="pos-app-icon notifications">${phoneOSIcon('notifications')}</span><span><strong>What happens when your line is forwarded?</strong><small>Follow the journey—from call to conversation.</small></span><b>›</b></button><div class="pos-inbox-top"><h2>Recent activity</h2><button class="pos-textbutton" id="pos-mark-all">Mark all read</button></div><div class="pos-filters" role="tablist" aria-label="Notification filters">${['all','unread'].map(k=>`<button data-nfilter="${k}" role="tab" aria-selected="${(S.phoneNotificationFilter||'all')===k}">${k==='all'?'All activity':'Unread'}</button>`).join('')}</div><div class="pos-conversations">${rows.map(n=>`<button class="pos-notification ${phoneNoticeUnread(d,n)?'unread':''}" data-pnotice="${esc(n.id)}"><span class="pos-notice-icon ${n.kind}">${phoneOSIcon(n.kind)}</span><span><strong>${esc(n.title)}</strong><p>${esc(n.detail)}</p><small>${esc(n.at?dayLabel(n.at)+' · '+timeLabel(n.at):'')}</small></span><span class="pos-chevron">›</span></button>`).join('')||'<div class="pos-empty"><h3>No new activity</h3><p>Call outcomes, messages and automatic actions will appear here. Each notification opens the details.</p></div>'}</div>`;}
+function phoneHowSheet(d){sheet(`<div class="pos-detail"><span class="pos-eyebrow">YOUR FORWARDED LINE</span><h2>From ringing phone to real conversation.</h2><p>Your forwarding choice controls which calls reach Ledger. Ledger can only show calls and texts that reach your assigned business number.</p><ol><li><strong>Your carrier forwards the call</strong><p>Conditional forwarding sends unanswered or busy calls; full forwarding sends every call. Your carrier’s setup determines which happens.</p></li><li><strong>The call outcome is recorded</strong><p>Open Missed Calls to see who called, when, whether voicemail was left, and whether an automatic text-back was sent.</p></li><li><strong>Your chosen commands respond</strong><p>Auto text-back is ${d.autoReplyEnabled?'on':'off'}. Front Desk is ${d.frontDesk?.enabled?'on':'off'}. Enabled commands still depend on your plan, texting allowance, contact preferences and delivery availability. Forwarding by itself does not mean AI voice answering is active.</p></li><li><strong>The conversation stays visible</strong><p>Replies to your Ledger number appear in Texts. Calls forwarded from another number do not automatically forward that number’s existing SMS messages. Keep checking that original inbox too.</p></li><li><strong>You stay in control</strong><p>Open a notification for the outcome, answer in Texts, or adjust Commands. A sent text is not proof that the customer read it.</p></li></ol></div>`);}
+function phoneNoticeSheet(d,n){
+ let happened='',action='',next='',extra='';
+ if(n.event){const e=n.event;happened=`${e.callerName||formatE164(e.callerNumber)} reached your Ledger line. ${e.answered?'The call was answered.':'The call was not answered.'}${e.voicemailUrl?' A voicemail was recorded.':''}`;action=e.autoReplySent?'Ledger recorded an automatic text-back as sent. Carrier acceptance does not prove the customer received or read it.':'No automatic text-back is recorded for this call. This event alone does not establish why; check Commands and the conversation before following up.';next=e.autoReplySent?'Open the conversation for any customer response. Call back if they still need help.':'Review the call and any voicemail, then call or text the customer if needed.';extra=e.autoReplyText?`<blockquote>${esc(e.autoReplyText)}</blockquote>`:'';}
+ else if(n.thread){happened='A customer text reached your business number.';action=n.thread.answeredBy==='front-desk'?'Front Desk replied in this conversation.':'The message is saved in Texts. Open it to see the full conversation, including any later replies.';next='Read the conversation and reply if needed. Mark it Done when it is handled; a new incoming message reopens it.';extra=`<blockquote>${esc(n.thread.lastMessagePreview||'')}</blockquote>`;}
+ else if(n.review){happened=`A paid-invoice review request for ${n.review.customer_name||'a customer'} is ${n.review.status.replaceAll('_',' ')}.`;action=n.review.reason||'Review requests follow your enabled command, contact preferences, business time zone and texting allowance.';next='Open Google Review Request for the request history and current settings.';}
+ else{happened=n.feed?.text||n.title;action=({frontdesk:'Front Desk recorded this outcome while handling a text conversation. A handoff means the owner should review the conversation.',reminders:'The appointment reminder was recorded in the activity log. Check the booking for confirmation or changes.',dispatcher:'The crew dispatch was recorded in the activity log. A sent message does not by itself prove the job was accepted.','crew-reminders':'The crew reminder was recorded in the activity log. Check the timecard or shift for the latest status.'})[n.feed?.key]||'This action was recorded on your business line.';next='Open the related command to review its activity and settings.';}
+ const wrap=sheet(`<div class="pos-detail"><span class="pos-eyebrow">LINE ACTIVITY · ${esc(n.at?dayLabel(n.at)+' '+timeLabel(n.at):'')}</span><h2>${esc(n.title)}</h2><h3>What happened</h3><p>${esc(happened)}</p><h3>What Ledger did</h3><p>${esc(action)}</p>${extra}<h3>What you should do</h3><p>${esc(next)}</p><button class="btn primary" id="pos-notice-open">${n.event?'Open call details':n.thread?'Open conversation':'Open command'}</button><button class="btn ghost" id="pos-notice-help">How forwarding works</button></div>`);
+ wrap.querySelector('#pos-notice-open').onclick=()=>{closeSheet();if(n.event)phoneEventSheet(n.event);else if(n.thread)phoneThreadSheet(n.thread);else openAutomation(d,n.review?'google-review-request':n.feed?.key||'frontdesk');};
+ wrap.querySelector('#pos-notice-help').onclick=()=>phoneHowSheet(d);
+ if(phoneNoticeUnread(d,n))api('/phone',{action:'notifications-read',ids:[n.id]}).then(()=>{d.notificationReadIds=[...(d.notificationReadIds||[]),n.id];if(S.tab==='phone')renderPhone(d);}).catch(()=>toast('Could not mark this notification read. Try again.'));
+}
+function wirePhoneThreadRows(d){on('[data-pthread]','click',e=>phoneThreadSheet((S.phoneInboxRows||d.threads||[]).find(t=>t.id===e.currentTarget.dataset.pthread)));on('[data-pevt]','click',e=>phoneEventSheet(d.events.find(t=>t.id===e.currentTarget.dataset.pevt)));if($('pos-more'))$('pos-more').onclick=()=>phoneLoadInbox(d,true);}
+async function phoneLoadInbox(d,more=false){const seq=S.phoneInboxRequest=(S.phoneInboxRequest||0)+1,filter=S.phoneFilter||'all',search=S.phoneSearch||'';if(filter==='missed')return;try{const r=await api('/phone',{action:'threads',filter,search,offset:more?(S.phoneInboxRows||[]).length:0,limit:50});if(seq!==S.phoneInboxRequest||S.tab!=='phone'||phoneLane()!=='inbox'||!$('pos-threads'))return;S.phoneInboxRows=more?[...(S.phoneInboxRows||[]),...r.threads.filter(t=>!(S.phoneInboxRows||[]).some(x=>x.id===t.id))]:r.threads;S.phoneInboxMore=r.hasMore;d.threads=[...(d.threads||[]).filter(t=>!r.threads.some(x=>x.id===t.id)),...r.threads];$('pos-threads').innerHTML=phoneConversationRows(d);wirePhoneThreadRows(d);}catch(e){if(seq===S.phoneInboxRequest&&$('pos-threads'))$('pos-threads').innerHTML='<div class="note err">'+esc(e.message)+' <button class="btn ghost" id="pos-retry">Retry</button></div>';if($('pos-retry'))$('pos-retry').onclick=()=>phoneLoadInbox(d,more);}}
+function wirePhoneOS(d){
+ if($("pos-exit"))$("pos-exit").onclick=()=>setTab("home");
+ if($('pos-refresh'))$('pos-refresh').onclick=()=>{S.phoneInboxRows=null;renderPhone();};
+ if(phoneLane()==='inbox'){
+  on('[data-pfilter]','click',e=>{S.phoneFilter=e.currentTarget.dataset.pfilter;S.phoneInboxRows=null;S.phoneInboxMore=false;S.phoneInboxRequest=(S.phoneInboxRequest||0)+1;renderPhone(d);});
+  if($('pos-search'))$('pos-search').oninput=e=>{S.phoneSearch=e.target.value;S.phoneInboxRequest=(S.phoneInboxRequest||0)+1;S.phoneInboxRows=null;$('pos-threads').innerHTML=phoneConversationRows(d);wirePhoneThreadRows(d);clearTimeout(S.phoneSearchTimer);S.phoneSearchTimer=setTimeout(()=>phoneLoadInbox(d),250);};
+  if($('pos-compose'))$('pos-compose').onclick=()=>phoneComposeSheet(d);
+  wirePhoneThreadRows(d);
+  phoneLoadInbox(d);
+ }
+ if($('pos-how'))$('pos-how').onclick=()=>phoneHowSheet(d);
+ on('[data-nfilter]','click',e=>{S.phoneNotificationFilter=e.currentTarget.dataset.nfilter;renderPhone(d);});
+ on('[data-pnotice]','click',e=>phoneNoticeSheet(d,phoneNoticeRows(d).find(n=>n.id===e.currentTarget.dataset.pnotice)));
+ if($('pos-mark-all'))$('pos-mark-all').onclick=async()=>{try{const ids=phoneNoticeRows(d).map(n=>n.id);await api('/phone',{action:'notifications-read',ids});d.notificationReadIds=ids;renderPhone(d);}catch(e){toast(e.message);}};
+}
+function phoneComposeSheet(d){const wrap=sheet('<h2>New text</h2><p class="sh-sub">Send from your business number.</p><label class="field"><span>To</span><input id="pos-to" type="tel" placeholder="+1 555 555 0123"></label><label class="field"><span>Message</span><textarea id="pos-new-body" rows="4" placeholder="Write a message…"></textarea></label><p class="note err" id="pos-send-error"></p><button class="btn primary" id="pos-send-new">Send text</button>');wrap.querySelector('#pos-send-new').onclick=async e=>{const to=wrap.querySelector('#pos-to').value.trim(),body=wrap.querySelector('#pos-new-body').value.trim();if(!to||!body){wrap.querySelector('#pos-send-error').textContent='Enter a phone number and a message.';return;}e.currentTarget.disabled=true;try{await api('/phone',{action:'reply',to_number:to,body});closeSheet();S.phoneInboxRows=null;await renderPhone();}catch(ex){wrap.querySelector('#pos-send-error').textContent=ex.message;e.target.disabled=false;smsSendFailed(ex);}};}
+
+setInterval(()=>{if(S.tab!=="phone"||document.hidden||document.querySelector("#sheetwrap")||document.activeElement?.id==="pos-search"||view()?.scrollTop>100)return;api("/phone",{action:"board"}).then(d=>{if(S.tab!=="phone"||document.querySelector("#sheetwrap")||document.activeElement?.id==="pos-search")return;renderPhone(d);}).catch(()=>{});},20000);
