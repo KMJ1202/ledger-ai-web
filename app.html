@@ -1396,7 +1396,8 @@ a{color:var(--cyan);text-decoration:none}
 @keyframes atmoA{from{transform:translate3d(-4%,-3%,0) scale(1)}to{transform:translate3d(9%,6%,0) scale(1.12)}}
 @keyframes atmoB{from{transform:translate3d(4%,3%,0) scale(1.05)}to{transform:translate3d(-8%,-5%,0) scale(.95)}}
 @media (prefers-reduced-motion:reduce){#root::before,#root::after{animation:none}}
-header,main,nav#tabs,#banner,#alertbar{position:relative;z-index:1}
+header,main,#banner,#alertbar{position:relative;z-index:1}
+/* The dock keeps its absolute app-shell geometry; never offset a full-width relative element. */
 
 /* ---------- PhoneGlass: the one card surface, everywhere ---------- */
 .panel,.kpi,.gotile,.brandcard,.console,.phstrip,.glass{
@@ -1741,7 +1742,7 @@ nav#tabs button .cnt{position:absolute;top:4px;right:18%;min-width:17px;height:1
 @media(min-width:900px){.pos-dock{bottom:24px}.phone-os{max-width:760px}.pos-conversation{min-height:93px}.pos-header h1{font-size:32px}}@media(max-width:360px){.pos-dock{width:calc(100% - 20px);padding:12px 5px 8px}.pos-dock button{font-size:9px}.pos-filters{gap:5px}.pos-filters button{padding:8px;font-size:11px}.pos-conversation-top strong{font-size:14px}.pos-avatar{width:40px;height:40px}.pos-header h1{font-size:25px}.pos-hours{font-size:10px}}
 
 
-.phone-os{width:100%;min-width:0;box-sizing:border-box}.phone-os-content{min-width:0}.pos-header{padding:0;flex-shrink:0}.pos-brand{min-width:0}.pos-header h1{text-align:left}.pos-circle{flex-shrink:0}.pos-back{align-self:flex-start;padding:5px 0;min-height:36px;color:#9ec8ff;background:none;border:0;font-size:12px;cursor:pointer}.pos-dock{bottom:calc(var(--bot) + 16px)}body:has(.phone-os) nav#tabs{display:none}body:has(.phone-os) main{padding-bottom:calc(var(--bot) + 20px)}.phone-os{padding-bottom:130px}
+.phone-os{width:100%;min-width:0;box-sizing:border-box}.phone-os-content{min-width:0}.pos-header{padding:0;flex-shrink:0}.pos-brand{min-width:0}.pos-header h1{text-align:left}.pos-circle{flex-shrink:0}.pos-back{align-self:flex-start;padding:5px 0;min-height:36px;color:#9ec8ff;background:none;border:0;font-size:12px;cursor:pointer}.pos-dock{bottom:calc(var(--bot) + 16px)}body:has(.phone-os .pos-dock) nav#tabs{display:none}body:has(.phone-os .pos-dock) main{padding-bottom:calc(var(--bot) + 20px)}.phone-os{padding-bottom:130px}
 
 .pos-header{gap:10px;margin-top:5px}.pos-header .pos-back{font-size:34px;width:24px;min-height:44px;margin:0;padding:0;align-self:center;flex-shrink:0}.pos-header-actions{display:flex;align-items:center;gap:9px;margin-left:auto}.pos-header .pos-brand{flex:1}.pos-header .pos-compose{width:40px;height:40px}.pos-header .pos-circle{width:40px;height:40px}.pos-header h1{font-size:27px}.pos-status{padding-bottom:10px}.pos-search{margin-top:3px}.pos-header .pos-eyebrow{font-size:8px;letter-spacing:1.5px}
 /* Keep business text out of large offscreen backdrop-filter textures. */
@@ -1753,5 +1754,5 @@ button,a,input,select,[role="switch"]{touch-action:manipulation}
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=152"></script>
+<script type="module" src="app.js?v=153"></script>
 </body></html>
