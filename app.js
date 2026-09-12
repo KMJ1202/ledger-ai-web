@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 153;
+const APP_BUILD = 155;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -4152,6 +4152,160 @@ async function loadEventCrew(sh, e) {
   });
 }
 
+/* ---------------- LIVE CREW MAP (Kyle 1202, 2026-09-12) ----------------
+   Apple Maps (MapKit JS) fed by crew {action:"locations"}. Every pin is a
+   person's name and how old their last position is; anything older than ten
+   minutes turns grey. The list under the map is the same feed in words, and it
+   is what shows when Apple Maps is not connected yet. Refreshes every 30 s
+   while the sheet is open and stops the moment it closes. */
+let MAPKIT_LOAD = null;
+function loadMapKit() {
+  if (window.mapkit && window.mapkit.init) return Promise.resolve(window.mapkit);
+  if (MAPKIT_LOAD) return MAPKIT_LOAD;
+  MAPKIT_LOAD = new Promise((resolve, reject) => {
+    const sc = document.createElement("script");
+    sc.src = "https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.js";
+    sc.crossOrigin = "anonymous";
+    sc.dataset.libraries = "map,annotations";
+    sc.onload = () => resolve(window.mapkit);
+    sc.onerror = () => { MAPKIT_LOAD = null; reject(new Error("Apple Maps could not be loaded.")); };
+    document.head.appendChild(sc);
+  });
+  return MAPKIT_LOAD;
+}
+let MAPKIT_READY = false;
+async function ensureMapKit() {
+  const mk = await loadMapKit();
+  if (!MAPKIT_READY) {
+    mk.init({
+      authorizationCallback: (done) => api("/crew", { action: "maps-token" }).then((r) => done(r.token)).catch((err) => { toast(err.message || "Apple Maps is not connected yet.", "err"); }),
+      language: "en",
+    });
+    MAPKIT_READY = true;
+  }
+  return mk;
+}
+function agoWords(seconds) {
+  if (seconds == null) return "no location yet";
+  if (seconds < 60) return "just now";
+  const m = Math.round(seconds / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h} h ${m % 60 ? (m % 60) + " min" : ""} ago`.replace(/\s+ago/, " ago") : "over a day ago";
+}
+function crewStatusWord(c) {
+  if (!c.clockedIn) return "Off the clock";
+  return { on_my_way: "On my way", on_site: "On site", done: "Done" }[c.status] || (c.currentJob ? "Assigned" : "On the clock");
+}
+async function crewLiveMapSheet() {
+  const wrap = sheet(`<h2>Live crew map</h2>
+    <p class="sub" id="lmsub">Loading…</p>
+    <div id="lmmap" style="height:340px;border-radius:14px;overflow:hidden;background:#0b1118;margin-top:10px;display:none"></div>
+    <p class="note" id="lmnote" style="margin-top:8px"></p>
+    <div id="lmlist" style="margin-top:12px"></div>
+    <div class="panel" style="margin-top:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div><b>Location on shift</b><div class="note">Required: crew are told the shop needs it while clocked in. Optional: their choice. Neither ever blocks a clock-in.</div></div>
+        <div class="chips" id="lmpolicy" style="display:flex;gap:8px"></div>
+      </div>
+    </div>`);
+  const pane = wrap.querySelector(".sheet");
+  let map = null, mk = null, timer = null, mapFailed = false, marks = new Map();
+  const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+  const alive = () => wrap.isConnected && document.body.contains(wrap);
+  const paintPolicy = (policy) => {
+    const host = pane.querySelector("#lmpolicy"); if (!host) return;
+    host.innerHTML = ["required", "optional"].map((p) => `<button type="button" class="chip${policy === p ? " on" : ""}" data-pol="${p}">${p === "required" ? "Required" : "Optional"}</button>`).join("");
+    host.querySelectorAll("[data-pol]").forEach((b) => b.onclick = async () => {
+      if (b.classList.contains("on")) return;
+      host.querySelectorAll("button").forEach((x) => x.disabled = true);
+      try { const r = await api("/crew", { action: "set-location-policy", policy: b.dataset.pol }); paintPolicy(r.policy); toast(r.policy === "required" ? "Location is required on shift" : "Location is optional for your crew"); }
+      catch (err) { toast(err.status === 403 ? "Only the owner or an admin can change this." : err.message, "err"); paintPolicy(policy); }
+    });
+  };
+  const paintList = (d) => {
+    const host = pane.querySelector("#lmlist"); if (!host) return;
+    const crew = d.crew || [];
+    if (!crew.length) { host.innerHTML = '<p class="note">No active crew on the roster yet.</p>'; return; }
+    host.innerHTML = crew.map((c) => {
+      const off = c.permission === "denied" || c.permission === "unsupported";
+      const dot = !c.clockedIn ? "#39424f" : off ? "var(--orange)" : c.stale ? "#6b7683" : "var(--cyan)";
+      const where = off ? "Location off on their phone" : (c.lat == null ? "No location yet" : (c.clockedIn ? agoWords(c.ageSeconds) : `Clocked out · last seen ${agoWords(c.ageSeconds)}`));
+      const job = c.currentJob ? ` · ${esc(c.currentJob.title || "Job")}${c.currentJob.location ? " — " + esc(c.currentJob.location) : ""}` : "";
+      return `<button type="button" class="row" data-crew="${esc(c.id)}" style="width:100%;text-align:left;display:flex;gap:10px;align-items:center;padding:10px 4px;border:0;background:none;color:inherit;border-bottom:1px solid var(--line)">
+        <span style="width:10px;height:10px;border-radius:50%;background:${dot};flex-shrink:0;box-shadow:${c.clockedIn && !c.stale && !off ? "0 0 8px " + dot : "none"}"></span>
+        <span style="flex:1;min-width:0"><b>${esc(c.name)}</b> <span class="note">${esc(crewStatusWord(c))}${job}</span><br><span class="note">${where}${c.accuracyM && !off && c.lat != null ? ` · ±${Math.round(c.accuracyM)} m` : ""}</span></span>
+        ${c.lat != null && c.clockedIn && !off ? `<a class="note" href="https://maps.apple.com/?ll=${c.lat},${c.lng}&q=${encodeURIComponent(c.name)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open ↗</a>` : ""}
+      </button>`;
+    }).join("");
+    host.querySelectorAll("[data-crew]").forEach((b) => b.onclick = () => {
+      const c = crew.find((x) => x.id === b.dataset.crew);
+      if (map && mk && c && c.lat != null) map.setCenterAnimated(new mk.Coordinate(c.lat, c.lng), true);
+    });
+  };
+  const paintMap = async (d) => {
+    const el = pane.querySelector("#lmmap"); if (!el) return;
+    if (!d.mapsConfigured || mapFailed) { el.style.display = "none"; return; }
+    try {
+      mk = await ensureMapKit();
+      if (!alive()) return;
+      el.style.display = "block";
+      if (!map) {
+        map = new mk.Map(el, { colorScheme: mk.Map.ColorSchemes.Dark, showsCompass: mk.FeatureVisibility.Hidden, showsMapTypeControl: false, isRotationEnabled: false });
+      }
+      const wanted = new Set();
+      const items = [];
+      for (const c of d.crew || []) {
+        // Off the clock is not at work: listed below, never pinned.
+        if (c.lat == null || c.permission === "denied" || !c.clockedIn) continue;
+        const key = "crew:" + c.id; wanted.add(key);
+        const fresh = c.clockedIn && !c.stale;
+        const color = !c.clockedIn ? "#39424f" : c.stale ? "#6b7683" : c.status === "on_my_way" ? "#fbbf24" : "#22d3ee";
+        const sub = `${agoWords(c.ageSeconds)} · ${crewStatusWord(c)}`;
+        let m = marks.get(key);
+        if (!m) { m = new mk.MarkerAnnotation(new mk.Coordinate(c.lat, c.lng), { title: c.name, subtitle: sub, color, glyphText: (c.name || "?").trim().charAt(0).toUpperCase(), displayPriority: 1000 }); marks.set(key, m); map.addAnnotation(m); }
+        else { m.coordinate = new mk.Coordinate(c.lat, c.lng); m.subtitle = sub; m.color = color; }
+        m.data = { fresh };
+        items.push(m);
+      }
+      for (const j of d.jobs || []) {
+        if (j.lat == null || j.status === "done") continue;
+        const key = "job:" + j.assignmentId; wanted.add(key);
+        const sub = `${j.employeeName ? j.employeeName + " · " : ""}${{ on_my_way: "On my way", on_site: "On site" }[j.status] || "Assigned"}`;
+        let m = marks.get(key);
+        if (!m) { m = new mk.MarkerAnnotation(new mk.Coordinate(j.lat, j.lng), { title: j.title || "Job", subtitle: sub, color: "#a855f7", glyphText: "🔧", displayPriority: 900 }); marks.set(key, m); map.addAnnotation(m); }
+        else { m.subtitle = sub; }
+        items.push(m);
+      }
+      for (const [key, m] of Array.from(marks.entries())) if (!wanted.has(key)) { map.removeAnnotation(m); marks.delete(key); }
+      if (items.length && !map.__fitted) { map.showItems(items, { animate: false, padding: new mk.Padding(40, 30, 40, 30) }); map.__fitted = true; }
+    } catch (err) {
+      mapFailed = true; el.style.display = "none";
+      const note = pane.querySelector("#lmnote"); if (note) note.textContent = err.message || "Apple Maps could not be loaded — the list below is live.";
+    }
+  };
+  const load = async () => {
+    if (!alive()) { stop(); return; }
+    try {
+      const d = await api("/crew", { action: "locations" }, "POST", { silentUpgrade: true });
+      if (!alive()) { stop(); return; }
+      const live = (d.crew || []).filter((c) => c.clockedIn).length, sharing = (d.crew || []).filter((c) => c.clockedIn && !c.stale && c.lat != null).length;
+      const sub = pane.querySelector("#lmsub"); if (sub) sub.textContent = `${live} on the clock · ${sharing} sharing a live location · ${(d.jobs || []).filter((j) => j.status !== "done").length} open job${(d.jobs || []).filter((j) => j.status !== "done").length === 1 ? "" : "s"} today`;
+      const note = pane.querySelector("#lmnote");
+      if (note && !mapFailed) note.textContent = d.mapsConfigured ? "Grey = no update in 10 minutes. Positions come from each crew member's job link and stop when they clock out." : "Map appears once Apple Maps is connected. The list below is live.";
+      paintPolicy(d.policy); paintList(d); await paintMap(d);
+    } catch (err) {
+      if (!alive()) { stop(); return; }
+      if (err.status === 402 && err.data?.code === "upgrade_required") { stop(); closeSheet(); upgradeHit(err.data); return; }
+      const sub = pane.querySelector("#lmsub"); if (sub) sub.textContent = err.message || "The crew map could not be read. Try again.";
+    }
+  };
+  await load();
+  timer = setInterval(load, 30000);
+  const obs = new MutationObserver(() => { if (!alive()) { stop(); obs.disconnect(); } });
+  obs.observe(document.body, { childList: true });
+}
+
 /** The Crew screen (iOS CrewCommandView): Track record, Time cards, Roster. */
 async function crewCommandSheet() {
   const wrap = sheet('<h2>Crew</h2><div id="crewbody" class="note">Loading crew…</div>');
@@ -4163,7 +4317,8 @@ async function crewCommandSheet() {
       if(!Array.isArray(d.track_record)) throw new Error("Crew records could not be read. Try again.");
       if(!wrap.isConnected) return;
       const rec=d.track_record;
-      box.innerHTML='<p>Roster, time cards and who is on what.</p><button class="btn wide" id="crewtrack">Track record</button><button class="btn wide" id="crewc">Time cards</button><button class="btn wide" id="crewr">Roster</button>';
+      box.innerHTML='<p>Roster, time cards, who is on what — and where they are.</p><button class="btn wide em" id="crewmap">Live map</button><button class="btn wide" id="crewtrack">Track record</button><button class="btn wide" id="crewc">Time cards</button><button class="btn wide" id="crewr">Roster</button>';
+      box.querySelector("#crewmap").onclick=()=>crewLiveMapSheet();
       box.querySelector("#crewtrack").onclick=()=>crewTrackRecordSheet(rec);
       box.querySelector("#crewc").onclick=()=>crewHoursSheet();
       box.querySelector("#crewr").onclick=()=>crewRosterSheet();
@@ -5484,8 +5639,8 @@ function phoneCommandHero(d) {
     </div>
   </section>`;
 }
-function phoneCommandIcon(key){return {frontdesk:"✦",autoreply:"↗",reminders:"◷",dispatcher:"⇄","crew-reminders":"◴","google-review-request":"☆"}[key]||"✦";}
-const PHONE_COMMAND_ORDER=["frontdesk","autoreply","reminders","google-review-request","dispatcher","crew-reminders"];
+function phoneCommandIcon(key){return {frontdesk:"✦",autoreply:"↗",reminders:"◷",dispatcher:"⇄","crew-reminders":"◴","google-review-request":"☆","on-my-way":"➤"}[key]||"✦";}
+const PHONE_COMMAND_ORDER=["frontdesk","autoreply","reminders","google-review-request","dispatcher","on-my-way","crew-reminders"];
 
 function phoneLaneSwitcher(d) {
   const lane = phoneLane();
@@ -5945,6 +6100,7 @@ function openAutomation(d, key) {
     autoreply: '<button class="btn" id="autoset">Wording &amp; hours</button>',
     dispatcher: '<button class="btn" id="autoorder">Dispatch order</button>',
     "crew-reminders": '<button class="btn" id="autocrewlist">Your reminders</button><button class="btn" id="autocrewhours">Crew hours</button><button class="btn" id="autocrewshifts">Clock-out timing</button>',
+    "on-my-way": '<button class="btn" id="autocrewmap">Live crew map</button>',
   }[key] || "";
   const blurb = {
     frontdesk: "When a missed caller texts back, Ledger answers them — quoting your real QuickBooks prices and offering real open times. It can never invoice, take a payment or discuss a bill.",
@@ -5952,6 +6108,7 @@ function openAutomation(d, key) {
     autoreply: "A missed call gets an instant text back so the caller knows you exist and can reply.",
     dispatcher: "New bookings text your first-call crew member their job from the business line, and you can tell Ledger to dispatch anyone by name. It can only ever text people on your crew roster.",
     "crew-reminders": "Two things. After a crew member's shift ends, anyone still clocked in gets a text — replying DONE clocks them out. And any reminder you write yourself goes out from the business line at the time you set it. Each punch is nudged once, each reminder sends once a day, and only people on your roster can ever be texted.",
+    "on-my-way": "The moment a crew member taps ON MY WAY on their job link, the customer on that booking gets one text from your business line: who is coming and a live drive-time arrival estimate from where the crew member actually is. One text per job, never a second. Needs the customer's number on the booking.",
   }[key] || "";
   sheet(`<h2>${esc(a.title)} ${a.enabled ? '<span class="pill live">ON</span>' : '<span class="pill">OFF</span>'}</h2>
     <p class="sub">${render(a.result)}</p>
@@ -5972,6 +6129,8 @@ function openAutomation(d, key) {
     if (crewShifts) crewShifts.onclick = () => { closeSheet(); crewTimingSheet(d); };
     const crewList = sh.querySelector("#autocrewlist");
     if (crewList) crewList.onclick = () => { closeSheet(); crewRemindersSheet(); };
+    const crewMap = sh.querySelector("#autocrewmap");
+    if (crewMap) crewMap.onclick = () => { closeSheet(); crewLiveMapSheet(); };
     sh.querySelector("#autotoggle").onclick = () => { closeSheet(); toggleAutomation(d, key); };
   });
 }
@@ -6031,9 +6190,9 @@ async function toggleAutomation(d, key) {
   const row = (d.automations || []).find(x => x.key === key);
   if (key === 'frontdesk') return toggleFrontDesk(d);
   if (key === 'reminders') return toggleApptReminders(d);
-  const enabled = !(row?.enabled ?? (key === 'crew-reminders' ? d.crewReminderEnabled === true : key === 'dispatcher' ? d.dispatcherEnabled === true : d.autoReplyEnabled !== false));
+  const enabled = !(row?.enabled ?? (key === 'crew-reminders' ? d.crewReminderEnabled === true : key === 'dispatcher' ? d.dispatcherEnabled === true : key === 'on-my-way' ? d.onMyWayEnabled === true : d.autoReplyEnabled !== false));
   if (key === 'google-review-request' && enabled && !d.reviewRequests?.url) return reviewRequestSheet(d);
-  const field = {'google-review-request':'reviewRequestsEnabled','crew-reminders':'crewReminderEnabled',dispatcher:'dispatcherEnabled',autoreply:'autoReplyEnabled'}[key];
+  const field = {'google-review-request':'reviewRequestsEnabled','crew-reminders':'crewReminderEnabled',dispatcher:'dispatcherEnabled',autoreply:'autoReplyEnabled','on-my-way':'onMyWayEnabled'}[key];
   if (!field) return;
   const saved = await savePhoneSwitch(d,key,enabled,{action:key === 'google-review-request' ? 'review-settings-save' : 'settings-save',[field]:enabled});
   if (!saved) return;

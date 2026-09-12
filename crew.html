@@ -66,6 +66,14 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
    question the clock does — am I working — and because a man who is off is
    about to look for the clock and should find this instead. */
 .availcard{border:1px solid var(--line);border-radius:18px;background:rgba(16,21,28,.7);padding:14px 15px;margin:0 0 16px}
+.loccard{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:16px;background:rgba(16,21,28,.7);padding:11px 14px;margin:-6px 0 16px}
+.loccard .loclabel{font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+.loccard .locnow{font-size:14px;font-weight:700;margin-top:2px}
+.loccard .locsub{color:var(--dim);font-size:12px;margin-top:2px}
+.loccard.on .locnow{color:var(--cyan)}
+.loccard.off .locnow{color:var(--amber)}
+.locbtn{flex-shrink:0;padding:10px 14px;border:0;border-radius:12px;font-size:12px;font-weight:800;letter-spacing:.05em;cursor:pointer;color:#03181d;background:linear-gradient(135deg,var(--cyan),#67e8f9)}
+.locbtn:disabled{opacity:.5}
 .availcard.off{border-color:rgba(248,113,113,.4);background:rgba(38,20,24,.6)}
 .availrow{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .availlabel{font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
@@ -124,6 +132,7 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
       <span class="badge"><span class="dot"></span><span id="datebadge"></span></span>
     </div>
     <div id="clock"></div>
+    <div id="loc"></div>
     <div id="avail"></div>
     <div id="jobs"></div>
   </div>
@@ -304,6 +313,110 @@ function renderClock(clock) {
   if (staleBtn) staleBtn.onclick = () => punch("out", staleBtn);
 }
 
+// ---- Location (Kyle 2026-09-12) ----
+// Where the worker is, recorded on every tap and — while they are on the
+// clock and this page is open — every 30 seconds. The phone is asked once,
+// at the first tap. A tap never waits more than 4 seconds for a fix and never
+// fails because of one. Off the clock, nothing is sent (and the server would
+// refuse it anyway).
+const FIX_TAP_TIMEOUT_MS = 4000;
+const PING_EVERY_MS = 30000;
+let pingTimer = null;
+let permissionReported = null;   // "denied" | "unsupported" once per page load
+let lastFixAt = 0;
+
+function geoSupported() { return typeof navigator !== "undefined" && "geolocation" in navigator && window.isSecureContext; }
+
+function getFix(timeoutMs, maximumAge = 15000) {
+  return new Promise((resolve) => {
+    if (!geoSupported()) { reportPermission("unsupported"); resolve(null); return; }
+    let settled = false;
+    const done = (v) => { if (!settled) { settled = true; resolve(v); } };
+    const timer = setTimeout(() => done(null), timeoutMs + 500);
+    navigator.geolocation.getCurrentPosition((pos) => {
+      clearTimeout(timer);
+      const c = pos.coords;
+      lastFixAt = Date.now();
+      done({ lat: c.latitude, lng: c.longitude, accuracy_m: Number.isFinite(c.accuracy) ? Math.round(c.accuracy) : null, device_at: new Date(pos.timestamp || Date.now()).toISOString() });
+    }, (err) => {
+      clearTimeout(timer);
+      if (err && err.code === 1) reportPermission("denied");
+      done(null);
+    }, { enableHighAccuracy: true, timeout: timeoutMs, maximumAge });
+  });
+}
+
+// The refusal is a fact the shop needs ("location off" next to the name),
+// so it is sent once. Never blocks anything.
+function reportPermission(state) {
+  if (permissionReported === state || !token) return;
+  permissionReported = state;
+  fetch(FN, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "crew-link/location", token, permission: state }) }).catch(() => {});
+}
+
+let pingGen = 0;
+function sharingNow() { return !stopped && !document.hidden && !!(lastData && lastData.location && lastData.location.sharing); }
+async function sendPing() {
+  if (!sharingNow()) { stopPings(); return; }
+  if (busy) return;   // a tap is in flight — this tick is skipped, not the loop
+  // A fix can take up to 20 s to arrive. If the worker clocked out in the
+  // meantime, this tick is stale and nothing is sent.
+  const gen = pingGen;
+  const fix = await getFix(20000, 25000);
+  if (!fix || gen !== pingGen || busy || !sharingNow()) return;
+  try {
+    const res = await fetch(FN, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "crew-link/location", token, ...fix }) });
+    const d = await res.json().catch(() => ({}));
+    // Clocked out from another device, or the shop paused crew tools: stop.
+    if (d && (d.reason === "off_shift" || res.status === 402 || res.status === 404)) { stopPings(); load(false); return; }
+    if (lastData && lastData.location) { lastData.location.lastAt = new Date().toISOString(); lastData.location.permission = "granted"; renderLocation(lastData.location); }
+  } catch { /* next tick tries again */ }
+}
+function startPings() {
+  stopPings();
+  if (!sharingNow()) return;
+  pingTimer = setInterval(sendPing, PING_EVERY_MS);
+  // First dot right away, once the tap that started the shift has settled.
+  setTimeout(sendPing, 1500);
+}
+function stopPings() { pingGen++; if (pingTimer) { clearInterval(pingTimer); pingTimer = null; } }
+
+function renderLocation(loc) {
+  const host = $("loc");
+  if (!loc) { host.innerHTML = ""; return; }
+  const required = loc.policy !== "optional";
+  const denied = loc.permission === "denied" || loc.permission === "unsupported";
+  let now, sub, cls = "", showTurnOn = false;
+  if (denied) {
+    now = "Location off";
+    sub = loc.permission === "unsupported"
+      ? "This phone can't share location from a web page."
+      : (required ? "Your shop needs your location while you're on the clock. Allow it in your browser settings for this site." : "Optional at your shop. Allow it in your browser settings if you want to share.");
+    cls = "off";
+  } else if (loc.sharing) {
+    const granted = loc.permission === "granted";
+    now = granted ? "Sharing while on the clock" : "Ready to share";
+    const age = loc.lastAt ? Math.round((Date.now() - new Date(loc.lastAt).getTime()) / 60000) : null;
+    sub = !granted ? "Allow location when your phone asks. Only while you're on the clock."
+      : (age === null ? "Updates every 30 seconds while this page is open." : (age < 1 ? "Updated just now." : `Updated ${age} min ago.`) + " Stops by itself when you clock out.");
+    cls = granted ? "on" : "";
+    showTurnOn = !granted && geoSupported();
+  } else {
+    now = "Off — you're off the clock";
+    sub = required ? "Your shop needs your location while you're on the clock. Starts when you clock in." : "Optional at your shop. Starts when you clock in.";
+  }
+  host.innerHTML = `<div class="loccard ${cls}">
+    <div>
+      <div class="loclabel">📍 Location</div>
+      <div class="locnow">${escapeHtml(now)}</div>
+      <div class="locsub">${escapeHtml(sub)}</div>
+    </div>
+    ${showTurnOn ? '<button class="locbtn" id="locon">TURN ON</button>' : ""}
+  </div>`;
+  const btn = $("locon");
+  if (btn) btn.onclick = async () => { btn.disabled = true; await getFix(15000, 0); startPings(); };
+}
+
 // ---- Availability (Kyle 2026-08-31) ----
 // One pill, two taps, no typing and no date picker. A tech does this at 6 AM
 // with one thumb, sometimes from bed. Everything here optimises for that.
@@ -389,6 +502,15 @@ async function sendAvailability(payload, btn) {
 async function crewMutation(payload,btn){
  if(busy||loadingJobs||stopped)return;busy=true;btn.disabled=true;
  try{
+  // Clock punches and status taps carry where the worker was. Best effort,
+  // capped at 4 s, never a reason for the tap itself to fail.
+  if(payload.action==="crew-link/clock"||payload.action==="crew-link/status"){
+   // A punch ends (or starts) sharing; the dot stops the moment the tap
+   // lands and render() restarts it only if the server says still on shift.
+   if(payload.action==="crew-link/clock")stopPings();
+   const fix=await getFix(FIX_TAP_TIMEOUT_MS);
+   if(fix)Object.assign(payload,fix);
+  }
   const d=await LinkRecovery.request(FN,{...payload,token});
   if(!d.closeOnly&&!Array.isArray(d.jobs))throw new Error("This change could not be confirmed.");
   availOpen=false;render(d);
@@ -403,7 +525,9 @@ function render(data) {
   if(data.closeOnly){renderRestricted(data);return;}
   lastData=data;
   renderClock(data.clock);
+  renderLocation(data.location);
   renderAvail(data.availability);
+  if(data.location&&data.location.sharing)startPings();else stopPings();
   $("greeting").textContent = `Hi, ${data.crewMemberName || "there"}`;
   $("bizline").textContent = data.business ? `${data.business} — today's jobs` : "Today's jobs";
   const d = new Date(`${data.date}T12:00:00`);
@@ -441,6 +565,7 @@ function retryPanel(message){
 }
 function renderRestricted(data){
  if(clockTicker){clearInterval(clockTicker);clockTicker=null;}
+ stopPings();
  $("loading").style.display="none";$("expired").style.display="none";$("app").style.display="none";
  const prior=$("restricted");if(prior)prior.remove();
  const div=document.createElement("div");div.id="restricted";div.style.cssText="padding:28px 12px;text-align:center";
@@ -487,8 +612,8 @@ if (!token) {
   load(true);
   scheduleRefresh();
 }
-document.addEventListener("visibilitychange",()=>{if(document.hidden){clearTimeout(refreshTimer);if(clockTicker)clearInterval(clockTicker);}else if(!stopped)load(false);});
-window.addEventListener("pagehide",()=>{stopped=true;clearTimeout(refreshTimer);if(clockTicker)clearInterval(clockTicker);});
+document.addEventListener("visibilitychange",()=>{if(document.hidden){clearTimeout(refreshTimer);if(clockTicker)clearInterval(clockTicker);stopPings();}else if(!stopped)load(false);});
+window.addEventListener("pagehide",()=>{stopped=true;clearTimeout(refreshTimer);if(clockTicker)clearInterval(clockTicker);stopPings();});
 window.addEventListener("pageshow",e=>{if(e.persisted&&token){stopped=false;load(false);}});
 </script>
 </body></html>
