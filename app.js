@@ -3092,8 +3092,38 @@ function drawProfit(refreshError) {
 }
 function profitJob(j){
  if(!j)return;
- sheet(`<h2>${esc(j.customer||"Job")}</h2><p class="sh-sub">${esc(j.number||"Invoice")} · ${esc(j.date)}</p><div class="hero"><span class="eyebrow">Money left before other costs</span><div class="big">${money(j.money_left)}</div><p class="sub">${esc(j.note)}</p></div><div class="item"><span>Sales before tax</span><b>${money(j.revenue)}</b></div><div class="item"><span>Recorded job costs</span><b>${money(j.known_material_cost)}</b></div><p class="note">${esc(j.status)}</p><button class="btn primary wide" id="jobaddcost">＋ Add job cost</button><h3>Cost evidence</h3>${j.allocations.length?j.allocations.map(a=>{const i=S.profit.inventory.items.find(i=>i.id===a.item_key);return `<div class="item"><span>${esc(i?.name||"Item")} · ${a.quantity}</span><b>${money(a.cost)}</b></div>`;}).join(""):`<p class="note">No direct material costs are proven for this job yet. This is not a claim of 100% profit.</p>`}`);
+ sheet(`<h2>${esc(j.customer||"Job")}</h2><p class="sh-sub">${esc(j.number||"Invoice")} · ${esc(j.date)}</p><div class="hero"><span class="eyebrow">Money left before other costs</span><div class="big">${money(j.money_left)}</div><p class="sub">${esc(j.note)}</p></div><div class="item"><span>Sales before tax</span><b>${money(j.revenue)}</b></div><div class="item"><span>Recorded job costs</span><b>${money(j.known_material_cost)}</b></div><p class="note">${esc(j.status)}</p><button class="btn primary wide" id="jobaddcost">＋ Add job cost</button><h3>Invoice</h3><div id="jobinvoice"><p class="note">Loading the invoice…</p></div><h3>Cost evidence</h3>${j.allocations.length?j.allocations.map(a=>{const i=S.profit.inventory.items.find(i=>i.id===a.item_key);return `<div class="item"><span>${esc(i?.name||"Item")} · ${a.quantity}</span><b>${money(a.cost)}</b></div>`;}).join(""):`<p class="note">No direct material costs are proven for this job yet. This is not a claim of 100% profit.</p>`}`);
  $("jobaddcost").onclick=()=>jobCostSheet(j);
+ jobInvoiceSection(j);
+}
+// The whole invoice behind the "money left" figure (Kyle 2026-09-11): every
+// line, the totals, and the same Print / Share PDF pair the invoice screen has.
+// Read straight off the synced sales row; nothing here touches costs.
+async function jobInvoiceSection(j){
+ const slot=$("jobinvoice");if(!slot)return;
+ try{
+  const {invoice:inv}=await get(`/profit/job-invoice?sale_id=${encodeURIComponent(j.id)}`);
+  if(!document.body.contains(slot))return; // sheet closed while loading
+  const lines=inv.lines.length?inv.lines.map(l=>`<div class="kv"><span>${esc(l.description||l.item||"Item")}${l.qty!=null?" × "+esc(String(l.qty)):""}${l.rate!=null?" @ "+money(l.rate):""}</span><span>${l.amount!=null?money(l.amount):"—"}</span></div>`).join(""):`<p class="note">No line items have been read for this invoice yet.</p>`;
+  // Built-in books open their invoice page (the QuickBooks PDF route is gated on a
+  // QuickBooks connection in the browser); QuickBooks invoices get Print / Share PDF.
+  const nativePage=inv.provider==="native"&&inv.link, qboPdf=inv.provider==="quickbooks"&&inv.pdf_available;
+  slot.innerHTML=`<p class="sh-sub">${esc(inv.number?"#"+inv.number:"Invoice")} · ${esc(inv.customer||j.customer||"Customer")} · ${esc(inv.date)}</p>${inv.voided?`<p class="note err">This invoice is voided or not issued.</p>`:""}${lines}<div class="kv"><span>Subtotal</span><span>${money(inv.subtotal)}</span></div><div class="kv"><span>Tax</span><span>${money(inv.tax)}</span></div><div class="kv tot"><span>Total</span><span>${money(inv.total)}</span></div>${nativePage?`<button class="btn primary wide" id="jobinvpage" style="margin-top:12px">Open invoice page</button>`:qboPdf?`<div class="rowbtns" style="margin-top:12px"><button class="btn ghost" id="jobsharepdf">Share PDF</button><button class="btn primary" id="jobprintpdf">Print</button></div><div class="note" id="pdfnote" style="margin-top:9px"></div>`:`<p class="note">The document for this invoice is not available here.</p>`}`;
+  if(nativePage){$("jobinvpage").onclick=()=>window.open(inv.link,"_blank");return;}
+  if(!qboPdf)return;
+  const sh=slot.closest(".sheet"),doc={id:inv.document_id,doc:inv.number||""};
+  $("jobprintpdf").onclick=()=>withPdf(doc,sh,(url)=>{
+   const frame=document.createElement("iframe");
+   frame.style.cssText="position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0";
+   frame.src=url;document.body.appendChild(frame);
+   frame.onload=()=>{try{frame.contentWindow.focus();frame.contentWindow.print();}catch{window.open(url,"_blank");}};
+   setTimeout(()=>{if(document.body.contains(frame))frame.remove();},60000);
+  });
+  $("jobsharepdf").onclick=()=>withPdf(doc,sh,async(url,file)=>{
+   if(navigator.canShare&&file&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:file.name});return;}catch{}}
+   const a=document.createElement("a");a.href=url;a.download=file?file.name:"invoice.pdf";a.click();
+  });
+ }catch(e){if(document.body.contains(slot))slot.innerHTML=`<p class="note err">${esc(e.message||"Could not load the invoice.")}</p>`;}
 }
 async function jobCostSheet(job, initialReceipt) {
  let opts, mode='choose', doc=null, stock=null, draft=null, requestId=crypto.randomUUID(), busy=false, message='', lastSubmit=null;
