@@ -96,7 +96,7 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
 .daymeter .count{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--emerald);white-space:nowrap}
 .track{display:flex;align-items:center;gap:6px;margin-top:16px}
 .step{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
-.step-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;border:1.5px solid var(--line);color:var(--dim);background:rgba(255,255,255,.03);transition:all .3s ease}
+.step-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;border:1.5px solid var(--line);color:var(--dim);background:#121821;transition:all .3s ease}
 .step-label{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--dim)}
 .step-line{flex-shrink:0;width:100%;height:2px;background:var(--line);margin:0 -8px;transform:translateY(-15px);z-index:-1}
 .step.done .step-dot{background:var(--emerald);border-color:var(--emerald);color:#03181d;box-shadow:0 0 16px rgba(52,211,153,.5)}
@@ -125,8 +125,8 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
 .notice .row{display:flex;align-items:center;gap:9px;margin-bottom:8px;font-size:13px;color:var(--text)}
 .notice .row span:first-child{width:26px;text-align:center;flex-shrink:0}
 .notice button{width:100%;padding:13px;border:0;border-radius:13px;font-size:14px;font-weight:800;letter-spacing:.04em;color:#03181d;background:linear-gradient(135deg,var(--cyan),#7dd3fc);cursor:pointer}
-.drive{display:flex;align-items:center;gap:8px;margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.25);font-size:13px;color:var(--cyan);font-weight:700}
-.drive small{color:var(--dim);font-weight:600}
+.drive{display:block;margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.25);font-size:13px;color:var(--cyan);font-weight:700;line-height:1.45}
+.drive small{display:block;color:var(--dim);font-weight:600;font-size:12px}
 .arrive{margin-top:12px;padding:12px 13px;border-radius:13px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.4);font-size:13.5px;line-height:1.45;color:#a7f3d0;animation:rise .4s ease}
 .arrive b{color:var(--emerald)}
 .told{margin-top:12px;padding:10px 12px;border-radius:12px;font-size:12.5px;line-height:1.45;border:1px solid var(--line);background:rgba(255,255,255,.035);color:var(--dim)}
@@ -236,7 +236,7 @@ function jobCard(job) {
   // Drive time to the job they are heading to. Shown only while their own
   // position is fresh — a stale position gets no number, not an old one.
   const driveHtml = job.driveTime && job.driveTime.seconds != null && job.status !== "on_site" && job.status !== "done"
-    ? `<div class="drive">🚗 About ${Math.max(1, Math.round(job.driveTime.seconds / 60))} min to this job <small>· arriving around ${fmtTime(job.driveTime.etaAt)} (live)</small></div>`
+    ? `<div class="drive">🚗 About ${Math.max(1, Math.round(job.driveTime.seconds / 60))} min to this job<small>Arriving around ${fmtTime(job.driveTime.etaAt)} · live from your last position</small></div>`
     : "";
   const toldHtml = customerTextLines(job);
 
