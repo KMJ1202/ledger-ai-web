@@ -1089,3 +1089,8 @@ nav.sitenav .brand b{background:linear-gradient(90deg,#fff 0%,#fff 40%,var(--cya
   .hero-split .herologo.compact .word{padding-left:0}
 }
 .hero-demo{scroll-margin-top:84px}
+
+/* pricing cards: one-line gist + link to /ai-usage/ (Kyle 12544) */
+.price .aihow{display:block;margin-top:5px;font-size:13px;color:var(--dim2);line-height:1.45}
+.price .aihow a{color:var(--cyan);font-weight:700;text-decoration:none;white-space:nowrap}
+.price .aihow a:hover{text-decoration:underline}

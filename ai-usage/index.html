@@ -5,47 +5,60 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b0f14">
-<meta name="description" content="How to delete your Ledger AI account and everything in it — in the app, or by email if you cannot sign in.">
+<meta name="description" content="What the AI allowance on Ledger Solo and Ledger Pro covers, what one question to Ledger costs, what happens when the allowance runs out, and how Power-Ups work.">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<title>Delete your account — Ledger AI</title>
-<meta property="og:title" content="Delete your account — Ledger AI">
-<meta property="og:description" content="How to delete your Ledger AI account and everything in it — in the app, or by email if you cannot sign in.">
-<meta property="og:url" content="https://heyledger.ai/delete-account/">
+<title>How AI usage works — Ledger AI</title>
+<meta property="og:title" content="How AI usage works — Ledger AI">
+<meta property="og:description" content="What the AI allowance on Ledger Solo and Ledger Pro covers, what one question to Ledger costs, what happens when the allowance runs out, and how Power-Ups work.">
+<meta property="og:url" content="https://heyledger.ai/ai-usage/">
 <meta property="og:image" content="https://heyledger.ai/assets/og-card.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Delete your account — Ledger AI">
-<meta name="twitter:description" content="How to delete your Ledger AI account and everything in it — in the app, or by email if you cannot sign in.">
+<meta name="twitter:title" content="How AI usage works — Ledger AI">
+<meta name="twitter:description" content="What the AI allowance on Ledger Solo and Ledger Pro covers, what one question to Ledger costs, what happens when the allowance runs out, and how Power-Ups work.">
 <meta name="twitter:image" content="https://heyledger.ai/assets/og-card.png">
-<link rel="canonical" href="https://heyledger.ai/delete-account/">
+<link rel="canonical" href="https://heyledger.ai/ai-usage/">
 <link rel="stylesheet" href="/assets/styles.css?v=53">
 <style>
-
-
-.pagewrap{max-width:760px;margin:0 auto;padding:0 22px}
-
-
-
+.pagewrap{max-width:820px;margin:0 auto;padding:0 22px}
 .btn.ghost{background:rgba(255,255,255,.06);color:var(--text);border:1px solid var(--line)}
 main{padding:36px 0 60px}
 h1{font-size:clamp(28px,5vw,40px);font-weight:900;letter-spacing:-1px;margin-bottom:8px}
-.meta{color:var(--dim);font-size:14px;margin-bottom:36px}
+.meta{color:var(--dim);font-size:14px;margin-bottom:26px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:0 0 26px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 16px;text-align:center}
+.stat b{display:block;font-size:34px;font-weight:900;letter-spacing:-1px;background:linear-gradient(120deg,#fff,#9fd9ff);-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1.1}
+.stat span{display:block;margin-top:6px;color:var(--dim);font-size:13px;line-height:1.4}
+@media (max-width:640px){.stats{grid-template-columns:1fr 1fr}.stat:first-child{grid-column:1/-1}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px 26px;margin-bottom:18px}
 h2{font-size:19px;font-weight:800;margin-bottom:12px;color:var(--text)}
-h2 .ico{margin-right:8px}
-p{color:var(--dim);font-size:15px;margin-bottom:10px}
+p{color:var(--dim);font-size:15px;line-height:1.6;margin-bottom:10px}
 p:last-child{margin-bottom:0}
 ul{list-style:none;margin:6px 0 4px}
-li{padding:6px 0 6px 20px;position:relative;color:var(--dim);font-size:14.5px}
+li{padding:6px 0 6px 20px;position:relative;color:var(--dim);font-size:14.5px;line-height:1.5}
 li:before{content:"→";position:absolute;left:0;color:var(--cyan)}
 li b{color:var(--text)}
+ul.no li:before{content:"–";color:var(--dim2)}
 a{color:var(--cyan)}
-.callout{border:1px solid rgba(34,211,238,.35);background:rgba(34,211,238,.06);border-radius:14px;padding:16px 18px;margin-top:14px;font-size:14px;color:var(--dim)}
+table{width:100%;border-collapse:collapse;margin:8px 0 4px;font-size:14.5px}
+td{padding:9px 0;border-top:1px solid var(--line);color:var(--dim);vertical-align:top}
+tr:first-child td{border-top:0}
+td:last-child{text-align:right;white-space:nowrap;color:var(--text);font-weight:800;padding-left:14px}
+.packs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0 4px}
+.pack{border:1px solid var(--line);border-radius:14px;padding:14px;background:rgba(255,255,255,.03);text-align:center}
+.pack b{display:block;color:var(--text);font-size:15px}
+.pack i{display:block;font-style:normal;color:var(--dim);font-size:13px;margin-top:4px}
+.pack em{display:block;font-style:normal;color:var(--emerald);font-size:12px;margin-top:4px;font-weight:700}
+@media (max-width:560px){.packs{grid-template-columns:1fr}}
+.callout{border:1px solid rgba(34,211,238,.35);background:rgba(34,211,238,.06);border-radius:14px;padding:16px 18px;margin-top:14px;font-size:14px;color:var(--dim);line-height:1.55}
+.callout b{color:var(--text)}
+.ctarow{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
 footer{border-top:1px solid var(--line);padding:34px 0;color:var(--dim);font-size:13px;text-align:center}
 footer a{color:var(--dim)}
 </style>
+
 </head>
 <body>
 <header class="site">
@@ -90,61 +103,83 @@ footer a{color:var(--dim)}
 <div class="pagewrap">
 
   <main>
-    <h1>Delete your Ledger AI account</h1>
-    <div class="meta">Hey Ledger AI Corp., Calgary, Alberta, Canada</div>
+    <h1>How AI usage works</h1>
+    <div class="meta">Plain answers about the AI allowance on every Ledger AI plan. The numbers below are measured across every shop on Ledger AI over the last 30 days, as of September 13, 2026.</div>
 
-    <div class="card">
-      <h2>The fastest way &mdash; do it yourself, in the app</h2>
-      <p>Open Ledger AI, open <b>Settings</b> and tap <b>Delete account</b>. It takes effect immediately and needs no approval from us.</p>
-      <p>This works in the iPhone app, the Android app and the web app at
-      <a href="https://heyledger.ai/app.html">heyledger.ai</a>.</p>
+    <div class="stats">
+      <div class="stat"><b>11¢</b><span>average cost of one question to Ledger</span></div>
+      <div class="stat"><b>~550</b><span>questions a month on Ledger Solo's $60</span></div>
+      <div class="stat"><b>~1,400</b><span>questions a month on Ledger Pro's $150</span></div>
     </div>
 
     <div class="card">
-      <h2>Or ask us to do it</h2>
-      <p>If you can no longer sign in, email <a href="mailto:supportteam@heyledger.ai">supportteam@heyledger.ai</a>
-      from the address on the account, with the subject <b>Delete my account</b>. We will confirm you own
-      the account and delete it within <b>30 days</b>, usually within two business days.</p>
-      <p>You do not need the app installed to make this request.</p>
+      <h2>What the allowance is</h2>
+      <p>Every plan includes a monthly AI allowance: <b style="color:var(--text)">$60 on Ledger Solo</b>, <b style="color:var(--text)">$150 on Ledger Pro</b>, and every teammate seat on Pro carries its own $50. Your 14-day free trial runs on the full Pro allowance.</p>
+      <p>It's a dollar meter, not a question count, because a one-line answer costs less than a ten-step job. You can see it any time in the app under <b style="color:var(--text)">Settings → AI allowance</b>: how much you've used this month against what's included. It starts fresh at your plan's amount on the 1st of every month.</p>
     </div>
 
     <div class="card">
-      <h2>What gets deleted</h2>
-      <p>Everything in your workspace is erased:</p>
+      <h2>What one question costs</h2>
+      <p>Ledger is billed by the work an answer takes — how much it has to read (your question, the records it pulls up, the conversation so far) and how much it writes back. A quick "what's my balance" is a few cents. A long job that pulls last month's invoices, checks the calendar and drafts an estimate costs more, because Ledger reads and writes more to do it.</p>
+      <table>
+        <tr><td>Average question to Ledger</td><td>11¢</td></tr>
+        <tr><td>Typical question — "who's booked at 10", "draft the invoice for that job"</td><td>7¢</td></tr>
+        <tr><td>Nine out of ten questions</td><td>under 30¢</td></tr>
+        <tr><td>The most expensive single answer we've measured (a long, multi-step job)</td><td>49¢</td></tr>
+        <tr><td>Receipt Radar reading one receipt email from your Gmail</td><td>1–2¢</td></tr>
+        <tr><td>Ledger saving a fact it learned about your business</td><td>under 1¢</td></tr>
+      </table>
+      <p style="margin-top:10px">There's no per-question fee, no minimum and no rounding up. The meter moves by the exact amount of work each answer took.</p>
+    </div>
+
+    <div class="card">
+      <h2>What that buys you</h2>
       <ul>
-        <li>Your account, name, email address and phone number</li>
-        <li>Your business profile, logo, branding and settings</li>
-        <li>Your customers, invoices, estimates, quotes and payment records held in Ledger AI</li>
-        <li>Your jobs, appointments, crew members and time cards</li>
-        <li>Receipts and photos you uploaded</li>
-        <li>Your conversations with the AI</li>
-        <li>The connections to QuickBooks, Google and any other service you linked</li>
+        <li><b>Ledger Solo, $60 a month</b> — roughly 550 questions. That's about 18 a day, every day of the month.</li>
+        <li><b>Ledger Pro, $150 a month</b> — roughly 1,400 questions. About 45 a day.</li>
       </ul>
-      <p>Deleting your Ledger AI account does <b>not</b> delete anything inside QuickBooks, Gmail or Google
-      Calendar. Those are your accounts with those companies and they are untouched.</p>
+      <div class="callout"><b>A real month.</b> The founder's own tire shop — a busy one, on QuickBooks, scanning every receipt and asking Ledger about the books all day — used $27 of AI in August 2026. Less than half the Solo allowance.</div>
     </div>
 
     <div class="card">
-      <h2>What we keep</h2>
-      <p>Deleting your account permanently removes your workspace, your receipts, your conversations and
-      the tokens for any connected account. It cannot be undone.</p>
-      <p>The only records kept afterwards are the billing and tax records for your own subscription &mdash;
-      what you paid us, and when &mdash; which we are required to keep by law. Those are records of the
-      transaction between you and Ledger AI, not your business data. Nothing is kept for marketing.</p>
+      <h2>What counts against it</h2>
+      <ul>
+        <li>Questions to Ledger — typed, or spoken out loud on iPhone</li>
+        <li>Advisor Mode</li>
+        <li>Receipt Radar reading receipts from your Gmail</li>
+        <li>Matching up your price list when you upload one</li>
+        <li>The small helpers that write invoice descriptions and remember facts about your business</li>
+      </ul>
+      <h2 style="margin-top:18px">What doesn't</h2>
+      <ul class="no">
+        <li>Front Desk answering your missed callers — included in Ledger Pro</li>
+        <li>Missed-call auto-texts and night-before reminders</li>
+        <li>Crew job links, day sheets and time cards</li>
+        <li>Customer portals and quote approvals</li>
+        <li>Your booking page</li>
+        <li>Texting — that runs on its own texting credit ($10 on Solo, $25 on Pro)</li>
+        <li>Talking to our support chat</li>
+      </ul>
     </div>
 
     <div class="card">
-      <h2>Cancel your subscription first</h2>
-      <p>Deleting the account stops the service, but it does not automatically cancel a subscription bought
-      through the App Store or Google Play &mdash; those are managed by Apple and Google, not by us. Cancel
-      it in the App Store or Play Store first. Subscriptions bought on our website are cancelled with the
-      account.</p>
+      <h2>When it runs out</h2>
+      <p>Ledger's chat pauses until the 1st. Everything else keeps working — invoicing, payments, booking, crew, phone, customer portals. Need more before then? Buy a Power-Up in the app, on web or iPhone:</p>
+      <div class="packs">
+        <div class="pack"><b>⚡ Boost</b><i>$25 → $25 of AI</i></div>
+        <div class="pack"><b>🔥 Power Pack</b><i>$50 → $55 of AI</i><em>$5 bonus</em></div>
+        <div class="pack"><b>🚀 Heavy Hitter</b><i>$100 → $120 of AI</i><em>$20 bonus</em></div>
+      </div>
+      <p style="margin-top:10px">It's credited the second the payment clears. A Power-Up adds to the current month's allowance; on the 1st the meter starts fresh at your plan's included amount.</p>
     </div>
 
     <div class="card">
-      <h2>Questions</h2>
-      <p><a href="mailto:supportteam@heyledger.ai">supportteam@heyledger.ai</a></p>
-      <p>See also our <a href="/privacy/">Privacy Policy</a>.</p>
+      <h2>No surprise bills</h2>
+      <p>The allowance is a cap, not a tab. Ledger never spends past it on its own, and the only way to add more is to buy a Power-Up yourself — always shown with its price before you pay. Unused allowance doesn't carry over, and you're never charged for it.</p>
+      <div class="ctarow" style="margin-top:14px">
+        <a class="btn primary" href="/app.html?signup=1">Start 14 days free →</a>
+        <a class="btn ghost" href="/#pricing">Back to pricing</a>
+      </div>
     </div>
   </main>
 
