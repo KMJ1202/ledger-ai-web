@@ -29,6 +29,25 @@
 .cd-step[data-clip="map"]{--c:var(--gold)}
 .cd-step[data-clip="timecards"]{--c:var(--emerald)}
 .cd-step[data-clip="track"]{--c:var(--purple)}
+/* generalised blocks (2026-09-13): per-step tone, informational steps, mirrored layout */
+.cd-step[data-tone="gold"]{--c:var(--gold)}.cd-step[data-tone="cyan"]{--c:var(--cyan)}.cd-step[data-tone="emerald"]{--c:var(--emerald)}
+.cd-step[data-tone="purple"]{--c:var(--purple)}.cd-step[data-tone="orange"]{--c:var(--orange)}.cd-step[data-tone="blue"]{--c:var(--blue)}
+.cd-step[data-tone="magenta"]{--c:var(--magenta)}.cd-step[data-tone="teal"]{--c:var(--teal)}.cd-step[data-tone="red"]{--c:var(--red)}
+.cd-step.static{cursor:default;transform:none!important}
+.cd-step.static:hover{border-color:var(--line2);background:var(--glass)}
+.cd-step.static .cd-bar{display:none}
+.cd-step.static .cd-num{color:var(--c);opacity:.75}
+.crewdemo.flip .cd-phone{order:2}
+.crewdemo .cd-note{grid-column:1/-1;margin:0;color:var(--dim2);font-size:13px;line-height:1.5}
+.fblock{scroll-margin-top:84px}
+.fblock .sectitle{max-width:880px;margin-left:auto;margin-right:auto}
+.cd-wide{margin:34px auto 0;max-width:920px;border-radius:18px;overflow:hidden;border:1px solid var(--line2);background:#05070b;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+.cd-wide video{display:block;width:100%;height:auto;aspect-ratio:16/9;background:#05070b}
+.cd-wide-cap{margin:12px auto 0;max-width:920px;font-family:var(--mono);font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim2);text-align:center}
+.intgrid.onecol{grid-template-columns:1fr;gap:12px}
+.intgrid.onecol .intcard{padding:18px 20px}
+.intgrid.onecol .intcard p{margin-top:8px}
+@media(max-width:900px){.crewdemo.flip .cd-phone{order:0}}
 .cd-fine{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:22px auto 0;max-width:1120px;font-family:var(--mono);font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim2)}
 .cd-fine a{color:#6ecfff;text-decoration:underline;text-underline-offset:3px;letter-spacing:.2px;text-transform:none;font-family:inherit;font-size:13px}
 /* stacked variant — phone on top, four chips underneath (feature page hero) */
@@ -53,3 +72,6 @@
   .cd-step,.crewdemo .cd-screen video{transition:none}
   .cd-step.active{transform:none}
 }
+
+/* home hero foot note (2026-09-13) */
+.hero .herofoot{margin:26px auto 0;max-width:600px;color:var(--dim2);font-size:14px;line-height:1.5;text-align:center}
