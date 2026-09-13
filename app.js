@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 162;
+const APP_BUILD = 163;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -433,6 +433,7 @@ const SEG_ICONS = {
   directory: `<circle cx="9" cy="8" r="3"/><path d="M4 19c0-2.8 2.2-5 5-5s5 2.2 5 5M15 5a3 3 0 010 6M17 14c1.9.6 3 2.3 3 5"/>`,
   reviews: `<path d="M4 5h16v11H9l-5 4V5zM12 7.5l1 2.2 2.4.2-1.8 1.6.5 2.3-2.1-1.2-2.1 1.2.5-2.3-1.8-1.6 2.4-.2z"/>`,
   todos: `<path d="M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17M11 6h9M11 12h9M11 18h9"/>`,
+  posts: `<path d="M3 11v2a1 1 0 001 1h2l6 4V6L6 10H4a1 1 0 00-1 1zM16 9.5a3 3 0 010 5M18.5 7a6 6 0 010 10M7 14l1 5h2l-.5-5"/>`,
   inbox: `<path d="M4 4h16v16H4zM4 14h5c0 1.7 1.3 3 3 3s3-1.3 3-3h5"/>`,
   autopilot: `<path d="M13 2L5 13h5l-1 9 8-11h-5l1-9z"/>`,
   activity: `<path d="M3 12h2l2-6 3 12 3-9 2 3h6"/>`,
@@ -604,7 +605,7 @@ function applyLaunchIntent() {
     return;
   }
   if (q.get("go") === "chat") openChat();
-  if (q.get("go") === "google_posts") { S.lane = "reviews"; setTab("customers"); setTimeout(() => { const el = $("gposts"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 900); }
+  if (q.get("go") === "google_posts") { S.lane = "posts"; setTab("customers"); }
   const ask = q.get("ask");
   if (ask) { openChat(); $("box").value = ask; send(); }
   if (q.get("go") || q.get("ask")) history.replaceState({}, "", location.pathname);
@@ -7387,7 +7388,7 @@ const LEAD_SOURCES = [["call-in", "Call-in"], ["walk-in", "Walk-in"], ["referral
   ["website", "Website"], ["social", "Social"], ["repeat", "Repeat"], ["other", "Other"]];
 const TODO_PRIORITIES = [["low", "Low"], ["normal", "Normal"], ["high", "High"], ["urgent", "Urgent"]];
 
-const LANE_CODE = { directory: "CUSTOMERS", reviews: "REVIEWS", todos: "TO-DO" };
+const LANE_CODE = { directory: "CUSTOMERS", reviews: "REVIEWS", posts: "GOOGLE POSTS" };
 
 // Red badge count on the lane switcher, same rule as iOS CustomerLaneSwitcher:
 // open to-dos due by end of today. Leads moved to the Phone tab — see
@@ -7403,13 +7404,14 @@ function laneAlerts() {
 
 async function renderCustomers() {
   view().innerHTML = `<div class="sect">
-    ${pageHead(S.lane === "todos" ? "To-Do" : S.lane === "reviews" ? "Reviews" : "Customers")}
+    ${pageHead(S.lane === "posts" ? "Google Posts" : S.lane === "reviews" ? "Reviews" : "Customers")}
     <div class="seg">
-      ${[["directory", "Directory", 0], ["reviews", "Reviews", S.revUnanswered || 0], ["todos", "To-Do", laneAlerts().todos]].map(([k, l, n]) =>
+      ${[["directory", "Directory", laneAlerts().todos], ["reviews", "Reviews", S.revUnanswered || 0], ["posts", "Google Posts", GP.board ? (GP.board.drafts || []).length : 0]].map(([k, l, n]) =>
         `<button class="${S.lane === k ? "on" : ""}" data-lane="${k}">${segIc(k)}${l}${n ? `<i class="badge">${n}</i>` : ""}</button>`).join("")}
     </div>
     <div id="lanebody"><div class="skel"></div><div class="skel"></div></div>
   </div>`;
+  if (S.lane === "todos") S.lane = "directory";   // old deep links / saved state
   on("[data-lane]", "click", (e) => { S.lane = e.currentTarget.dataset.lane; renderCustomers(); });
   if (S.lane === "directory") {
     loadDirectory();
@@ -7426,7 +7428,7 @@ async function renderCustomers() {
       }
     }
   } else if (S.lane === "reviews") loadReviewsLane();
-  else loadBoard();
+  else loadPostsLane();
 }
 
 // Reviews lane — the web twin of iOS ReviewsCommandLane (build 40): live Google
@@ -7504,7 +7506,10 @@ async function loadReviewsLane() {
         ? `<button class="btn ghost wide" style="margin-top:10px" id="rvall">Show all ${items.length} reviews</button>` : "")
         : `<p class="note">No reviews yet \u2014 the moment your first Google review lands it appears here.</p>`}
     </div>
-    <div id="gposts"><div class="skel"></div></div>
+    <button class="gppointer" id="gpopenlane">
+      <span class="ic">&#128227;</span>
+      <span class="m"><b>Google posts</b><span>Photos, drafts and autopilot now live in their own lane.</span></span>
+      <span class="go">&#8594;</span></button>
     <div class="revgrow">
       <div class="cihead" style="color:var(--emerald)">&#128200; GROW YOUR REVIEWS WITH LEDGER</div>
       ${[["01", "Ask at the high point", "Right after a job they loved. The Directory lane puts an Ask-for-review button on every customer — it sends your real Google review link."],
@@ -7514,7 +7519,8 @@ async function loadReviewsLane() {
       <button class="cta gold" id="rvask"><span class="ic">&#11088;</span>
         <span><b>Ask a customer for a review</b><span>Opens the Directory review queue</span></span></button>
     </div>`;
-  $("rvreload").onclick = () => { slot.innerHTML = `<div class="skel"></div>`; loadReviewsLane(); };
+  const rvreload = $("rvreload"); if (rvreload) rvreload.onclick = () => { slot.innerHTML = `<div class="skel"></div>`; loadReviewsLane(); };
+  if ($("gpopenlane")) $("gpopenlane").onclick = () => { S.lane = "posts"; renderCustomers(); };
   if ($("rvall")) $("rvall").onclick = () => { S.revShowAll = true; loadReviewsLane(); };
   on("[data-rexp]", "click", (e) => {
     const id = e.currentTarget.dataset.rexp;
@@ -7522,6 +7528,12 @@ async function loadReviewsLane() {
     loadReviewsLane();
   }, slot);
   $("rvask").onclick = () => { S.lane = "directory"; renderCustomers(); };
+}
+
+// Google Posts lane (Kyle 12578 + 1202, build 163): the third Customers pill.
+async function loadPostsLane() {
+  const slot = $("lanebody"); if (!slot) return;
+  slot.innerHTML = `<div id="gposts"><div class="skel"></div><div class="skel"></div></div>`;
   gpLoad();
 }
 
@@ -7568,11 +7580,11 @@ function gpRender() {
   const history = b.history || [];
   const posted = history.filter((h) => h.status === "posted");
   const lastPosted = posted[0];
-  const cadence = { daily: "every day", three_week: "Mon · Wed · Fri", weekly: "every Monday" }[s.cadence] || "every day";
+  const cadence = { daily: "daily", three_week: "Mon·Wed·Fri", weekly: "weekly" }[s.cadence] || "daily";
   const status = !b.connected ? ["Connect Google", "var(--orange)"]
-    : !s.enabled ? ["Off — post by hand any time", "var(--dim)"]
+    : !s.enabled ? ["Off — post by hand", "var(--dim)"]
     : s.mode === "auto" ? [`Autopilot · ${cadence} · ${gpHour(s.post_hour)}`, "var(--emerald)"]
-    : [`Asks you first · ${cadence} · ${gpHour(s.post_hour)}`, "var(--cyan)"];
+    : [`Asks you · ${cadence} · ${gpHour(s.post_hour)}`, "var(--cyan)"];
   // The bin is a single strip that scrolls sideways — it never grows the desk,
   // however many photos land in it. Needs-OK first, then fresh, then used.
   const binOrder = gpBinOrder(photos);
@@ -7602,19 +7614,41 @@ function gpRender() {
       ${h.status === "posted" ? `<div class="acts">${h.search_url ? `<a class="pillbtn sm" href="${esc(h.search_url)}" target="_blank" rel="noopener">View</a>` : ""}<button class="pillbtn sm" data-gpdel="${esc(h.id)}">Remove</button></div>` : ""}
     </div>`;
 
-  slot.innerHTML = `<div class="gpbox">
-    <div class="t"><span class="cihead" style="color:var(--cyan);margin:0">&#128227; GOOGLE POSTS</span>
-      <span class="gpstat" style="color:${status[1]}">${esc(status[0])}</span></div>
-    <p class="sub">Ledger writes the post from your own business, uses a fresh photo from your bin, and puts your button under it. You tap Post — or turn on autopilot.</p>
-    ${!b.connected ? `<p class="note">Connect Google Business Profile under Business profile &amp; settings first.</p>` : ""}
-    <div class="gprow">
-      <div class="gpstat-tile"><small>PHOTO BIN</small><b>${photos.length}</b><i>${flagged.length ? `${flagged.length} need your OK` : photos.filter((p) => !p.last_used_at).length + " fresh"}</i></div>
-      <div class="gpstat-tile"><small>WAITING</small><b>${drafts.length}</b><i>${drafts.length ? "tap Post below" : "nothing to approve"}</i></div>
-      <div class="gpstat-tile"><small>LAST POST</small><b>${lastPosted ? esc(gpRel(lastPosted.posted_at)) : "—"}</b><i>${posted.length} through Ledger</i></div>
-    </div>
-    ${s.last_skip_reason && s.enabled ? `<p class="note" style="color:var(--orange)">&#9888; ${esc(s.last_skip_reason)}</p>` : ""}
+  const rhythm = b.rhythm || { days: [], posted_30: posted.length, streak_weeks: 0 };
+  const days14 = (rhythm.days || []).slice(-14);
+  const next = gpNextLine(b);
+  const live = s.enabled && s.mode === "auto";
+  const laneTone = !b.connected ? "251,146,60" : live ? "47,224,160" : "58,200,245";
+  const tile = (n, label, sig, isLive) => `<div class="cstat${n ? "" : " quiet"}" style="--sig:${sig}"><div class="ckrow"><span class="ckr">${label}</span>${isLive ? `<i class="cld"></i>` : ""}</div><b>${n}</b></div>`;
 
-    <div class="gpsec"><div class="t"><b>Photo bin</b>
+  slot.innerHTML = `<div class="gplane" style="--sig:${laneTone}">
+    <div class="cglass gphero crise" style="--i:0">
+      <div class="t"><div><div class="ckr" style="color:var(--cyan)">&#128227; GOOGLE POSTS</div>
+          <b class="crtitle">${esc(b.business_name || "Your Google listing")}</b></div>
+        <span class="cpill${live ? " live" : ""}" style="--sig:${!b.connected ? "251,146,60" : !s.enabled ? "141,154,168" : live ? "47,224,160" : "58,200,245"}"><i></i>${esc(status[0])}</span></div>
+      <div class="cstats" style="margin-top:12px">
+        ${tile(rhythm.streak_weeks || 0, "WEEKS IN A ROW", "47,224,160", false)}
+        ${tile(rhythm.posted_30 || 0, "LAST 30 DAYS", "58,200,245", false)}
+        ${tile(drafts.length, "WAITING", "251,191,36", drafts.length > 0)}
+      </div>
+      <div class="gpnext" style="color:${next[1]}"><span class="ic">&#9201;</span><span>${esc(next[0])}</span>
+        <button class="cinfo" id="gpinfo" aria-label="How posting works">i</button></div>
+      <div class="cfine" id="gpinfotext" hidden>Ledger writes each post from your own business facts and a fresh photo from your bin, and puts your button under it. Ask-first mode drafts and waits for your tap; autopilot posts on its own at your hour. The schedule check runs at 20 past the hour.</div>
+    </div>
+
+    <div class="cglass gpsec gpcard crise" style="--i:1;--sig:${drafts.length ? "47,224,160" : "58,200,245"}">
+      ${drafts.length ? `<div class="t"><b>Waiting for your OK</b><span class="ckr">${drafts.length === 1 ? "1 DRAFT" : drafts.length + " DRAFTS"}</span></div>${drafts.map(draftCard).join("")}`
+        : `<div class="ckr" style="color:var(--cyan)">NEXT UP</div>
+           <p class="sub" style="margin-top:6px">${s.enabled ? "Ledger drafts the next post on schedule from a fresh photo. Want one sooner? Draft it now." : "Nothing waiting. Draft a post now, or turn on the schedule and Ledger keeps the listing fresh for you."}</p>`}
+      <div class="rowbtns" style="margin-top:12px">
+        <button class="btn em" id="gpnew" ${!b.connected ? "disabled" : ""}>&#10024; Draft a post now</button>
+        <button class="btn" id="gpsettings">Settings</button>
+      </div>
+      ${!b.connected ? `<p class="note">Connect Google Business Profile under Business profile &amp; settings first.</p>` : ""}
+      ${s.last_skip_reason && s.enabled ? `<p class="note" style="color:var(--orange)">&#9888; ${esc(s.last_skip_reason)}</p>` : ""}
+    </div>
+
+    <div class="cglass gpsec gpcard crise" style="--i:2"><div class="t"><b>Photo bin</b>
         <span class="gpbinacts">${photos.length ? `<button class="pillbtn sm" id="gpseeall">See all ${photos.length}</button>` : ""}
         <label class="pillbtn sm" style="cursor:pointer"><b>+ Add photos</b><input type="file" id="gpfiles" accept="image/*" multiple hidden></label></span></div>
       <p class="note">On your iPhone, anything you put in the <b>Ledger AI</b> album lands here on its own. Ledger checks each photo for faces, licence plates and paperwork — those wait for your OK.</p>
@@ -7622,14 +7656,16 @@ function gpRender() {
       <div id="gpprog" class="note" style="display:none"></div>
     </div>
 
-    ${drafts.length ? `<div class="gpsec"><div class="t"><b>Waiting for your OK</b></div>${drafts.map(draftCard).join("")}</div>` : ""}
-
-    <div class="rowbtns" style="margin-top:12px">
-      <button class="btn em" id="gpnew" ${!b.connected ? "disabled" : ""}>&#10024; Draft a post now</button>
-      <button class="btn" id="gpsettings">Settings</button>
+    <div class="cglass gpsec gpcard crise" style="--i:3">
+      <div class="t"><span class="ckr" style="color:var(--cyan)">POSTING RHYTHM · 14 DAYS</span><span class="note" style="margin:0">${rhythm.posted_30 === 1 ? "1 post in 30 days" : (rhythm.posted_30 || 0) + " posts in 30 days"}</span></div>
+      ${days14.length ? `<div class="cstrip" style="margin-top:10px">${days14.map((d) => `<div class="cday${d.today ? " today" : ""}" title="${esc(d.date)}${d.count ? " · " + d.count + (d.count === 1 ? " post" : " posts") : ""}"><div class="ccol">${d.count ? `<i style="height:${Math.max(14, Math.min(100, d.count * 50))}%"></i>` : d.today ? `<i class="base"></i>` : ""}</div><span>${esc(d.date.slice(-2))}</span></div>`).join("")}</div>
+        <p class="cfine">Google shows your newest post on the listing — one steady post a week keeps something fresh in front of every searcher.</p>`
+        : `<p class="note">Your first post starts the rhythm.</p>`}
     </div>
 
-    ${history.length ? `<div class="gpsec"><div class="t"><b>Recent</b><button class="pillbtn sm" id="gphist">${GP.showHistory ? "Hide" : "Show " + history.length}</button></div>
+    ${gpCoachHTML()}
+
+    ${history.length ? `<div class="cglass gpsec gpcard crise" style="--i:5"><div class="t"><b>Recent</b><button class="pillbtn sm" id="gphist">${GP.showHistory ? "Hide" : "Show " + history.length}</button></div>
       ${GP.showHistory ? history.map(histRow).join("") : ""}</div>` : ""}
   </div>`;
 
@@ -7646,6 +7682,65 @@ function gpRender() {
   on("[data-gpdel]", "click", (e) => gpDelete(e.currentTarget.dataset.gpdel), slot);
   on("[data-gpsum]", "focus", (e) => { GP.expanded.add(e.currentTarget.dataset.gpsum); e.currentTarget.rows = 8; }, slot);
   on("[data-gpsum]", "input", (e) => gpCountUpdate(e.currentTarget), slot);
+  if ($("gpinfo")) $("gpinfo").onclick = () => { const t = $("gpinfotext"); t.hidden = !t.hidden; };
+  gpCoachWire(slot);
+  // The pill badge follows the waiting count.
+  const pill = document.querySelector('[data-lane="posts"]');
+  if (pill) { const old = pill.querySelector(".badge"); if (old) old.remove(); if (drafts.length) pill.insertAdjacentHTML("beforeend", `<i class="badge">${drafts.length}</i>`); }
+}
+
+// "Next post" in the owner's words: the scheduled run, or why there is none.
+function gpNextLine(b) {
+  const s = b.settings || {};
+  if (!b.connected) return ["Connect Google Business Profile under Business profile & settings and posting lights up.", "var(--orange)"];
+  if (s.last_skip_reason && s.enabled) return [s.last_skip_reason, "var(--orange)"];
+  if (b.next_post_at) {
+    const at = new Date(b.next_post_at);
+    const now = new Date(); const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const day = at.toDateString() === now.toDateString() ? "today" : at.toDateString() === tomorrow.toDateString() ? "tomorrow" : at.toLocaleDateString(undefined, { weekday: "long" });
+    const time = at.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    return [s.mode === "auto" ? `Next post goes out ${day} at ${time}.` : `Next draft lands ${day} at ${time} — you tap Post.`, s.mode === "auto" ? "var(--emerald)" : "var(--cyan)"];
+  }
+  return ["Nothing scheduled — draft one now, or turn on the schedule in Settings.", "var(--dim)"];
+}
+
+// Coach: what every owner should know about Google posts, one card at a
+// time — universal facts, each ending with what Ledger does about it. "Got it"
+// retires a card in this browser; the footer brings the set back.
+const GP_COACH = [
+  ["fresh", "&#10024;", "Fresh posts show on your listing", "Your newest posts sit right on your Google listing in Search and Maps. A listing with something new on it looks open and alive — a stale one looks closed.", "Ledger writes a post from your own shop's facts and a fresh photo, on your schedule."],
+  ["rhythm", "&#127925;", "One post a week beats ten in a day", "Google shows the newest post first. A steady rhythm keeps something fresh in front of people every week; a burst disappears in days.", "Autopilot runs daily, Mon · Wed · Fri or weekly at the hour you pick."],
+  ["button", "&#128073;", "Every post carries a button", "Book, Call now or Learn more sits right under the post, so a reader acts without hunting for your number or your site.", "Ledger uses your default button and writes the closing line to match it. Change it per post any time."],
+  ["photo", "&#128247;", "Real photos win", "A phone shot of today's job beats a stock image every time. Faces, licence plates and paperwork need care — Google posts are public.", "Ledger checks every photo and holds anything with a face, a plate or paperwork until you OK it."],
+  ["opener", "&#128204;", "The first line does the work", "People see the first line or two before they tap. That is why a post opens with the point, then the details as short bullets.", "Every draft: an emoji opener, two to four bullets, and a closing line that matches the button."],
+  ["phone", "&#128245;", "Keep phone numbers out of the text", "Google rejects posts with a phone number in the words — the Call now button is the right way to offer one. Same idea for links: the button carries them.", "Ledger strips numbers from the text automatically and puts your number on the Call button when you choose it."],
+  ["limit", "&#128207;", "1,500 characters, hard limit", "Google will not accept a longer post, and short and specific reads better anyway.", "Ledger keeps every draft under the limit and shows the count while you edit."],
+  ["kinds", "&#128218;", "Three kinds of post", "Update: what's new. Offer: a deal with dates and an optional code. Event: something with a date and a title. Google shows offer and event details itself.", "Say it in chat — \"post an offer: 10% off brake service until Friday\" — or tap Draft a post now."],
+];
+const gpCoachDismissed = () => new Set(JSON.parse(localStorage.getItem("ledger.gbpCoachDismissed") || "[]"));
+function gpCoachHTML() {
+  const gone = gpCoachDismissed();
+  const tips = GP_COACH.filter(([id]) => !gone.has(id));
+  return `<div class="cglass gpsec gpcard gpcoach crise" style="--i:4;--sig:251,191,36">
+    <div class="t"><span class="ckr" style="color:var(--gold, #fbbf24)">COACH · WHY POSTS MATTER</span>${tips.length ? `<span class="ckr" id="gpcoachn">1 / ${tips.length}</span>` : ""}</div>
+    ${tips.length ? `<div class="gptips" id="gptips">${tips.map(([id, ic, title, body, ledger], i) => `<div class="gptip" data-gptip="${id}" data-gpi="${i}">
+        <div class="h"><span class="ic">${ic}</span><b>${esc(title)}</b></div>
+        <p>${esc(body)}</p>
+        <p class="ldg">&#10004; ${esc(ledger)}</p>
+        <button class="pillbtn sm" data-gpgotit="${id}">Got it</button>
+      </div>`).join("")}</div>`
+      : `<div class="gpcoachdone"><span class="note" style="margin:0">You've read all ${GP_COACH.length} tips.</span><button class="pillbtn sm" id="gpcoachagain">Show again</button></div>`}
+  </div>`;
+}
+function gpCoachWire(slot) {
+  on("[data-gpgotit]", "click", (e) => {
+    const gone = gpCoachDismissed(); gone.add(e.currentTarget.dataset.gpgotit);
+    localStorage.setItem("ledger.gbpCoachDismissed", JSON.stringify([...gone]));
+    const card = e.currentTarget.closest(".gpcoach"); if (card) card.outerHTML = gpCoachHTML(); gpCoachWire($("gposts"));
+  }, slot);
+  if ($("gpcoachagain")) $("gpcoachagain").onclick = () => { localStorage.removeItem("ledger.gbpCoachDismissed"); const card = $("gposts").querySelector(".gpcoach"); if (card) card.outerHTML = gpCoachHTML(); gpCoachWire($("gposts")); };
+  const strip = $("gptips");
+  if (strip) strip.onscroll = () => { const n = $("gpcoachn"); if (!n) return; const w = strip.firstElementChild ? strip.firstElementChild.getBoundingClientRect().width + 10 : 1; n.textContent = `${Math.min(strip.children.length, Math.round(strip.scrollLeft / w) + 1)} / ${strip.children.length}`; };
 }
 
 // Google's cap on post text, counted the way Google counts it (an emoji is two).
@@ -7969,6 +8064,7 @@ async function loadDirectory() {
         owingTotal: all.reduce((t, c) => t + (Number(c.balance) > 0 ? Number(c.balance) : 0), 0),
         owingCount: all.filter((c) => Number(c.balance) > 0).length,
         overdueCount: all.filter((c) => overdueIds.has(c.id)).length })}
+      ${todoCardHTML()}
       <div class="revpanel">
         <div class="t"><div><span class="eyebrow" style="color:var(--magenta)">Review opportunities</span>
           <b>${qHead.length ? "Recent customers ready to ask" : "You\u2019re caught up"}</b></div>
@@ -8009,6 +8105,7 @@ async function loadDirectory() {
     if ($("cclr")) $("cclr").onclick = () => { S.custSearch = ""; loadDirectory(); };
     $("cadd").onclick = () => newCustomerSheet();
     on("[data-cust]", "click", (e) => customerSheet(all.find((c) => c.id === e.currentTarget.dataset.cust)), slot);
+    wireTodoCard();
     on("[data-review]", "click", (e) => {
       const c = all.find((x) => x.id === e.currentTarget.dataset.review);
       if (c) reviewSheet(c, asked.has(c.id));
@@ -8134,6 +8231,7 @@ async function loadNativeDirectory() {
         owingTotal: all.reduce((t, c) => t + (c.balance > 0 ? c.balance : 0), 0),
         owingCount: all.filter((c) => c.balance > 0).length,
         overdueCount: all.filter((c) => overdueIds.has(c.id)).length })}
+      ${todoCardHTML()}
       <div class="revpanel">
         <div class="t"><div><span class="eyebrow" style="color:var(--magenta)">Review opportunities</span>
           <b>${qHead.length ? "Recent customers ready to ask" : "You’re caught up"}</b></div>
@@ -8172,6 +8270,7 @@ async function loadNativeDirectory() {
     $("cadd").onclick = () => nativeCustomerSheet(null);
     S.nativeDirRows = all; S.nativeInvoices = invoices;
     on("[data-nprof]", "click", (e) => nativeProfileSheet(all.find((c) => c.id === e.currentTarget.dataset.nprof)), slot);
+    wireTodoCard();
     on("[data-review]", "click", (e) => {
       const c = all.find((x) => x.id === e.currentTarget.dataset.review);
       if (c) reviewSheet(c, asked.has(c.id));
@@ -8651,7 +8750,7 @@ function customerSheet(c) {
 }
 
 async function loadBoard() {
-  const slot = $("lanebody"); if (!slot) return;
+  const slot = todoSlot(); if (!slot) return;
   try {
     S.board = await api("/leads", { action: "board" });
     drawTodos();
@@ -8824,8 +8923,53 @@ function leadSheet(l) {
   });
 }
 
+// Where the to-do board draws since build 163: the sheet opened from the
+// Directory card (`#todobody`). Falls back to the lane body for any old caller.
+function todoSlot() { return $("todobody") || $("lanebody"); }
+function todoListSheet() {
+  sheet(`<div class="pcc-kicker">TO-DO</div><div id="todobody"><div class="skel"></div></div>`, () => {
+    if (S.board) drawTodos(); else loadBoard();
+  });
+}
+// After an edit: redraw wherever the board is showing, or refresh the Directory card.
+function todoAfterSave() {
+  if ($("todobody")) drawTodos();
+  else if (S.lane === "directory" && $("tdcard")) { const c = $("tdcard"); c.outerHTML = todoCardHTML(); wireTodoCard(); }
+}
+function todoCardHTML() {
+  const all = S.board?.todos || [];
+  const todos = all.filter((t) => t.status === "open");
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+  const overdue = todos.filter((t) => t.dueAt && new Date(t.dueAt) < startToday).length;
+  const today = todos.filter((t) => t.dueAt && new Date(t.dueAt) >= startToday && new Date(t.dueAt) <= endToday).length;
+  const tone = overdue ? "var(--red)" : today ? "var(--orange)" : "var(--cyan)";
+  const headline = !S.board ? "Loading your to-dos…" : !todos.length ? "Board is clear"
+    : overdue ? (overdue === 1 ? "1 item is overdue" : `${overdue} items are overdue`)
+    : today ? (today === 1 ? "1 item due today" : `${today} items due today`)
+    : todos.length === 1 ? "1 open item" : `${todos.length} open items`;
+  const when = (t) => {
+    if (!t.dueAt) return "Any time";
+    const d = new Date(t.dueAt);
+    if (d < startToday) return "Overdue";
+    if (d <= endToday) return "Today " + d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    if (d.toDateString() === tomorrow.toDateString()) return "Tomorrow";
+    return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" });
+  };
+  const preview = todos.slice().sort((a, b) => (a.dueAt ? new Date(a.dueAt) : 8e15) - (b.dueAt ? new Date(b.dueAt) : 8e15)).slice(0, 3);
+  return `<button class="tdcard" id="tdcard" style="--tone:${tone}">
+    <div class="t"><span class="eyebrow" style="color:${tone}">&#9989; To-do</span><span class="go">${todos.length ? `Open all ${todos.length}` : "Open"} &#8594;</span></div>
+    <b style="color:${tone === "var(--cyan)" ? "var(--text)" : tone}">${esc(headline)}</b>
+    ${preview.length ? `<div class="rows">${preview.map((t) => `<div class="row"><i></i><span>${esc(t.title)}</span><small>${esc(when(t))}</small></div>`).join("")}</div>`
+      : `<span class="note">Tell Ledger "remind me to call the fleet guy Thursday" in chat and it lands here.</span>`}
+  </button>`;
+}
+function wireTodoCard() { const c = $("tdcard"); if (c) c.onclick = () => todoListSheet(); }
+
 function drawTodos() {
-  const slot = $("lanebody"); if (!slot) return;
+  const slot = todoSlot(); if (!slot) return;
   const all = S.board?.todos || [];
   const todos = all.filter((t) => t.status === "open");
   const done = all.filter((t) => t.status === "done");
@@ -8874,6 +9018,8 @@ function drawTodos() {
       ${S.showDoneTodos ? `<div class="list" style="margin-top:8px;opacity:.6">${done.map((t) => row(t, true)).join("")}</div>` : ""}` : ""}`;
   $("addtodo").onclick = () => todoSheet({});
   $("tdrefresh").onclick = () => { slot.innerHTML = `<div class="skel"></div>`; loadBoard(); };
+  // Keep the Directory card and the pill badge honest while the sheet is open.
+  if ($("tdcard")) { $("tdcard").outerHTML = todoCardHTML(); wireTodoCard(); }
   if ($("tdone")) $("tdone").onclick = () => { S.showDoneTodos = !S.showDoneTodos; drawTodos(); };
   // The board only understands a done flag \u2014 sending {status} silently saved nothing.
   // Tapping a done item puts it back on the board, the way the iPhone does.
@@ -8914,13 +9060,13 @@ function todoSheet(t) {
         priority: sh.querySelector("#tp").value,
         notes: sh.querySelector("#tn").value.trim(),
       };
-      try { S.board = await api("/leads", { action: "todo-save", todo }); closeSheet(); drawTodos(); toast("Saved"); }
+      try { S.board = await api("/leads", { action: "todo-save", todo }); closeSheet(); todoAfterSave(); toast("Saved"); }
       catch (err) { e.currentTarget.disabled = false; const n = sh.querySelector("#tnote"); n.className = "note err"; n.textContent = err.message; }
     };
     const del = sh.querySelector("#tdel");
     if (del) del.onclick = async () => {
       if (!confirm("Delete this to-do?")) return;
-      try { S.board = await api("/leads", { action: "todo-delete", id: t.id }); closeSheet(); drawTodos(); }
+      try { S.board = await api("/leads", { action: "todo-delete", id: t.id }); closeSheet(); todoAfterSave(); }
       catch (err) { toast(err.message, "err"); }
     };
   });
