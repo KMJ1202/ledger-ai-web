@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 160;
+const APP_BUILD = 161;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -604,6 +604,7 @@ function applyLaunchIntent() {
     return;
   }
   if (q.get("go") === "chat") openChat();
+  if (q.get("go") === "google_posts") { S.lane = "reviews"; setTab("customers"); setTimeout(() => { const el = $("gposts"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 900); }
   const ask = q.get("ask");
   if (ask) { openChat(); $("box").value = ask; send(); }
   if (q.get("go") || q.get("ask")) history.replaceState({}, "", location.pathname);
@@ -7503,6 +7504,7 @@ async function loadReviewsLane() {
         ? `<button class="btn ghost wide" style="margin-top:10px" id="rvall">Show all ${items.length} reviews</button>` : "")
         : `<p class="note">No reviews yet \u2014 the moment your first Google review lands it appears here.</p>`}
     </div>
+    <div id="gposts"><div class="skel"></div></div>
     <div class="revgrow">
       <div class="cihead" style="color:var(--emerald)">&#128200; GROW YOUR REVIEWS WITH LEDGER</div>
       ${[["01", "Ask at the high point", "Right after a job they loved. The Directory lane puts an Ask-for-review button on every customer — it sends your real Google review link."],
@@ -7520,6 +7522,285 @@ async function loadReviewsLane() {
     loadReviewsLane();
   }, slot);
   $("rvask").onclick = () => { S.lane = "directory"; renderCustomers(); };
+  gpLoad();
+}
+
+/* ---- Google Posts (Kyle 12563 + 1202, 2026-09-13) ----------------------
+   The owner's Google Business Profile posting desk, under the reviews: photo
+   bin (drop photos in; the iPhone app syncs its "Ledger AI" album here),
+   posting settings (on/off, ask-me-first or autopilot, schedule, the website
+   behind Learn more, the phone behind Call now, the booking page behind Book),
+   drafts waiting for a Post tap, and what already went out. Nothing reaches
+   Google until the owner taps Post or turns autopilot on. */
+const GP = { board: null, busy: false, expanded: new Set(), showHistory: false };
+const GP_CTA_LABEL = { LEARN_MORE: "Learn more", CALL: "Call now", BOOK: "Book", ORDER: "Order", SHOP: "Shop", SIGN_UP: "Sign up" };
+const GP_TOPIC_LABEL = { STANDARD: "Update", OFFER: "Offer", EVENT: "Event" };
+
+async function gpLoad(quiet) {
+  const slot = $("gposts"); if (!slot) return;
+  if (!quiet) slot.innerHTML = `<div class="skel"></div>`;
+  try {
+    GP.board = (await get("/google-business-profile/posts-board")).board;
+    gpRender();
+  } catch (e) {
+    slot.innerHTML = `<div class="gpbox"><div class="cihead" style="color:var(--cyan)">&#128227; GOOGLE POSTS</div>
+      <p class="note">${esc(e.message || "Google Posts is unavailable right now.")}</p>
+      <button class="pillbtn" id="gpretry" style="margin-top:8px"><b>Try again</b></button></div>`;
+    $("gpretry").onclick = () => gpLoad();
+  }
+}
+
+function gpRel(iso) {
+  const d = new Date(iso); if (isNaN(d)) return "";
+  const mins = Math.floor((Date.now() - d) / 60000);
+  if (mins < 1) return "just now"; if (mins < 60) return mins + "m ago";
+  const hrs = Math.floor(mins / 60); if (hrs < 24) return hrs + "h ago";
+  const days = Math.floor(hrs / 24); return days === 1 ? "yesterday" : days < 30 ? days + "d ago" : Math.floor(days / 30) + "mo ago";
+}
+const gpHour = (h) => (h % 12 || 12) + (h < 12 ? " AM" : " PM");
+
+function gpRender() {
+  const slot = $("gposts"); const b = GP.board; if (!slot || !b) return;
+  const s = b.settings || {};
+  const photos = (b.photos || []).filter((p) => p.status !== "removed");
+  const flagged = photos.filter((p) => p.status === "flagged");
+  const drafts = b.drafts || [];
+  const history = b.history || [];
+  const posted = history.filter((h) => h.status === "posted");
+  const lastPosted = posted[0];
+  const cadence = { daily: "every day", three_week: "Mon · Wed · Fri", weekly: "every Monday" }[s.cadence] || "every day";
+  const status = !b.connected ? ["Connect Google", "var(--orange)"]
+    : !s.enabled ? ["Off — post by hand any time", "var(--dim)"]
+    : s.mode === "auto" ? [`Autopilot · ${cadence} · ${gpHour(s.post_hour)}`, "var(--emerald)"]
+    : [`Asks you first · ${cadence} · ${gpHour(s.post_hour)}`, "var(--cyan)"];
+  const photoCard = (p) => `<div class="gpph${p.status === "flagged" ? " flag" : ""}" data-gpphoto="${esc(p.id)}" title="${esc(p.caption || "")}">
+      <img src="${esc(p.url)}" alt="${esc(p.caption || "Photo")}" loading="lazy">
+      ${p.status === "flagged" ? `<span class="tag warn">Needs your OK</span>` : p.last_used_at ? `<span class="tag">Used ${esc(gpRel(p.last_used_at))}</span>` : `<span class="tag fresh">Fresh</span>`}
+    </div>`;
+  const draftCard = (d) => {
+    const open = GP.expanded.has(d.id);
+    return `<div class="gpdraft" data-gpdraft="${esc(d.id)}">
+      <div class="t"><b>${esc(GP_TOPIC_LABEL[d.topic_type] || "Update")}${d.source === "ai_scheduled" ? " · scheduled" : d.source === "ai_chat" ? " · from chat" : ""}</b>
+        <small>${esc(gpRel(d.created_at))}${d.cta_type ? ` · ${esc(GP_CTA_LABEL[d.cta_type] || d.cta_type)} button` : " · no button"}</small></div>
+      <div class="body">${d.photo ? `<img class="ph" src="${esc(d.photo.url)}" alt="">` : ""}
+        <textarea class="gptext" data-gpsum="${esc(d.id)}" rows="${open ? 8 : 4}" maxlength="1500">${esc(d.summary)}</textarea></div>
+      ${d.error ? `<p class="note" style="color:var(--orange)">${esc(d.error)}</p>` : ""}
+      <div class="rowbtns">
+        <button class="btn em" data-gppost="${esc(d.id)}">Post to Google</button>
+        <button class="btn" data-gpsave="${esc(d.id)}">Save edit</button>
+        <button class="btn ghost" data-gpcancel="${esc(d.id)}">Discard</button>
+      </div>
+    </div>`;
+  };
+  const histRow = (h) => `<div class="gphist ${esc(h.status)}">
+      ${h.photo ? `<img src="${esc(h.photo.url)}" alt="">` : `<i></i>`}
+      <div><b>${{ posted: "Posted", failed: "Failed", expired: "Expired draft", deleted: "Removed from Google" }[h.status] || h.status}${h.google_state && h.status === "posted" ? ` · ${esc(h.google_state.toLowerCase())}` : ""}</b>
+        <p>${esc((h.summary || "").slice(0, 140))}${(h.summary || "").length > 140 ? "…" : ""}</p>
+        <small>${esc(gpRel(h.posted_at || h.created_at))}${h.cta_type ? ` · ${esc(GP_CTA_LABEL[h.cta_type] || h.cta_type)}` : ""}</small></div>
+      ${h.status === "posted" ? `<div class="acts">${h.search_url ? `<a class="pillbtn sm" href="${esc(h.search_url)}" target="_blank" rel="noopener">View</a>` : ""}<button class="pillbtn sm" data-gpdel="${esc(h.id)}">Remove</button></div>` : ""}
+    </div>`;
+
+  slot.innerHTML = `<div class="gpbox">
+    <div class="t"><span class="cihead" style="color:var(--cyan);margin:0">&#128227; GOOGLE POSTS</span>
+      <span class="gpstat" style="color:${status[1]}">${esc(status[0])}</span></div>
+    <p class="sub">Ledger writes the post from your own business, uses a fresh photo from your bin, and puts your button under it. You tap Post — or turn on autopilot.</p>
+    ${!b.connected ? `<p class="note">Connect Google Business Profile under Business profile &amp; settings first.</p>` : ""}
+    <div class="gprow">
+      <div class="gpstat-tile"><small>PHOTO BIN</small><b>${photos.length}</b><i>${flagged.length ? `${flagged.length} need your OK` : photos.filter((p) => !p.last_used_at).length + " fresh"}</i></div>
+      <div class="gpstat-tile"><small>WAITING</small><b>${drafts.length}</b><i>${drafts.length ? "tap Post below" : "nothing to approve"}</i></div>
+      <div class="gpstat-tile"><small>LAST POST</small><b>${lastPosted ? esc(gpRel(lastPosted.posted_at)) : "—"}</b><i>${posted.length} through Ledger</i></div>
+    </div>
+    ${s.last_skip_reason && s.enabled ? `<p class="note" style="color:var(--orange)">&#9888; ${esc(s.last_skip_reason)}</p>` : ""}
+
+    <div class="gpsec"><div class="t"><b>Photo bin</b>
+        <label class="pillbtn sm" style="cursor:pointer"><b>+ Add photos</b><input type="file" id="gpfiles" accept="image/*" multiple hidden></label></div>
+      <p class="note">On your iPhone, anything you put in the <b>Ledger AI</b> album lands here on its own. Ledger checks each photo for faces, licence plates and paperwork — those wait for your OK.</p>
+      ${photos.length ? `<div class="gpgrid">${photos.map(photoCard).join("")}</div>` : `<p class="note" style="margin-top:8px">No photos yet — add a few shots of your work, your shop, your crew.</p>`}
+      <div id="gpprog" class="note" style="display:none"></div>
+    </div>
+
+    ${drafts.length ? `<div class="gpsec"><div class="t"><b>Waiting for your OK</b></div>${drafts.map(draftCard).join("")}</div>` : ""}
+
+    <div class="rowbtns" style="margin-top:12px">
+      <button class="btn em" id="gpnew" ${!b.connected ? "disabled" : ""}>&#10024; Draft a post now</button>
+      <button class="btn" id="gpsettings">Settings</button>
+    </div>
+
+    ${history.length ? `<div class="gpsec"><div class="t"><b>Recent</b><button class="pillbtn sm" id="gphist">${GP.showHistory ? "Hide" : "Show " + history.length}</button></div>
+      ${GP.showHistory ? history.map(histRow).join("") : ""}</div>` : ""}
+  </div>`;
+
+  $("gpfiles").onchange = (e) => gpUpload([...e.target.files]);
+  $("gpnew").onclick = () => gpDraftSheet();
+  $("gpsettings").onclick = () => gpSettingsSheet();
+  if ($("gphist")) $("gphist").onclick = () => { GP.showHistory = !GP.showHistory; gpRender(); };
+  on("[data-gpphoto]", "click", (e) => gpPhotoSheet(e.currentTarget.dataset.gpphoto), slot);
+  on("[data-gppost]", "click", (e) => gpPublish(e.currentTarget.dataset.gppost, e.currentTarget), slot);
+  on("[data-gpsave]", "click", (e) => gpSaveEdit(e.currentTarget.dataset.gpsave, e.currentTarget), slot);
+  on("[data-gpcancel]", "click", (e) => gpCancel(e.currentTarget.dataset.gpcancel), slot);
+  on("[data-gpdel]", "click", (e) => gpDelete(e.currentTarget.dataset.gpdel), slot);
+  on("[data-gpsum]", "focus", (e) => { GP.expanded.add(e.currentTarget.dataset.gpsum); e.currentTarget.rows = 8; }, slot);
+}
+
+async function gpUpload(files) {
+  if (!files.length) return;
+  const prog = $("gpprog"); let done = 0, dup = 0, flagged = 0;
+  prog.style.display = "block";
+  for (const file of files) {
+    prog.textContent = `Adding ${done + 1} of ${files.length}…`;
+    try {
+      const image = await downscaleReceipt(file);
+      const r = await api("/google-business-profile/photo-add", { image, media_type: "image/jpeg", source: "upload" });
+      if (r.duplicate) dup++; else if (r.photo && r.photo.status === "flagged") flagged++;
+      done++;
+    } catch (e) { toast(e.message || "That photo didn't upload", "err"); }
+  }
+  prog.style.display = "none";
+  toast(done ? `${done} photo${done === 1 ? "" : "s"} added${dup ? ` (${dup} already there)` : ""}${flagged ? ` · ${flagged} need your OK` : ""}` : "Nothing added");
+  gpLoad(true);
+}
+
+function gpPhotoSheet(id) {
+  const p = (GP.board.photos || []).find((x) => x.id === id); if (!p) return;
+  const sf = p.safety || {};
+  const why = [sf.faces && "a person's face", sf.plates && "a licence plate", sf.documents && "paperwork or a screen with text"].filter(Boolean).join(", ");
+  sheet(`<h2>${p.status === "flagged" ? "Needs your OK" : "Photo"}</h2>
+    <img src="${esc(p.url)}" alt="" style="width:100%;border-radius:14px;margin-top:10px">
+    <p class="sub" style="margin-top:10px">${esc(p.caption || "")}</p>
+    ${p.status === "flagged" ? `<p class="note">Ledger spotted ${esc(why || "something to check")}. Google posts are public — if you're fine with it, approve it and it joins the bin.</p>` : ""}
+    <p class="note">${p.last_used_at ? `Used in a post ${esc(gpRel(p.last_used_at))}${p.used_count > 1 ? ` · ${p.used_count} times` : ""}.` : "Not used in a post yet."}</p>
+    <div class="rowbtns">
+      ${p.status === "flagged" ? `<button class="btn em" id="gpapprove">Approve for posting</button>` : `<button class="btn em" id="gpusenow">Draft a post with it</button>`}
+      <button class="btn ghost" id="gpremove">Remove from bin</button>
+    </div>`, (sh) => {
+    const a = sh.querySelector("#gpapprove"); if (a) a.onclick = () => gpPhotoReview(id, "approve", a);
+    const r = sh.querySelector("#gpremove"); r.onclick = () => gpPhotoReview(id, "remove", r);
+    const u = sh.querySelector("#gpusenow"); if (u) u.onclick = () => { closeSheet(); gpDraftSheet(id); };
+  });
+}
+
+async function gpPhotoReview(id, action, btn) {
+  btn.disabled = true; btn.textContent = action === "approve" ? "Approving…" : "Removing…";
+  try { await api("/google-business-profile/photo-review", { photo_id: id, action }); closeSheet(); toast(action === "approve" ? "Photo approved" : "Photo removed"); gpLoad(true); }
+  catch (e) { btn.disabled = false; btn.textContent = action === "approve" ? "Approve for posting" : "Remove from bin"; toast(e.message, "err"); }
+}
+
+function gpSettingsSheet() {
+  const s = GP.board.settings || {};
+  const suggestedPhone = GP.board.suggested_phone || "";
+  const opt = (v, l, cur) => `<option value="${v}"${cur === v ? " selected" : ""}>${l}</option>`;
+  sheet(`<div class="pcc-kicker">GOOGLE BUSINESS PROFILE</div><h2>Google Posts</h2>
+    <p class="sub">Your posts, your photos, your buttons. Change anything, any time.</p>
+    <div class="kv" style="align-items:center;margin-top:14px"><span><b>Post on a schedule</b><br><small class="note">Off means you still draft and post by hand whenever you like.</small></span>
+      <button class="pswx${s.enabled ? " on" : ""}" id="gpen" role="switch" aria-checked="${!!s.enabled}" aria-label="Post on a schedule"><i></i></button></div>
+    <label class="pcc-field">Before it goes on Google
+      <select id="gpmode"><option value="approve"${s.mode !== "auto" ? " selected" : ""}>Ask me first — I tap Post</option><option value="auto"${s.mode === "auto" ? " selected" : ""}>Autopilot — post it for me</option></select></label>
+    <label class="pcc-field">How often
+      <select id="gpcad">${opt("daily", "Every day", s.cadence)}${opt("three_week", "Monday, Wednesday, Friday", s.cadence)}${opt("weekly", "Once a week (Monday)", s.cadence)}</select></label>
+    <label class="pcc-field">What time
+      <select id="gphour">${Array.from({ length: 24 }, (_, h) => opt(String(h), gpHour(h), String(s.post_hour ?? 9))).join("")}</select></label>
+    <div class="kv" style="align-items:center;margin-top:16px"><span><b>Only post with a fresh photo</b><br><small class="note">No new photo in 30 days, no post. Keeps it real.</small></span>
+      <button class="pswx${s.require_fresh_photo !== false ? " on" : ""}" id="gpfresh" role="switch" aria-checked="${s.require_fresh_photo !== false}" aria-label="Only post with a fresh photo"><i></i></button></div>
+    <h3 style="margin-top:22px">The button under every post</h3>
+    <label class="pcc-field">Default button
+      <select id="gpcta">${opt("LEARN_MORE", "Learn more → your website", s.cta_default)}${opt("CALL", "Call now → your phone", s.cta_default)}${opt("BOOK", "Book → your Ledger booking page", s.cta_default)}${opt("NONE", "No button", s.cta_default)}</select></label>
+    <label class="pcc-field">Your website (Learn more)<input id="gpweb" type="url" value="${esc(s.website_url || "")}" placeholder="https://yourshop.com" autocomplete="off"></label>
+    <label class="pcc-field">Your phone (Call now)<input id="gpphone" type="tel" value="${esc(s.phone_number || suggestedPhone)}" placeholder="403 555 0142" autocomplete="off"></label>
+    <p class="note">${s.booking_url ? `Book goes to <a href="${esc(s.booking_url)}" target="_blank" rel="noopener">your booking page</a>.` : "Turn on online booking under Business profile &amp; settings to use the Book button."} Google doesn't allow phone numbers in the post text — the Call now button is how customers reach you.</p>
+    <div class="rowbtns" style="margin-top:18px"><button class="btn em" id="gpsave">Save</button></div>
+    <p class="note" id="gperr" role="alert"></p>`, (sh) => {
+    const sw = (id) => { const b = sh.querySelector(id); b.onclick = () => { b.classList.toggle("on"); b.setAttribute("aria-checked", b.classList.contains("on")); }; };
+    sw("#gpen"); sw("#gpfresh");
+    sh.querySelector("#gpsave").onclick = async () => {
+      const btn = sh.querySelector("#gpsave"); btn.disabled = true; btn.textContent = "Saving…"; sh.querySelector("#gperr").textContent = "";
+      try {
+        const r = await api("/google-business-profile/posts-settings", {
+          enabled: sh.querySelector("#gpen").classList.contains("on"),
+          mode: sh.querySelector("#gpmode").value, cadence: sh.querySelector("#gpcad").value,
+          post_hour: Number(sh.querySelector("#gphour").value), cta_default: sh.querySelector("#gpcta").value,
+          website_url: sh.querySelector("#gpweb").value.trim(), phone_number: sh.querySelector("#gpphone").value.trim(),
+          require_fresh_photo: sh.querySelector("#gpfresh").classList.contains("on"),
+        });
+        GP.board.settings = r.settings; closeSheet(); toast(r.settings.enabled ? (r.settings.mode === "auto" ? "Autopilot is on" : "Ledger will ask you before each post") : "Saved"); gpRender();
+      } catch (e) { btn.disabled = false; btn.textContent = "Save"; sh.querySelector("#gperr").textContent = e.message; }
+    };
+  });
+}
+
+function gpDraftSheet(photoId) {
+  const s = GP.board.settings || {};
+  const photos = (GP.board.photos || []).filter((p) => p.status === "ready" || p.status === "used");
+  const opt = (v, l, cur) => `<option value="${v}"${cur === v ? " selected" : ""}>${l}</option>`;
+  sheet(`<h2>Draft a Google post</h2>
+    <p class="sub">Tell Ledger the angle, or leave it blank for a what's-new post from your own business.</p>
+    <label class="pcc-field">What's it about? (optional)<textarea id="gpbrief" rows="3" maxlength="600" placeholder="e.g. Fall booking week — we have openings Thursday and Friday" style="display:block;width:100%;margin-top:8px"></textarea></label>
+    <label class="pcc-field">Kind of post<select id="gptopic">${opt("STANDARD", "Update", "STANDARD")}${opt("OFFER", "Offer (with dates)", "")}${opt("EVENT", "Event (with a date)", "")}</select></label>
+    <div id="gpdates" style="display:none">
+      <label class="pcc-field">Title<input id="gptitle" type="text" maxlength="58" placeholder="Short title Google shows"></label>
+      <div class="rowbtns"><label class="pcc-field" style="flex:1">Starts<input id="gpstart" type="date"></label><label class="pcc-field" style="flex:1">Ends<input id="gpend" type="date"></label></div>
+      <div id="gpoffer" style="display:none"><label class="pcc-field">Coupon code (optional)<input id="gpcoupon" type="text" maxlength="58"></label><label class="pcc-field">Terms (optional)<input id="gpterms" type="text" maxlength="200"></label></div>
+    </div>
+    <label class="pcc-field">Button<select id="gpdcta">${opt("", `Your default (${GP_CTA_LABEL[s.cta_default] || "none"})`, "")}${opt("LEARN_MORE", "Learn more", "")}${opt("CALL", "Call now", "")}${opt("BOOK", "Book", "")}${opt("NONE", "No button", "")}</select></label>
+    <label class="pcc-field">Photo<select id="gpdphoto">${opt("auto", "Freshest photo in the bin", photoId ? "" : "auto")}${photos.map((p) => opt(p.id, (p.caption || "Photo").slice(0, 60) + (p.last_used_at ? " (used)" : ""), photoId || "")).join("")}${opt("none", "No photo", "")}</select></label>
+    <div class="rowbtns" style="margin-top:18px"><button class="btn em" id="gpgo">&#10024; Write it</button></div>
+    <p class="note" id="gpderr" role="alert"></p>`, (sh) => {
+    const topic = sh.querySelector("#gptopic");
+    topic.onchange = () => { sh.querySelector("#gpdates").style.display = topic.value === "STANDARD" ? "none" : "block"; sh.querySelector("#gpoffer").style.display = topic.value === "OFFER" ? "block" : "none"; };
+    sh.querySelector("#gpgo").onclick = async () => {
+      const btn = sh.querySelector("#gpgo"); btn.disabled = true; btn.textContent = "Writing…"; sh.querySelector("#gpderr").textContent = "";
+      const photo = sh.querySelector("#gpdphoto").value;
+      const body = { brief: sh.querySelector("#gpbrief").value.trim(), topic_type: topic.value, cta_type: sh.querySelector("#gpdcta").value || undefined };
+      if (photo === "none") { body.photo_id = null; body.auto_photo = false; } else if (photo !== "auto") body.photo_id = photo;
+      if (topic.value !== "STANDARD") {
+        body.event = { title: sh.querySelector("#gptitle").value.trim(), start_date: sh.querySelector("#gpstart").value, end_date: sh.querySelector("#gpend").value };
+        if (topic.value === "OFFER") body.offer = { coupon_code: sh.querySelector("#gpcoupon").value.trim(), terms: sh.querySelector("#gpterms").value.trim() };
+      }
+      try {
+        const r = await api("/google-business-profile/post-draft", body);
+        closeSheet(); toast("Draft ready — read it over, then Post"); GP.expanded.add(r.post.id); await gpLoad(true);
+        const card = document.querySelector(`[data-gpdraft="${r.post.id}"]`); if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+      } catch (e) {
+        btn.disabled = false; btn.textContent = "✨ Write it";
+        sh.querySelector("#gpderr").textContent = e.message === "ai_budget_exhausted" ? "This month's AI allowance is used up — add a Power-Up to keep drafting." : e.message;
+      }
+    };
+  });
+}
+
+async function gpSaveEdit(id, btn) {
+  const ta = document.querySelector(`[data-gpsum="${id}"]`); if (!ta) return;
+  btn.disabled = true; btn.textContent = "Saving…";
+  try { await api("/google-business-profile/post-update", { post_id: id, summary: ta.value }); toast("Edit saved"); await gpLoad(true); }
+  catch (e) { btn.disabled = false; btn.textContent = "Save edit"; toast(e.message, "err"); }
+}
+
+async function gpPublish(id, btn) {
+  const ta = document.querySelector(`[data-gpsum="${id}"]`);
+  const draft = (GP.board.drafts || []).find((d) => d.id === id);
+  btn.disabled = true; btn.textContent = "Posting…";
+  try {
+    if (ta && draft && ta.value.trim() !== (draft.summary || "").trim()) await api("/google-business-profile/post-update", { post_id: id, summary: ta.value });
+    const r = await api("/google-business-profile/post-publish", { post_id: id });
+    toast(r.post && r.post.google_state === "LIVE" ? "Posted — it's live on Google" : "Posted — Google is putting it up now");
+    GP.showHistory = true; await gpLoad(true);
+  } catch (e) { btn.disabled = false; btn.textContent = "Post to Google"; toast(e.message, "err"); gpLoad(true); }
+}
+
+async function gpCancel(id) {
+  try { await api("/google-business-profile/post-cancel", { post_id: id }); toast("Draft discarded"); gpLoad(true); }
+  catch (e) { toast(e.message, "err"); }
+}
+
+function gpDelete(id) {
+  sheet(`<h2>Remove this post from Google?</h2><p class="sub">Customers won't see it any more. You can always post a new one.</p>
+    <div class="rowbtns"><button class="btn" id="gpdelyes" style="color:var(--red)">Remove from Google</button><button class="btn ghost" id="gpdelno">Keep it</button></div>`, (sh) => {
+    sh.querySelector("#gpdelno").onclick = closeSheet;
+    sh.querySelector("#gpdelyes").onclick = async () => {
+      const b = sh.querySelector("#gpdelyes"); b.disabled = true; b.textContent = "Removing…";
+      try { await api("/google-business-profile/post-delete", { post_id: id }); closeSheet(); toast("Removed from Google"); gpLoad(true); }
+      catch (e) { b.disabled = false; b.textContent = "Remove from Google"; toast(e.message, "err"); }
+    };
+  });
 }
 
 const reviewAsked = () => new Set((localStorage.getItem("kmj.reviewRequestedCustomerIDs") || "").split(",").filter(Boolean));

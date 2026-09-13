@@ -1365,6 +1365,47 @@ a{color:var(--cyan);text-decoration:none}
 .playstep span{display:block;font-size:13px;font-weight:800}
 .playstep small{display:block;font-size:11.5px;color:var(--dim);margin-top:3px}
 .revlane-err{border:1px solid rgba(251,191,36,.28);border-radius:18px;padding:17px;background:linear-gradient(165deg,rgba(251,191,36,.05),rgba(255,255,255,.01))}
+/* Google Posts desk (2026-09-13) — sits under the reviews list */
+.gpbox{border:1px solid rgba(58,200,245,.24);border-radius:18px;padding:15px;margin-top:13px;background:linear-gradient(165deg,rgba(58,200,245,.05),rgba(255,255,255,.01))}
+.gpbox>.t{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.gpbox .gpstat{font-family:var(--mono);font-size:9.5px;font-weight:800;letter-spacing:1px;text-align:right}
+.gpbox .sub{margin:4px 0 0}
+.gprow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
+.gpstat-tile{border-radius:13px;padding:10px;background:rgba(58,200,245,.07);border:1px solid rgba(58,200,245,.2)}
+.gpstat-tile small{display:block;font-family:var(--mono);font-size:8.5px;font-weight:800;letter-spacing:1px;color:var(--dim)}
+.gpstat-tile b{display:block;font-size:18px;font-weight:900;margin-top:3px;color:var(--cyan)}
+.gpstat-tile i{display:block;font-style:normal;font-size:9px;color:var(--dim);margin-top:2px}
+.gpsec{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.gpsec>.t{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.gpsec>.t b{font-size:13.5px;font-weight:800}
+.gpgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.gpph{position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:rgba(255,255,255,.03);cursor:pointer}
+.gpph img{width:100%;height:100%;object-fit:cover;display:block}
+.gpph .tag{position:absolute;left:6px;bottom:6px;font-family:var(--mono);font-size:8px;font-weight:800;letter-spacing:.8px;padding:3px 6px;border-radius:999px;background:rgba(5,7,11,.72);color:var(--dim);backdrop-filter:blur(6px)}
+.gpph .tag.fresh{color:var(--emerald)}
+.gpph .tag.warn{color:var(--orange)}
+.gpph.flag{border-color:rgba(251,146,60,.6);box-shadow:0 0 0 1px rgba(251,146,60,.25) inset}
+.gpdraft{border:1px solid rgba(47,224,160,.3);border-radius:14px;padding:12px;margin-top:10px;background:rgba(47,224,160,.05)}
+.gpdraft .t{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.gpdraft .t b{font-size:12.5px;color:var(--emerald)}
+.gpdraft .t small{font-size:10.5px;color:var(--dim)}
+.gpdraft .body{display:flex;gap:10px;margin-top:9px;align-items:flex-start}
+.gpdraft .ph{width:84px;height:84px;object-fit:cover;border-radius:10px;flex-shrink:0;border:1px solid var(--line)}
+.gptext{flex:1;width:100%;min-width:0;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);color:var(--text);font:inherit;font-size:13.5px;line-height:1.4;padding:9px 10px;resize:vertical}
+.gpdraft .rowbtns{margin-top:10px}
+.gphist{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}
+.gphist:first-of-type{border-top:0}
+.gphist img,.gphist>i{width:48px;height:48px;border-radius:9px;object-fit:cover;flex-shrink:0;background:rgba(255,255,255,.04);display:block}
+.gphist>div{flex:1;min-width:0}
+.gphist b{font-size:12px;display:block}
+.gphist.failed b,.gphist.deleted b{color:var(--dim)}
+.gphist.posted b{color:var(--emerald)}
+.gphist p{font-size:12px;color:var(--text);opacity:.85;margin:3px 0 0}
+.gphist small{display:block;font-size:10px;color:var(--dim);margin-top:3px}
+.gphist .acts{display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.gphist .acts .pillbtn{text-decoration:none;text-align:center}
+.pcc-field select,.pcc-field textarea{display:block;width:100%;margin-top:8px;min-height:48px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.04);color:var(--text);font:inherit;font-size:15px;padding:10px 12px}
+.pcc-field textarea{min-height:76px}
 
 /* ==========================================================================
    iOS PARITY DESIGN LAYER (Kyle 1202, 2026-09-02) — the web app wears the same
@@ -1947,5 +1988,5 @@ button,a,input,select,[role="switch"]{touch-action:manipulation}
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=160"></script>
+<script type="module" src="app.js?v=161"></script>
 </body></html>
