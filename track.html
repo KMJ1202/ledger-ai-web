@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07090d">
+<meta name="robots" content="noindex">
+<title>Your technician</title>
+<style>
+:root{--bg:#07090d;--card:#10151c;--line:#1f2833;--text:#f3f5f7;--dim:#93a1af;--cyan:#22d3ee;--purple:#a855f7;--emerald:#34d399;--amber:#fbbf24;--red:#f87171}
+*{box-sizing:border-box}
+body{margin:0;min-height:100dvh;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;display:flex;flex-direction:column;align-items:center;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:-40%;background:
+  radial-gradient(42% 34% at 22% 12%, rgba(34,211,238,.13), transparent 60%),
+  radial-gradient(40% 34% at 82% 18%, rgba(168,85,247,.12), transparent 60%),
+  radial-gradient(50% 40% at 50% 96%, rgba(34,211,238,.06), transparent 65%);
+  animation:drift 26s ease-in-out infinite alternate;pointer-events:none;z-index:0}
+@keyframes drift{from{transform:translate3d(-1.5%,-1%,0) scale(1)}to{transform:translate3d(1.5%,1.5%,0) scale(1.05)}}
+.wrap{position:relative;z-index:1;width:100%;max-width:520px;padding:34px 18px calc(env(safe-area-inset-bottom) + 44px)}
+.hero{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:22px}
+.ring{width:66px;height:66px;border-radius:21px;padding:2px;background:linear-gradient(135deg,var(--cyan),var(--purple));box-shadow:0 0 42px rgba(34,211,238,.35),0 0 90px rgba(168,85,247,.18);animation:breathe 4.5s ease-in-out infinite}
+@keyframes breathe{0%,100%{box-shadow:0 0 34px rgba(34,211,238,.3),0 0 80px rgba(168,85,247,.15)}50%{box-shadow:0 0 52px rgba(34,211,238,.5),0 0 110px rgba(168,85,247,.28)}}
+.ring>.inner{width:100%;height:100%;border-radius:19px;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:30px}
+.shop{font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan);margin-top:16px}
+h1{font-size:24px;margin:8px 0 0;letter-spacing:-.02em;line-height:1.2}
+.sub{margin:8px 0 0;color:var(--dim);font-size:14.5px;line-height:1.5}
+.card{position:relative;border-radius:22px;padding:1px;margin-bottom:16px;background:linear-gradient(160deg,rgba(34,211,238,.4),rgba(168,85,247,.28) 45%,rgba(34,211,238,.1));box-shadow:0 24px 70px rgba(0,0,0,.5)}
+.card>.in{border-radius:21px;background:rgba(16,21,28,.92);backdrop-filter:blur(18px);padding:20px 18px 18px}
+.eta{text-align:center}
+.eta .big{font-size:38px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.eta .big.orig{color:var(--amber)}
+.eta .label{font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+.eta .line{color:var(--dim);font-size:13.5px;line-height:1.5;margin-top:8px}
+.live{display:inline-flex;align-items:center;gap:7px;margin-top:10px;padding:5px 12px;border-radius:999px;border:1px solid rgba(34,211,238,.35);background:rgba(34,211,238,.08);color:var(--cyan);font-size:11px;font-weight:800;letter-spacing:.06em}
+.live .dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);animation:pulse 2s ease-in-out infinite}
+.live.warn{border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.08);color:var(--amber)}
+.live.warn .dot{background:var(--amber);animation:none}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(34,211,238,.5)}50%{box-shadow:0 0 0 6px rgba(34,211,238,0)}}
+.track{display:flex;align-items:center;gap:6px;margin-top:18px}
+.step{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+.step-dot{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;border:1.5px solid var(--line);color:var(--dim);background:rgba(255,255,255,.03);transition:all .3s ease}
+.step-label{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);text-align:center}
+.step-time{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;min-height:14px}
+.step-line{flex-shrink:0;width:100%;height:2px;background:var(--line);margin:0 -8px;transform:translateY(-16px);z-index:-1}
+.step.done .step-dot{background:var(--emerald);border-color:var(--emerald);color:#03181d;box-shadow:0 0 16px rgba(52,211,153,.5)}
+.step.done .step-label{color:var(--emerald)}
+.step.current .step-dot{border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 0 4px rgba(34,211,238,.12)}
+.step.current .step-label{color:var(--cyan)}
+.callrow{display:flex;gap:9px;margin-top:16px}
+.callbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 10px;border-radius:13px;font-size:13.5px;font-weight:800;letter-spacing:.02em;text-decoration:none;color:#03181d;background:linear-gradient(135deg,var(--cyan),#7dd3fc);box-shadow:0 8px 26px rgba(34,211,238,.28)}
+.note{color:var(--dim);font-size:12.5px;line-height:1.5;text-align:center;margin-top:14px}
+.finished{text-align:center;padding:6px 0 2px}
+.finished .big{font-size:44px}
+.finished h2{font-size:20px;margin:10px 0 6px}
+.foot{position:relative;z-index:1;margin-top:auto;padding:20px;color:#556270;font-size:12px;letter-spacing:.04em}
+.foot a{color:var(--dim);text-decoration:none}
+#loading{position:relative;z-index:1;color:var(--dim);padding-top:16vh;text-align:center}
+.expired{display:none;text-align:center;padding-top:14vh;animation:rise .5s ease}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.expired .icon{width:88px;height:88px;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.35)}
+.expired h2{font-size:21px;margin:20px 0 8px}
+.expired p{color:var(--dim);font-size:14.5px;line-height:1.55;padding:0 20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="loading">Loading…</div>
+  <div id="app" style="display:none">
+    <div class="hero">
+      <div class="ring"><div class="inner" id="icon">🚗</div></div>
+      <div class="shop" id="shop"></div>
+      <h1 id="headline"></h1>
+      <p class="sub" id="subline"></p>
+    </div>
+    <div class="card"><div class="in" id="card"></div></div>
+    <p class="note" id="footnote"></p>
+  </div>
+  <div class="expired" id="expired">
+    <div class="icon">✕</div>
+    <h2>This link has expired</h2>
+    <p id="expiredmsg">Tracking links only work for the day of the job. Call the shop if you have a question.</p>
+  </div>
+</div>
+<p class="foot">Powered by <a href="https://heyledger.ai">Ledger AI</a></p>
+<script>
+// Customer tracking page (Kyle 2026-09-12, 1202). Package-tracker honesty:
+// the timeline is what the technician actually tapped, the estimate is either
+// LIVE (their position is under three minutes old) or the ORIGINAL estimate
+// they were texted, said exactly that way. No fake live dot, no coordinates.
+const FN = "https://lbzkyyehmgudlxmfpzzh.supabase.co/functions/v1/crew";
+const token = new URLSearchParams(location.search).get("t") || "";
+const $ = (id) => document.getElementById(id);
+let timer = null, lastStatus = null;
+
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function clock(iso, tz) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  try { return d.toLocaleTimeString("en-CA", { timeZone: tz, hour: "numeric", minute: "2-digit" }).replace(/\s?([ap])\.m\./i, (m, p) => " " + p.toUpperCase() + "M"); }
+  catch { return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }
+}
+function telHref(phone) { const d = String(phone || "").replace(/[^\d+]/g, ""); return d.replace(/\D/g, "").length >= 10 ? "tel:" + d : null; }
+
+function render(d) {
+  const tz = d.timezone || "America/Edmonton";
+  const first = d.tech?.firstName || "Your technician";
+  const shop = d.shop?.name || "";
+  const status = d.status || "assigned";
+  const t = d.timeline || {};
+  $("shop").textContent = shop;
+  const steps = [
+    { key: "on_my_way", label: "On the way", at: t.onMyWayAt },
+    { key: "on_site", label: "Arrived", at: t.onSiteAt },
+    { key: "done", label: "All done", at: t.doneAt },
+  ];
+  const idx = status === "done" ? 2 : status === "on_site" ? 1 : status === "on_my_way" ? 0 : -1;
+  const track = steps.map((s, i) => `<div class="${i <= idx ? "step done" : i === idx + 1 ? "step current" : "step"}">
+      <div style="display:flex;align-items:center;width:100%">
+        ${i > 0 ? '<div class="step-line"></div>' : '<div style="width:0"></div>'}
+        <div class="step-dot">${i <= idx ? "✓" : String(i + 1)}</div>
+        ${i < steps.length - 1 ? '<div class="step-line"></div>' : '<div style="width:0"></div>'}
+      </div>
+      <div class="step-label">${s.label}</div>
+      <div class="step-time">${i <= idx && s.at ? esc(clock(s.at, tz)) : ""}</div>
+    </div>`).join("");
+  const tel = telHref(d.shop?.phone);
+  const callRow = tel ? `<div class="callrow"><a class="callbtn" href="${tel}">Call ${esc(shop || "the shop")}</a></div>` : "";
+
+  let head = "", sub = "", body = "", icon = "🚗", foot = "";
+  if (status === "done") {
+    icon = "✓";
+    head = "All done";
+    sub = `${esc(first)} finished the job${t.doneAt ? ` at ${esc(clock(t.doneAt, tz))}` : ""}. Thank you for choosing ${esc(shop || "us")}.`;
+    body = `<div class="finished"><div class="big">🎉</div><h2>Job complete</h2></div><div class="track">${track}</div>${callRow}`;
+  } else if (status === "on_site") {
+    icon = "📍";
+    head = `${esc(first)} has arrived`;
+    sub = t.onSiteAt ? `Arrived at ${esc(clock(t.onSiteAt, tz))}.` : "";
+    body = `<div class="track">${track}</div>${callRow}`;
+  } else if (status === "on_my_way") {
+    head = `${esc(first)} is on the way`;
+    const e = d.estimate || { kind: "none", line: "" };
+    if (e.kind === "live") {
+      sub = "Live — updated as your technician moves.";
+      body = `<div class="eta"><div class="label">Arriving around</div><div class="big">${esc(clock(e.etaAt, tz))}</div>
+        <span class="live"><span class="dot"></span>LIVE · AS OF ${esc(clock(e.asOf, tz)).toUpperCase()}</span>
+        <div class="line">About ${Math.max(1, Math.round((e.etaSeconds || 0) / 60))} minutes away by road.</div></div>
+        <div class="track">${track}</div>${callRow}`;
+    } else if (e.kind === "original") {
+      sub = "Location isn't updating right now, so this is the estimate you were sent — not a live one.";
+      body = `<div class="eta"><div class="label">Original arrival estimate</div><div class="big orig">${esc(clock(e.etaAt, tz))}</div>
+        <span class="live warn"><span class="dot"></span>${e.staleSince ? "LOCATION NOT UPDATING SINCE " + esc(clock(e.staleSince, tz)).toUpperCase() : "LOCATION NOT UPDATING"}</span>
+        <div class="line">${e.asOf ? `Texted to you at ${esc(clock(e.asOf, tz))}. ` : ""}${tel ? "Need a firmer time? Call the shop." : ""}</div></div>
+        <div class="track">${track}</div>${callRow}`;
+    } else {
+      sub = t.onMyWayAt ? `Left for you at ${esc(clock(t.onMyWayAt, tz))}.` : "";
+      body = `<div class="eta"><div class="label">Arrival</div><div class="big" style="font-size:22px">No estimate yet</div>
+        <div class="line">${esc(e.line || "We'll show a time as soon as one is available.")}</div></div>
+        <div class="track">${track}</div>${callRow}`;
+    }
+    foot = "This page refreshes on its own. It shows what the technician has reported — it never shows their exact position.";
+  } else {
+    head = `${esc(first)} is scheduled`;
+    sub = "You'll see live progress here once they're on the way.";
+    body = `<div class="track">${track}</div>${callRow}`;
+  }
+  $("icon").textContent = icon;
+  $("headline").innerHTML = head;
+  $("subline").innerHTML = sub;
+  $("card").innerHTML = body;
+  $("footnote").textContent = foot;
+  document.title = shop ? `${shop} — ${first}` : "Your technician";
+  lastStatus = status;
+}
+
+async function load() {
+  clearTimeout(timer);
+  try {
+    const res = await fetch(FN, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "crew-track/data", token }) });
+    const d = await res.json().catch(() => ({}));
+    if (res.status === 404 || res.status === 400) { showExpired(d.error); return; }
+    if (!res.ok) throw new Error(d.error || "Could not load.");
+    $("loading").style.display = "none"; $("expired").style.display = "none"; $("app").style.display = "block";
+    render(d);
+  } catch {
+    // Keep whatever is on screen; try again shortly.
+    if ($("app").style.display !== "block") $("loading").textContent = "Still loading… check your connection.";
+  }
+  if (lastStatus !== "done" && !document.hidden) timer = setTimeout(load, lastStatus === "on_my_way" ? 30000 : 60000);
+}
+function showExpired(msg) {
+  clearTimeout(timer);
+  $("loading").style.display = "none"; $("app").style.display = "none";
+  if (msg) $("expiredmsg").textContent = msg + " Call the shop if you have a question.";
+  $("expired").style.display = "block";
+}
+if (!token) showExpired("This link is missing its code."); else load();
+document.addEventListener("visibilitychange", () => { if (document.hidden) clearTimeout(timer); else if (token && lastStatus !== "done") load(); });
+</script>
+</body></html>

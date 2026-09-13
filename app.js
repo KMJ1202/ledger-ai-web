@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 155;
+const APP_BUILD = 156;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -4154,10 +4154,13 @@ async function loadEventCrew(sh, e) {
 
 /* ---------------- LIVE CREW MAP (Kyle 1202, 2026-09-12) ----------------
    Apple Maps (MapKit JS) fed by crew {action:"locations"}. Every pin is a
-   person's name and how old their last position is; anything older than ten
-   minutes turns grey. The list under the map is the same feed in words, and it
-   is what shows when Apple Maps is not connected yet. Refreshes every 30 s
-   while the sheet is open and stops the moment it closes. */
+   person's initial with a drive time to their job; a position under three
+   minutes old pulses, anything older than ten minutes turns grey. Build 1.5
+   (Kyle 12491): a drive time is LIVE only off a fresh position — otherwise
+   the ORIGINAL estimate the customer was texted is shown as exactly that.
+   Tap a name for call / text / route. The list under the map is the same
+   feed in words, and it is what shows when the map is unavailable. Refreshes
+   every 30 s while the sheet is open and stops the moment it closes. */
 let MAPKIT_LOAD = null;
 function loadMapKit() {
   if (window.mapkit && window.mapkit.init) return Promise.resolve(window.mapkit);
@@ -4178,7 +4181,7 @@ async function ensureMapKit() {
   const mk = await loadMapKit();
   if (!MAPKIT_READY) {
     mk.init({
-      authorizationCallback: (done) => api("/crew", { action: "maps-token" }).then((r) => done(r.token)).catch((err) => { toast(err.message || "Apple Maps is not connected yet.", "err"); }),
+      authorizationCallback: (done) => api("/crew", { action: "maps-token" }).then((r) => done(r.token)).catch((err) => { toast(err.message || "The map is unavailable right now. The crew list is still live.", "err"); }),
       language: "en",
     });
     MAPKIT_READY = true;
@@ -4197,7 +4200,57 @@ function crewStatusWord(c) {
   if (!c.clockedIn) return "Off the clock";
   return { on_my_way: "On my way", on_site: "On site", done: "Done" }[c.status] || (c.currentJob ? "Assigned" : "On the clock");
 }
+function crewClock(iso, tz) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  try { return d.toLocaleTimeString("en-CA", { timeZone: tz || undefined, hour: "numeric", minute: "2-digit" }).replace(/\s?([ap])\.m\./i, (m, p) => " " + p.toUpperCase() + "M"); }
+  catch { return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }
+}
+function hoursWords(seconds) {
+  const h = Math.floor((seconds || 0) / 3600), m = Math.round(((seconds || 0) % 3600) / 60);
+  if (!h && !m) return "0 h";
+  return h === 0 ? `${m} min` : m === 0 ? `${h} h` : `${h} h ${m} min`;
+}
+// One line for "how far away": the server's rule (Kyle 2026-09-12) — live
+// only off a position under three minutes old, otherwise the ORIGINAL
+// estimate said as exactly that. This is display only; nothing is recomputed.
+function crewEstimateLine(c, tz) {
+  const e = c.estimate; if (!e) return "";
+  const job = c.currentJob && c.currentJob.title ? esc(c.currentJob.title) : "the job";
+  if (e.kind === "live") return `<span style="color:var(--cyan)">${Math.max(1, Math.round(e.etaSeconds / 60))} min from ${job} — arriving ~${crewClock(e.etaAt, tz)} <span class="note">(live, as of ${crewClock(e.asOf, tz)})</span></span>`;
+  if (e.kind === "original") return `<span style="color:var(--orange)">Original estimate ${crewClock(e.etaAt, tz)} — location isn't updating${e.staleSince ? ` since ${crewClock(e.staleSince, tz)}` : ""}</span>`;
+  return `<span class="note">${esc(e.line || "")}</span>`;
+}
+function crewTextMarks(t, tz) {
+  if (!t) return "";
+  const bits = [];
+  const mark = (label, r) => {
+    if (!r) return;
+    if (r.state === "sent") bits.push(`<span style="color:var(--emerald)">${label} ${crewClock(r.sentAt, tz)} ✓</span>`);
+    else if (r.state === "failed") bits.push(`<span style="color:var(--red);font-weight:700">${label} text failed ✗</span>`);
+    else if (r.state === "sending") bits.push(`<span class="note">${label} sending…</span>`);
+  };
+  mark("Customer told", t.on_my_way); mark("Arrived text", t.arrived); mark("All-done text", t.done);
+  return bits.join(" · ");
+}
+let CREWMAP_STYLE = false;
+function crewMapStyle() {
+  if (CREWMAP_STYLE) return; CREWMAP_STYLE = true;
+  const st = document.createElement("style");
+  st.textContent = `.cpin{position:relative;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:800 14px/1 -apple-system,Segoe UI,Roboto,sans-serif;color:#03181d;border:2px solid rgba(255,255,255,.85);box-shadow:0 4px 14px rgba(0,0,0,.5);transform:translate(-50%,-50%)}
+.cpin.live::before{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid currentColor;opacity:.7;animation:cpinpulse 1.8s ease-out infinite}
+@keyframes cpinpulse{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.9);opacity:0}}
+.cpin .tag{position:absolute;top:36px;left:50%;transform:translateX(-50%);white-space:nowrap;font:700 11px/1.2 -apple-system,Segoe UI,Roboto,sans-serif;color:#f3f5f7;background:rgba(7,9,13,.85);padding:3px 7px;border-radius:8px;border:1px solid rgba(255,255,255,.12)}
+.jpin{width:26px;height:26px;border-radius:8px;background:#a855f7;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid rgba(255,255,255,.8);box-shadow:0 4px 12px rgba(0,0,0,.5);transform:translate(-50%,-50%)}
+.jpin.done{opacity:.45}
+.crewcard{margin:6px 0 10px;padding:12px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.crewcard .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.crewcard .acts a,.crewcard .acts button{flex:1;min-width:90px;text-align:center;text-decoration:none}`;
+  document.head.appendChild(st);
+}
 async function crewLiveMapSheet() {
+  crewMapStyle();
   const wrap = sheet(`<h2>Live crew map</h2>
     <p class="sub" id="lmsub">Loading…</p>
     <div id="lmmap" style="height:340px;border-radius:14px;overflow:hidden;background:#0b1118;margin-top:10px;display:none"></div>
@@ -4210,9 +4263,10 @@ async function crewLiveMapSheet() {
       </div>
     </div>`);
   const pane = wrap.querySelector(".sheet");
-  let map = null, mk = null, timer = null, mapFailed = false, marks = new Map();
+  let map = null, mk = null, timer = null, mapFailed = false, marks = new Map(), routeLine = null, openCard = null, last = null;
   const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
   const alive = () => wrap.isConnected && document.body.contains(wrap);
+  const MAP_DOWN = "The map is unavailable right now — the crew list below is still live.";
   const paintPolicy = (policy) => {
     const host = pane.querySelector("#lmpolicy"); if (!host) return;
     host.innerHTML = ["required", "optional"].map((p) => `<button type="button" class="chip${policy === p ? " on" : ""}" data-pol="${p}">${p === "required" ? "Required" : "Optional"}</button>`).join("");
@@ -4223,29 +4277,70 @@ async function crewLiveMapSheet() {
       catch (err) { toast(err.status === 403 ? "Only the owner or an admin can change this." : err.message, "err"); paintPolicy(policy); }
     });
   };
+  const tel = (p) => { const d = String(p || "").replace(/[^\d+]/g, ""); return d.replace(/\D/g, "").length >= 10 ? d : null; };
+  const showRoute = async (c) => {
+    if (!map || !mk || c.lat == null || !c.currentJob || c.currentJob.lat == null) { toast("No pinned job to route to yet.", "err"); return; }
+    if (routeLine) { map.removeOverlay(routeLine); routeLine = null; }
+    const from = new mk.Coordinate(c.lat, c.lng), to = new mk.Coordinate(c.currentJob.lat, c.currentJob.lng);
+    const straight = () => { routeLine = new mk.PolylineOverlay([from, to], { style: new mk.Style({ lineWidth: 3, strokeColor: "#22d3ee", lineDash: [6, 6] }) }); map.addOverlay(routeLine); };
+    try {
+      new mk.Directions().route({ origin: from, destination: to, transportType: mk.Directions.Transport.Automobile }, (err, data) => {
+        if (!alive() || !map) return;
+        const r = !err && data && data.routes && data.routes[0];
+        if (r && r.polyline) { routeLine = r.polyline; routeLine.style = new mk.Style({ lineWidth: 4, strokeColor: "#22d3ee" }); map.addOverlay(routeLine); }
+        else straight();
+        map.showItems([routeLine], { animate: true, padding: new mk.Padding(50, 40, 50, 40) });
+      });
+    } catch { straight(); }
+  };
   const paintList = (d) => {
     const host = pane.querySelector("#lmlist"); if (!host) return;
-    const crew = d.crew || [];
+    const crew = d.crew || [], tz = d.timezone;
     if (!crew.length) { host.innerHTML = '<p class="note">No active crew on the roster yet.</p>'; return; }
     host.innerHTML = crew.map((c) => {
       const off = c.permission === "denied" || c.permission === "unsupported";
       const dot = !c.clockedIn ? "#39424f" : off ? "var(--orange)" : c.stale ? "#6b7683" : "var(--cyan)";
-      const where = off ? "Location off on their phone" : (c.lat == null ? "No location yet" : (c.clockedIn ? agoWords(c.ageSeconds) : `Clocked out · last seen ${agoWords(c.ageSeconds)}`));
+      const where = off ? "Location off on their phone" : (c.lat == null ? "No location yet" : (c.clockedIn ? `Seen ${agoWords(c.ageSeconds)}` : (c.clockedOutAt ? `Clocked out at ${crewClock(c.clockedOutAt, tz)}` : `Clocked out · last seen ${agoWords(c.ageSeconds)}`)));
       const job = c.currentJob ? ` · ${esc(c.currentJob.title || "Job")}${c.currentJob.location ? " — " + esc(c.currentJob.location) : ""}` : "";
-      return `<button type="button" class="row" data-crew="${esc(c.id)}" style="width:100%;text-align:left;display:flex;gap:10px;align-items:center;padding:10px 4px;border:0;background:none;color:inherit;border-bottom:1px solid var(--line)">
-        <span style="width:10px;height:10px;border-radius:50%;background:${dot};flex-shrink:0;box-shadow:${c.clockedIn && !c.stale && !off ? "0 0 8px " + dot : "none"}"></span>
-        <span style="flex:1;min-width:0"><b>${esc(c.name)}</b> <span class="note">${esc(crewStatusWord(c))}${job}</span><br><span class="note">${where}${c.accuracyM && !off && c.lat != null ? ` · ±${Math.round(c.accuracyM)} m` : ""}</span></span>
-        ${c.lat != null && c.clockedIn && !off ? `<a class="note" href="https://maps.apple.com/?ll=${c.lat},${c.lng}&q=${encodeURIComponent(c.name)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open ↗</a>` : ""}
-      </button>`;
+      const est = c.clockedIn ? crewEstimateLine(c, tz) : "";
+      const texts = crewTextMarks(c.texts, tz);
+      const today = c.today && (c.today.seconds > 0 || c.today.jobsTotal > 0) ? `Today: ${hoursWords(c.today.seconds)}${c.today.jobsTotal ? ` · ${c.today.jobsDone} of ${c.today.jobsTotal} job${c.today.jobsTotal === 1 ? "" : "s"} done` : ""}` : "";
+      const isOpen = openCard === c.id;
+      const card = isOpen ? `<div class="crewcard" data-card="${esc(c.id)}">
+          <div><b>${esc(c.name)}</b> <span class="note">· ${esc(crewStatusWord(c))}</span></div>
+          ${est ? `<div style="margin-top:4px">${est}</div>` : ""}
+          ${today ? `<div class="note" style="margin-top:4px">${today}</div>` : ""}
+          <div class="acts">
+            ${tel(c.phone) ? `<a class="btn" href="tel:${tel(c.phone)}">Call</a><a class="btn" href="sms:${tel(c.phone)}">Text</a>` : '<span class="note" style="flex:1">No phone on their roster card</span>'}
+            ${c.lat != null && c.clockedIn && !off ? `<button class="btn" type="button" data-center="${esc(c.id)}">Show on map</button>` : ""}
+            ${c.lat != null && c.clockedIn && !off && c.currentJob && c.currentJob.lat != null ? `<button class="btn" type="button" data-route="${esc(c.id)}">Route to job</button>` : ""}
+            ${c.lat != null && c.clockedIn && !off ? `<a class="btn" href="https://maps.apple.com/?ll=${c.lat},${c.lng}&q=${encodeURIComponent(c.name)}" target="_blank" rel="noopener">Open in Maps ↗</a>` : ""}
+          </div>
+        </div>` : "";
+      return `<button type="button" class="row" data-crew="${esc(c.id)}" style="width:100%;text-align:left;display:flex;gap:10px;align-items:flex-start;padding:10px 4px;border:0;background:none;color:inherit;border-bottom:${isOpen ? "0" : "1px solid var(--line)"}">
+        <span style="width:10px;height:10px;border-radius:50%;background:${dot};flex-shrink:0;margin-top:5px;box-shadow:${c.clockedIn && !c.stale && !off ? "0 0 8px " + dot : "none"}"></span>
+        <span style="flex:1;min-width:0"><b>${esc(c.name)}</b> <span class="note">${esc(crewStatusWord(c))}${job}</span><br><span class="note">${where}</span>${est ? `<br>${est}` : ""}${texts ? `<br><span class="note">${texts}</span>` : ""}${today ? `<br><span class="note">${today}</span>` : ""}</span>
+        <span class="note" style="flex-shrink:0">${isOpen ? "▴" : "▾"}</span>
+      </button>${card}`;
     }).join("");
-    host.querySelectorAll("[data-crew]").forEach((b) => b.onclick = () => {
-      const c = crew.find((x) => x.id === b.dataset.crew);
-      if (map && mk && c && c.lat != null) map.setCenterAnimated(new mk.Coordinate(c.lat, c.lng), true);
-    });
+    host.querySelectorAll("[data-crew]").forEach((b) => b.onclick = () => { openCard = openCard === b.dataset.crew ? null : b.dataset.crew; paintList(last || d); });
+    host.querySelectorAll("[data-center]").forEach((b) => b.onclick = (ev) => { ev.stopPropagation(); const c = crew.find((x) => x.id === b.dataset.center); if (map && mk && c && c.lat != null) { map.setCenterAnimated(new mk.Coordinate(c.lat, c.lng), true); pane.scrollTo({ top: 0, behavior: "smooth" }); } });
+    host.querySelectorAll("[data-route]").forEach((b) => b.onclick = (ev) => { ev.stopPropagation(); const c = crew.find((x) => x.id === b.dataset.route); if (c) { showRoute(c); pane.scrollTo({ top: 0, behavior: "smooth" }); } });
+  };
+  const pinFactory = (c, tz) => (coord) => {
+    const el = document.createElement("div");
+    const live = c.clockedIn && c.fresh;
+    const color = c.stale ? "#6b7683" : c.status === "on_my_way" ? "#fbbf24" : "#22d3ee";
+    el.className = "cpin" + (live ? " live" : "");
+    el.style.background = color; el.style.color = color;
+    const e = c.estimate;
+    const tag = e && e.kind === "live" ? `${Math.max(1, Math.round(e.etaSeconds / 60))} min` : e && e.kind === "original" ? `est. ${crewClock(e.etaAt, tz)} · not updating` : agoWords(c.ageSeconds);
+    el.innerHTML = `<span style="color:#03181d">${esc((c.name || "?").trim().charAt(0).toUpperCase())}</span><span class="tag">${esc(c.name.split(" ")[0])} · ${esc(tag)}</span>`;
+    return el;
   };
   const paintMap = async (d) => {
     const el = pane.querySelector("#lmmap"); if (!el) return;
-    if (!d.mapsConfigured || mapFailed) { el.style.display = "none"; return; }
+    if (!d.mapsConfigured || d.mapsError || mapFailed) { el.style.display = "none"; return; }
     try {
       mk = await ensureMapKit();
       if (!alive()) return;
@@ -4259,13 +4354,12 @@ async function crewLiveMapSheet() {
         // Off the clock is not at work: listed below, never pinned.
         if (c.lat == null || c.permission === "denied" || !c.clockedIn) continue;
         const key = "crew:" + c.id; wanted.add(key);
-        const fresh = c.clockedIn && !c.stale;
-        const color = !c.clockedIn ? "#39424f" : c.stale ? "#6b7683" : c.status === "on_my_way" ? "#fbbf24" : "#22d3ee";
-        const sub = `${agoWords(c.ageSeconds)} · ${crewStatusWord(c)}`;
         let m = marks.get(key);
-        if (!m) { m = new mk.MarkerAnnotation(new mk.Coordinate(c.lat, c.lng), { title: c.name, subtitle: sub, color, glyphText: (c.name || "?").trim().charAt(0).toUpperCase(), displayPriority: 1000 }); marks.set(key, m); map.addAnnotation(m); }
-        else { m.coordinate = new mk.Coordinate(c.lat, c.lng); m.subtitle = sub; m.color = color; }
-        m.data = { fresh };
+        // Custom DOM pins so a live position can pulse; MapKit re-renders the
+        // element when the factory changes, so the pin is rebuilt each refresh.
+        if (m) { map.removeAnnotation(m); marks.delete(key); }
+        m = new mk.Annotation(new mk.Coordinate(c.lat, c.lng), pinFactory(c, d.timezone), { title: "", anchorOffset: new DOMPoint(0, 0), displayPriority: 1000 });
+        marks.set(key, m); map.addAnnotation(m);
         items.push(m);
       }
       for (const j of d.jobs || []) {
@@ -4278,10 +4372,10 @@ async function crewLiveMapSheet() {
         items.push(m);
       }
       for (const [key, m] of Array.from(marks.entries())) if (!wanted.has(key)) { map.removeAnnotation(m); marks.delete(key); }
-      if (items.length && !map.__fitted) { map.showItems(items, { animate: false, padding: new mk.Padding(40, 30, 40, 30) }); map.__fitted = true; }
+      if (items.length && !map.__fitted) { map.showItems(items, { animate: false, padding: new mk.Padding(50, 30, 50, 30) }); map.__fitted = true; }
     } catch (err) {
       mapFailed = true; el.style.display = "none";
-      const note = pane.querySelector("#lmnote"); if (note) note.textContent = err.message || "Apple Maps could not be loaded — the list below is live.";
+      const note = pane.querySelector("#lmnote"); if (note) note.textContent = MAP_DOWN;
     }
   };
   const load = async () => {
@@ -4289,10 +4383,15 @@ async function crewLiveMapSheet() {
     try {
       const d = await api("/crew", { action: "locations" }, "POST", { silentUpgrade: true });
       if (!alive()) { stop(); return; }
-      const live = (d.crew || []).filter((c) => c.clockedIn).length, sharing = (d.crew || []).filter((c) => c.clockedIn && !c.stale && c.lat != null).length;
-      const sub = pane.querySelector("#lmsub"); if (sub) sub.textContent = `${live} on the clock · ${sharing} sharing a live location · ${(d.jobs || []).filter((j) => j.status !== "done").length} open job${(d.jobs || []).filter((j) => j.status !== "done").length === 1 ? "" : "s"} today`;
+      last = d;
+      const crew = d.crew || [], jobs = d.jobs || [];
+      const live = crew.filter((c) => c.clockedIn).length, sharing = crew.filter((c) => c.clockedIn && !c.stale && c.lat != null).length;
+      const open = jobs.filter((j) => j.status !== "done").length, done = jobs.filter((j) => j.status === "done").length;
+      const sub = pane.querySelector("#lmsub"); if (sub) sub.textContent = `${live} on the clock · ${sharing} sharing a live location · ${open} open job${open === 1 ? "" : "s"}${done ? ` · ${done} done` : ""} today`;
       const note = pane.querySelector("#lmnote");
-      if (note && !mapFailed) note.textContent = d.mapsConfigured ? "Grey = no update in 10 minutes. Positions come from each crew member's job link and stop when they clock out." : "Map appears once Apple Maps is connected. The list below is live.";
+      if (note && !mapFailed) note.textContent = (d.mapsConfigured && !d.mapsError)
+        ? "Grey = no update in 10 minutes. Updates pause while their job link is closed (like driving with Maps open) — it doesn't mean they stopped moving. Positions come from each crew member's job link and stop when they clock out."
+        : MAP_DOWN;
       paintPolicy(d.policy); paintList(d); await paintMap(d);
     } catch (err) {
       if (!alive()) { stop(); return; }
@@ -6108,7 +6207,7 @@ function openAutomation(d, key) {
     autoreply: "A missed call gets an instant text back so the caller knows you exist and can reply.",
     dispatcher: "New bookings text your first-call crew member their job from the business line, and you can tell Ledger to dispatch anyone by name. It can only ever text people on your crew roster.",
     "crew-reminders": "Two things. After a crew member's shift ends, anyone still clocked in gets a text — replying DONE clocks them out. And any reminder you write yourself goes out from the business line at the time you set it. Each punch is nudged once, each reminder sends once a day, and only people on your roster can ever be texted.",
-    "on-my-way": "The moment a crew member taps ON MY WAY on their job link, the customer on that booking gets one text from your business line: who is coming and a live drive-time arrival estimate from where the crew member actually is. One text per job, never a second. Needs the customer's number on the booking.",
+    "on-my-way": "The moment a crew member taps ON MY WAY on their job link, the customer on that booking gets one text from your business line: who is coming, an arrival time worked out from where the crew member actually is, and a link to a page that follows the job — on the way, arrived, done. They get one more text when the crew member marks ON SITE and one when the job is DONE (with your review link if that's the only review lane you have on). One text of each kind per job, never a second, and the crew member sees on their link whether it actually went. Needs the customer's number on the booking.",
   }[key] || "";
   sheet(`<h2>${esc(a.title)} ${a.enabled ? '<span class="pill live">ON</span>' : '<span class="pill">OFF</span>'}</h2>
     <p class="sub">${render(a.result)}</p>

@@ -118,6 +118,23 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
 .expired .icon{width:88px;height:88px;margin:0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.35);box-shadow:0 0 60px rgba(248,113,113,.15)}
 .expired h2{font-size:21px;margin:20px 0 8px}
 .expired p{color:var(--dim);font-size:14.5px;line-height:1.55;padding:0 20px}
+.notice{border-radius:18px;padding:1px;margin:0 0 16px;background:linear-gradient(160deg,rgba(34,211,238,.45),rgba(168,85,247,.3));box-shadow:0 18px 50px rgba(0,0,0,.45);animation:rise .5s ease}
+.notice>.in{border-radius:17px;background:rgba(16,21,28,.96);padding:16px 16px 14px}
+.notice h3{margin:0 0 6px;font-size:15px;letter-spacing:-.01em}
+.notice p{margin:0 0 12px;color:var(--dim);font-size:13px;line-height:1.5}
+.notice .row{display:flex;align-items:center;gap:9px;margin-bottom:8px;font-size:13px;color:var(--text)}
+.notice .row span:first-child{width:26px;text-align:center;flex-shrink:0}
+.notice button{width:100%;padding:13px;border:0;border-radius:13px;font-size:14px;font-weight:800;letter-spacing:.04em;color:#03181d;background:linear-gradient(135deg,var(--cyan),#7dd3fc);cursor:pointer}
+.drive{display:flex;align-items:center;gap:8px;margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.25);font-size:13px;color:var(--cyan);font-weight:700}
+.drive small{color:var(--dim);font-weight:600}
+.arrive{margin-top:12px;padding:12px 13px;border-radius:13px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.4);font-size:13.5px;line-height:1.45;color:#a7f3d0;animation:rise .4s ease}
+.arrive b{color:var(--emerald)}
+.told{margin-top:12px;padding:10px 12px;border-radius:12px;font-size:12.5px;line-height:1.45;border:1px solid var(--line);background:rgba(255,255,255,.035);color:var(--dim)}
+.told.ok{border-color:rgba(52,211,153,.35);background:rgba(52,211,153,.08);color:#a7f3d0}
+.told.bad{border-color:rgba(248,113,113,.4);background:rgba(248,113,113,.08);color:#fecaca}
+.told a{color:inherit;font-weight:800;text-decoration:underline;text-underline-offset:3px}
+.actionbtn.nudge{animation:nudge 1.6s ease-in-out infinite}
+@keyframes nudge{0%,100%{box-shadow:0 10px 34px rgba(52,211,153,.25)}50%{box-shadow:0 10px 44px rgba(52,211,153,.6)}}
 </style>
 </head>
 <body>
@@ -131,6 +148,7 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
       <p class="tagline" id="bizline"></p>
       <span class="badge"><span class="dot"></span><span id="datebadge"></span></span>
     </div>
+    <div id="notice"></div>
     <div id="clock"></div>
     <div id="loc"></div>
     <div id="avail"></div>
@@ -202,14 +220,25 @@ function jobCard(job) {
   }).join("");
 
   const nextStep = STEPS[idx + 1];
+  // Auto-arrive (Kyle 2026-09-12): a fix within 150 m of the job while on the
+  // way only SUGGESTS — the tap below is still the confirmation, and only that
+  // tap tells the customer.
+  const suggested = job.status === "on_my_way" && job.arrivalSuggested;
   let actionHtml;
   if (job.status === "done") {
     actionHtml = `<div class="tick-burst">✓ Job complete</div>`;
   } else if (nextStep) {
-    actionHtml = `<button class="actionbtn" data-id="${job.id}" data-next="${nextStep.key}">${nextStep.icon} Mark "${nextStep.label}"</button>`;
+    actionHtml = `${suggested ? `<div class="arrive"><b>Looks like you've arrived</b>${suggested.meters != null ? ` — about ${suggested.meters} m from the job` : ""}. Tap below to confirm.</div>` : ""}
+      <button class="actionbtn${suggested ? " nudge" : ""}" data-id="${job.id}" data-next="${nextStep.key}">${nextStep.icon} Mark "${nextStep.label}"</button>`;
   } else {
     actionHtml = "";
   }
+  // Drive time to the job they are heading to. Shown only while their own
+  // position is fresh — a stale position gets no number, not an old one.
+  const driveHtml = job.driveTime && job.driveTime.seconds != null && job.status !== "on_site" && job.status !== "done"
+    ? `<div class="drive">🚗 About ${Math.max(1, Math.round(job.driveTime.seconds / 60))} min to this job <small>· arriving around ${fmtTime(job.driveTime.etaAt)} (live)</small></div>`
+    : "";
+  const toldHtml = customerTextLines(job);
 
   // NAVIGATE fires real turn-by-turn: Apple Maps natively on iPhone/iPad,
   // Google Maps directions everywhere else. The address text stays as a
@@ -242,10 +271,66 @@ function jobCard(job) {
     </div>
     ${locHtml}
     ${detailsHtml}
+    ${driveHtml}
     <div class="track">${stepsHtml}</div>
+    ${toldHtml}
     ${actionHtml}
   </div></div>`;
 }
+
+// "Customer's been told" is shown only when it is TRUE: the state comes from
+// the server's claim row, and 'sent' means the carrier accepted the text
+// (Kyle 2026-09-12, requirement 2). A failed text says so, with the number to
+// call. Nothing shows when the shop's customer texts are switched off.
+function customerTextLines(job) {
+  if (!lastData || !lastData.customerTextsOn || !job.customerTexts) return "";
+  const t = job.customerTexts;
+  const lines = [];
+  const line = (cls, html) => lines.push(`<div class="told ${cls}">${html}</div>`);
+  const call = (to) => { const d = String(to || "").replace(/[^\d+]/g, ""); return d.replace(/\D/g, "").length >= 10 ? ` <a href="tel:${d}">Call them</a>` : ""; };
+  const skipWords = (reason) => {
+    if (reason === "no customer number on the booking") return "No customer number on this booking — nobody was texted.";
+    if (reason === "calendar event unavailable") return "Couldn't read the booking — the customer wasn't texted.";
+    return null;   // not a customer booking / shop's own number / texts off: nothing to tell the worker
+  };
+  const omw = t.on_my_way;
+  if (omw) {
+    if (omw.state === "sent") line("ok", `✓ Customer's been told at ${fmtTime(omw.sentAt)}${omw.etaAt ? ` — arriving around ${fmtTime(omw.etaAt)}` : ""}`);
+    else if (omw.state === "failed") line("bad", `Couldn't text the customer — call them.${call(omw.to)}`);
+    else if (omw.state === "skipped" && skipWords(omw.reason)) line("", escapeHtml(skipWords(omw.reason)));
+  }
+  const arr = t.arrived;
+  if (arr) {
+    if (arr.state === "sent") line("ok", `✓ Customer told you've arrived (${fmtTime(arr.sentAt)})`);
+    else if (arr.state === "failed") line("bad", `Couldn't text the customer that you've arrived — call them.${call(arr.to)}`);
+  }
+  const dn = t.done;
+  if (dn) {
+    if (dn.state === "sent") line("ok", `✓ Customer told the job's done (${fmtTime(dn.sentAt)})`);
+    else if (dn.state === "failed") line("bad", `Couldn't text the customer that you're done — call them.${call(dn.to)}`);
+  }
+  return lines.join("");
+}
+
+// One-time notice (per person, remembered by the shop, not the phone): plain
+// words on what location sharing is and is not.
+function renderNotice(loc) {
+  const host = $("notice");
+  if (!loc || loc.noticeAcknowledged || noticeDismissed) { host.innerHTML = ""; return; }
+  host.innerHTML = `<div class="notice"><div class="in">
+    <h3>📍 Where you are, only while you're working</h3>
+    <div class="row"><span>🕒</span><span>Your shop sees your location <b>only while you're clocked in</b>.</span></div>
+    <div class="row"><span>⏹</span><span>It <b>stops by itself</b> the moment you clock out. Nothing is sent off the clock.</span></div>
+    <div class="row"><span>👀</span><span>You see what they see — this page shows the same status.</span></div>
+    <p>Location is used for drive times to your jobs and to tell customers when you're on the way.</p>
+    <button id="noticeok">GOT IT</button>
+  </div></div>`;
+  $("noticeok").onclick = () => {
+    noticeDismissed = true; host.innerHTML = "";
+    fetch(FN, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "crew-link/notice-ack", token }) }).catch(() => {});
+  };
+}
+let noticeDismissed = false;
 
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -370,6 +455,17 @@ async function sendPing() {
     // Clocked out from another device, or the shop paused crew tools: stop.
     if (d && (d.reason === "off_shift" || res.status === 402 || res.status === 404)) { stopPings(); load(false); return; }
     if (lastData && lastData.location) { lastData.location.lastAt = new Date().toISOString(); lastData.location.permission = "granted"; renderLocation(lastData.location); }
+    // The fix that just landed is fresh by definition: the drive time and the
+    // arrival suggestion ride back on the same answer, no extra round trip.
+    if (lastData && Array.isArray(lastData.jobs) && d && d.ok && !busy) {
+      let changed = false;
+      for (const j of lastData.jobs) {
+        const drive = d.driveTime && d.driveTime.assignmentId === j.id ? { seconds: d.driveTime.seconds, etaAt: d.driveTime.etaAt, asOf: d.driveTime.asOf } : (d.driveTime ? null : j.driveTime);
+        if (JSON.stringify(drive) !== JSON.stringify(j.driveTime)) { j.driveTime = drive; changed = true; }
+        if (d.arrivalSuggested && d.arrivalSuggested.assignmentId === j.id && j.status === "on_my_way" && !j.arrivalSuggested) { j.arrivalSuggested = { at: new Date().toISOString(), meters: d.arrivalSuggested.meters }; changed = true; }
+      }
+      if (changed) renderJobs(lastData);
+    }
   } catch { /* next tick tries again */ }
 }
 function startPings() {
@@ -398,9 +494,13 @@ function renderLocation(loc) {
     now = granted ? "Sharing while on the clock" : "Ready to share";
     const age = loc.lastAt ? Math.round((Date.now() - new Date(loc.lastAt).getTime()) / 60000) : null;
     sub = !granted ? "Allow location when your phone asks. Only while you're on the clock."
-      : (age === null ? "Updates every 30 seconds while this page is open." : (age < 1 ? "Updated just now." : `Updated ${age} min ago.`) + " Stops by itself when you clock out.");
+      : (age === null ? "Updates every 30 seconds while this page is open." : (age < 1 ? "Updated just now." : `Updated ${age} min ago.`) + " Pauses while this page is closed. Stops by itself when you clock out.");
     cls = granted ? "on" : "";
     showTurnOn = !granted && geoSupported();
+  } else if (loc.stoppedAt) {
+    // Requirement 3 (Kyle 2026-09-12): the stop is shown, not promised.
+    now = `Off — clocked out at ${new Date(loc.stoppedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+    sub = "Location sharing stopped when you clocked out. Nothing is sent off the clock.";
   } else {
     now = "Off — you're off the clock";
     sub = required ? "Your shop needs your location while you're on the clock. Starts when you clock in." : "Optional at your shop. Starts when you clock in.";
@@ -524,6 +624,7 @@ async function crewMutation(payload,btn){
 function render(data) {
   if(data.closeOnly){renderRestricted(data);return;}
   lastData=data;
+  renderNotice(data.location);
   renderClock(data.clock);
   renderLocation(data.location);
   renderAvail(data.availability);
@@ -532,7 +633,10 @@ function render(data) {
   $("bizline").textContent = data.business ? `${data.business} — today's jobs` : "Today's jobs";
   const d = new Date(`${data.date}T12:00:00`);
   $("datebadge").textContent = isNaN(d.getTime()) ? "TODAY" : d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" }).toUpperCase();
+  renderJobs(data);
+}
 
+function renderJobs(data) {
   const jobs = data.jobs || [];
   if (!jobs.length) {
     $("jobs").innerHTML = `<div class="empty">
@@ -603,6 +707,9 @@ function showExpired(msg){
 }
 
 async function setStatus(assignmentId,status,btn){
+ // The tap now waits (up to ~8 s) for the customer text's real outcome, so the
+ // button says what it is doing instead of just greying out.
+ if(btn){btn.textContent=(lastData&&lastData.customerTextsOn&&status!=="assigned")?"Telling the customer…":"Saving…";}
  await crewMutation({action:"crew-link/status",assignment_id:assignmentId,status},btn);
 }
 
