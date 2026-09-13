@@ -1,0 +1,55 @@
+/* Crew Command — real app footage in a phone frame (2026-09-12).
+   Four silent clips recorded from the iPhone app with a demo shop, played
+   as a loop; the step cards follow the clip that is on screen. */
+.crewdemo{display:grid;grid-template-columns:minmax(280px,374px) minmax(0,1fr);gap:clamp(28px,5vw,72px);align-items:center;margin-top:44px}
+.crewdemo .cd-phone{position:relative;z-index:0}
+.crewdemo .cd-phone::before{content:"";position:absolute;inset:6% -14%;z-index:-1;border-radius:50%;pointer-events:none;
+  background:radial-gradient(58% 48% at 50% 36%,rgba(58,200,245,.24),transparent 72%),radial-gradient(52% 44% at 56% 72%,rgba(168,85,247,.18),transparent 72%);
+  filter:blur(34px)}
+.crewdemo .phoneframe::before{display:none}            /* the footage carries its own island */
+.crewdemo .cd-screen{position:relative;aspect-ratio:390/847;background:#05070b;overflow:hidden}
+.crewdemo .cd-screen video{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover;opacity:0;transition:opacity .38s ease;background:#05070b}
+.crewdemo .cd-screen video.on{opacity:1}
+.crewdemo .cd-screen .cd-tap{position:absolute;left:0;right:0;bottom:16px;display:flex;justify-content:center;pointer-events:none;opacity:0;transition:opacity .3s}
+.crewdemo .cd-screen .cd-tap span{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2.2px;text-transform:uppercase;color:#dbe7f2;background:rgba(5,7,11,.72);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:7px 12px;backdrop-filter:blur(8px)}
+.crewdemo.paused .cd-screen .cd-tap{opacity:1}
+.cd-steps{display:grid;gap:10px;min-width:0}
+.cd-step{--c:var(--cyan);position:relative;display:grid;grid-template-columns:38px minmax(0,1fr);gap:12px;align-items:start;width:100%;padding:15px 18px 17px;border-radius:16px;
+  border:1px solid var(--line2);background:var(--glass);color:inherit;font:inherit;text-align:left;cursor:pointer;overflow:hidden;
+  transition:border-color .25s,background .25s,transform .25s}
+.cd-step:hover{border-color:var(--line);background:rgba(255,255,255,.065)}
+.cd-step:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+.cd-step.active{border-color:color-mix(in srgb,var(--c) 45%,transparent);background:linear-gradient(180deg,color-mix(in srgb,var(--c) 10%,transparent),rgba(255,255,255,.03));transform:translateX(5px)}
+.cd-step .cd-num{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:2px;color:var(--dim2);padding-top:3px;transition:color .25s}
+.cd-step.active .cd-num{color:var(--c);text-shadow:0 0 12px color-mix(in srgb,var(--c) 70%,transparent)}
+.cd-step .cd-title{display:block;font-family:var(--display);font-size:17px;font-weight:700;letter-spacing:-.2px;line-height:1.25;color:var(--text)}
+.cd-step .cd-desc{display:block;margin-top:5px;color:var(--dim);font-size:14px;line-height:1.5}
+.cd-step .cd-bar{position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--line2)}
+.cd-step .cd-bar::after{content:"";position:absolute;inset:0;background:var(--c);transform-origin:left;transform:scaleX(var(--p,0));box-shadow:0 0 10px color-mix(in srgb,var(--c) 70%,transparent)}
+.cd-step[data-clip="map"]{--c:var(--gold)}
+.cd-step[data-clip="timecards"]{--c:var(--emerald)}
+.cd-step[data-clip="track"]{--c:var(--purple)}
+.cd-fine{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:22px auto 0;max-width:1120px;font-family:var(--mono);font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim2)}
+.cd-fine a{color:#6ecfff;text-decoration:underline;text-underline-offset:3px;letter-spacing:.2px;text-transform:none;font-family:inherit;font-size:13px}
+/* stacked variant — phone on top, four chips underneath (feature page hero) */
+.crewdemo.stack{grid-template-columns:1fr;justify-items:center;gap:26px;margin-top:38px}
+.crewdemo.stack .cd-steps{grid-template-columns:repeat(4,minmax(0,1fr));width:100%;max-width:820px}
+.crewdemo.stack .cd-step{grid-template-columns:1fr;gap:6px;padding:12px 14px 15px}
+.crewdemo.stack .cd-step .cd-title{font-size:14.5px}
+.crewdemo.stack .cd-step .cd-desc{display:none}
+.crewdemo.stack .cd-step.active{transform:translateY(-3px)}
+@media(max-width:900px){
+  .crewdemo{grid-template-columns:1fr;justify-items:center;gap:24px}
+  .crewdemo .phoneframe{width:min(374px,76vw)}        /* leave room for the chips under it on a phone */
+  .cd-steps{grid-template-columns:1fr 1fr;width:100%;max-width:640px}
+  .cd-step{grid-template-columns:1fr;gap:6px;padding:12px 14px 15px}
+  .cd-step .cd-title{font-size:15px}
+  .cd-step .cd-desc{display:none}
+  .cd-step.active{transform:translateY(-3px)}
+  .crewdemo.stack .cd-steps{grid-template-columns:1fr 1fr}
+}
+@media(max-width:420px){.cd-step .cd-num{display:none}}
+@media(prefers-reduced-motion:reduce){
+  .cd-step,.crewdemo .cd-screen video{transition:none}
+  .cd-step.active{transform:none}
+}
