@@ -4242,7 +4242,7 @@ function crewTextMarks(t, tz) {
 // Pure UI over the feeds the app already has — nothing new on the server.
 const CREW_REDUCE_MOTION = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const crewFirst = (name) => String(name || "").trim().split(/\s+/)[0] || "";
-const crewHours = (sec) => { const s = sec || 0; if (s <= 0) return "0h"; const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); if (!h) return `${m}m`; return m ? `${h}h ${String(m).padStart(2, "0")}m` : `${h}h`; };
+const crewHours = (sec) => { const s = sec || 0; const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); if (!h && !m) return "0h"; if (!h) return `${m}m`; return m ? `${h}h ${String(m).padStart(2, "0")}m` : `${h}h`; };
 const CREW_RGB = { cyan: "58,200,245", emerald: "47,224,160", orange: "251,146,60", purple: "168,85,247", pink: "244,114,182", yellow: "250,204,21", red: "248,113,113", blue: "59,130,246", silver: "194,209,230", gold: "251,191,36", grey: "110,120,135" };
 const crewRgb = (tag) => CREW_RGB[String(tag || "").toLowerCase()] || CREW_RGB.cyan;
 /** Chamfered crew badge (the sigil), tinted by the member's colour tag. `tick` = emerald | amber | orange | null. */
