@@ -1018,3 +1018,65 @@ nav.sitenav .brand b{background:linear-gradient(90deg,#fff 0%,#fff 40%,var(--cya
 .price .plusline{margin:26px 0 0;text-align:left;font-size:13.5px;font-weight:800;color:var(--text);letter-spacing:.2px}
 .price .forwho{margin:14px 0 0;font-size:14px;line-height:1.5;color:var(--dim)}
 @media(max-width:900px){.pricegrid{grid-template-columns:1fr;max-width:520px}}
+
+/* Split hero (2026-09-13): the first real recording sits beside the headline,
+   the logo lockup is compact, and QuickBooks-is-optional is said up top. */
+.hero-split{padding:56px 0 34px;text-align:left}
+.hero-split .hero-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,440px);gap:clamp(28px,5vw,64px);align-items:center}
+.hero-split .hero-copy{max-width:640px}
+.hero-split .say{margin-bottom:14px}
+.hero-split h1{font-size:clamp(38px,5.4vw,64px)}
+.hero-split p.lead{margin:18px 0 28px;max-width:600px;font-size:18px}
+.hero-split .cta-row{justify-content:flex-start}
+.hero-split .trialline{margin:16px 0 0}
+.hero-split .qbline{margin:14px 0 0;color:var(--dim);font-size:14.5px;line-height:1.55;max-width:560px}
+.hero-split .qbline b{color:var(--text)}
+.hero-split .herofoot{margin-top:30px}
+.hero-split .badgerow{margin-top:18px}
+.hero-demo .crewdemo.stack{margin-top:0}
+.hero-demo .phoneframe{width:min(330px,94vw)}
+.hero-demo .phoneframe .screen{aspect-ratio:auto;display:block}
+.hero-demo .crewdemo.stack .cd-steps{grid-template-columns:1fr 1fr;max-width:440px}
+.hero-demo .crewdemo.stack .cd-step{padding:11px 12px 14px}
+.hero-demo .crewdemo.stack .cd-step .cd-title{font-size:13.5px}
+.hero-demo .cd-fine{justify-content:center;margin-top:14px;text-align:center}
+.herologo.compact{width:300px;margin:0 0 18px;perspective:700px}
+.herologo.compact .orbit{top:46px}
+.herologo.compact .ring.r1{left:-90px;top:-90px;width:180px;height:180px}
+.herologo.compact .ring.r2{left:-71px;top:-71px;width:142px;height:142px}
+.herologo.compact .ring.r3{left:-112px;top:-112px;width:224px;height:224px}
+.herologo.compact .halo{left:-102px;top:-102px;width:204px;height:204px;filter:blur(24px)}
+.herologo.compact .spark.s1{left:-72px;top:-24px}.herologo.compact .spark.s2{left:58px;top:-42px}.herologo.compact .spark.s3{left:78px;top:24px}
+.herologo.compact .spark.s4{left:-84px;top:42px}.herologo.compact .spark.s5{left:6px;top:-72px}
+.herologo.compact .markwrap{width:92px;height:92px}
+.herologo.compact .word{margin-top:12px;font-size:22px;letter-spacing:.3em;padding-left:.3em}
+.herologo.compact .tag{margin-top:8px}
+.herologo.compact .tag .tt{font-size:8.5px;letter-spacing:.22em}
+.herologo.compact .tag .tl{width:24px}
+@media (max-width:1000px){
+  .hero-split{text-align:center;padding:44px 0 28px}
+  .hero-split .hero-grid{grid-template-columns:1fr;gap:34px}
+  .hero-split .hero-copy{max-width:640px;margin:0 auto}
+  .hero-split p.lead{margin:18px auto 28px}
+  .hero-split .cta-row{justify-content:center}
+  .hero-split .trialline{margin:16px auto 0}
+  .hero-split .qbline{margin:14px auto 0}
+  .herologo.compact{margin:0 auto 18px}
+  .hero-demo .crewdemo.stack .cd-steps{max-width:520px}
+}
+@media (max-width:560px){.herologo.compact .word{font-size:20px}.herologo.compact .markwrap{width:84px;height:84px}.herologo.compact .orbit{top:42px}.herologo.compact .tag .tt{font-size:8px}}
+/* pillar jump strip — replaces the nine-card grid that sat between the hero and the first recording */
+.pillarnav{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:26px}
+.pillarnav a{--c:var(--cyan);display:inline-flex;align-items:center;gap:9px;padding:10px 16px;border-radius:999px;border:1px solid var(--line);background:var(--glass);color:var(--text);text-decoration:none;font-weight:700;font-size:14px;letter-spacing:-.1px;transition:border-color .2s,background .2s,transform .2s}
+.pillarnav a i{width:8px;height:8px;border-radius:50%;background:var(--c);box-shadow:0 0 10px var(--c);flex:none}
+.pillarnav a:hover{border-color:color-mix(in srgb,var(--c) 55%,transparent);background:color-mix(in srgb,var(--c) 10%,transparent);transform:translateY(-1px)}
+.pillarfoot{margin:18px auto 0;text-align:center;color:var(--dim2);font-size:13.5px}
+.pillarfoot a{color:#6ecfff}
+/* on the wide layout the compact lockup lines up with the headline's left edge */
+@media (min-width:1001px){
+  .hero-split .herologo.compact .markwrap{margin:0}
+  .hero-split .herologo.compact .orbit{left:46px}
+  .hero-split .herologo.compact .word,.hero-split .herologo.compact .tag{justify-content:flex-start}
+  .hero-split .herologo.compact .word{padding-left:0}
+}
+.hero-demo{scroll-margin-top:84px}

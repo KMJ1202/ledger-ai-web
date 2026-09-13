@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 156;
+const APP_BUILD = 159;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -9909,8 +9909,16 @@ async function boot() {
     // A confirmation link that was already opened (by the customer or a
     // scanner) has done its job — the account is confirmed. Just sign in.
     if (hash.get("error_code")) { history.replaceState({}, "", location.pathname); loginView("signin"); toast(/expired|invalid/i.test(hash.get("error_code")) ? "That link was already used — just sign in with your password." : hash.get("error_description") || "That link didn't work — sign in below.", "err"); return; }
+    // The website's free-trial buttons land here as ?signup=1 (2026-09-13):
+    // a new visitor gets the Create-account card straight away instead of
+    // the sign-in card with a "New here?" link under it. Someone already
+    // signed in just goes on into the app. The param stays in the URL on
+    // purpose: the build-freshen check and a worker update both reload the
+    // page, and the visitor must land on this same card, not on Sign in.
+    if (qs.get("signup")) { loginView("signup"); return; }
     loginView("signin"); return;
   }
+  if (qs.get("signup")) history.replaceState({}, "", location.pathname);
   if (qs.get("reset")) { newPasswordView(); return; }
   S.email = (session.user?.email || "").toLowerCase();
   try {

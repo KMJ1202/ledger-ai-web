@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#05070b">
 <meta name="description" content="Receipt Radar: Ledger AI watches your inbox for supplier receipts and invoices, extracts vendor/total/GST, and only posts to QuickBooks when you confirm.">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/assets/styles.css?v=49">
+<link rel="stylesheet" href="/assets/styles.css?v=51">
 <link rel="stylesheet" href="/assets/crewdemo.css?v=2">
 <script src="/assets/crewdemo.js?v=2" defer></script>
 <title>Gmail — Receipt Radar — Ledger AI</title>
@@ -74,7 +74,7 @@
     <div class="oshead"><span class="dash" style="background:var(--orange);box-shadow:0 0 8px rgba(251,146,60,.7)"></span><span class="code" style="color:var(--orange)">Integration // Receipt Radar</span></div>
     <h1>Every supplier bill,<br><span class="grad" style="background:linear-gradient(135deg,var(--orange),var(--red));-webkit-background-clip:text;background-clip:text;color:transparent">caught the moment it lands.</span></h1>
     <p class="lead">Connect Gmail and Ledger stands watch over your inbox for receipts and invoices. It pulls out the vendor, total, GST, and date automatically — and queues everything for your review before a single dollar touches QuickBooks.</p>
-    <div class="cta-row" style="margin-top:30px"><a class="btn primary" href="/app.html">Connect Gmail →</a><a class="btn ghost" href="/#pricing">See pricing</a></div>
+    <div class="cta-row" style="margin-top:30px"><a class="btn primary" href="/app.html?signup=1">Start free — 14 days →</a><a class="btn ghost" href="/#pricing">See pricing</a></div>
     <div class="crewdemo stack" data-app-demo>
       <div class="cd-phone"><div class="phoneframe"><div class="screen"><div class="cd-screen" role="img" aria-label="Gmail Receipt Radar — real app footage, silent"><div class="cd-tap" aria-hidden="true"><span>Tap to play</span></div></div></div></div></div>
       <div class="cd-steps" role="group" aria-label="Footage clips">
@@ -106,8 +106,8 @@
     <div class="steps">
       <div class="step">
         <div class="num" style="color:var(--orange)">1</div>
-        <div class="m"><h4>Ledger scans for receipts and invoices, not your whole inbox</h4>
-        <p>It searches for the language a bill actually uses — receipt, invoice, order confirmation, amount due, payment received — and skips spam, trash, social, and promotions. It's not reading your personal email; it's looking for supplier paperwork.</p></div>
+        <div class="m"><h4>Receipt Radar scans for receipts and invoices, not your whole inbox</h4>
+        <p>It searches for the language a bill actually uses — receipt, invoice, order confirmation, amount due, payment received — and skips spam, trash, social, and promotions. On its own, Ledger isn't reading your personal email; it's looking for supplier paperwork. Anything else it does with your mail starts with you asking.</p></div>
       </div>
       <div class="step">
         <div class="num" style="color:var(--orange)">2</div>
@@ -139,7 +139,7 @@
       <div class="capitem"><div class="tick" style="background:rgba(251,146,60,.15);color:var(--orange)">✓</div><p><b>Photo receipts join the same pipeline</b> — snap a paper receipt in the app and it gets the identical vendor/total/GST extraction and review-then-post flow as an emailed one.</p></div>
       <div class="capitem"><div class="tick" style="background:rgba(251,146,60,.15);color:var(--orange)">✓</div><p><b>Category confirmation, every time</b> — Ledger suggests an expense account based on the vendor; you confirm or change it before anything posts.</p></div>
       <div class="capitem"><div class="tick" style="background:rgba(251,146,60,.15);color:var(--orange)">✓</div><p><b>Can't double-post</b> — a receipt already posted to QuickBooks is locked; posting it again is blocked at the source.</p></div>
-      <div class="capitem"><div class="tick" style="background:rgba(251,146,60,.15);color:var(--orange)">✓</div><p><b>Ask about any email, not just receipts</b> — Ledger can also search your recent mail, read a specific message, and draft a reply for you to send.</p></div>
+      <div class="capitem"><div class="tick" style="background:rgba(251,146,60,.15);color:var(--orange)">✓</div><p><b>When you ask, it works your inbox too</b> — “find the Foothills statement”, “what did Prairie Auto Parts say about the backorder?” Ledger searches your mail, opens that message, and drafts a reply that waits for your Send tap. Nothing is read or sent on its own — Receipt Radar's receipt scan and the crew day sheets you schedule are the only things that run without a tap, and you switch both on yourself.</p></div>
     </div>
   </div>
 </section>
@@ -148,7 +148,7 @@
   <div class="wrap narrow">
     <div class="datapanel">
       <h3>— Your data</h3>
-      <p>Gmail access is read-only and used solely to detect supplier receipt and invoice emails for Receipt Radar. Ledger's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+      <p>Gmail access is read and send. Receipt Radar is the only thing that reads your mail on its own, and it's looking for supplier receipts and invoices. Everything else happens only on your say-so: a search or opening a message when you ask, a reply that waits for your Send tap (unless you give Ledger standing permission to send in Settings), and the morning day sheets you schedule for your crew — sent from your own address at the hour you chose. Ledger's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
       <p>In practice: we do not use Gmail content for advertising, and no human reads your email except as needed to debug a support request you've raised, with your knowledge.</p>
       <p>Disconnect Gmail any time from Settings → Connections and scanning stops immediately. See the <a href="/privacy/">Privacy Policy</a> for full retention and deletion details.</p>
     </div>
@@ -160,7 +160,7 @@
     <div class="ctaband">
       <h2>Stop losing receipts in your inbox</h2>
       <p>Connect Gmail and let Receipt Radar catch what you'd otherwise dig for.</p>
-      <a class="btn primary" href="/app.html">Open Ledger AI →</a>
+      <a class="btn primary" href="/app.html?signup=1">Start free — 14 days →</a>
     </div>
   </div>
 </section>
