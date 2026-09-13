@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 164;
+const APP_BUILD = 165;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -10896,13 +10896,36 @@ function wakeToggle(btn) {
 document.addEventListener("visibilitychange", () => wakeSync());
 
 let LIVE = null;
+
+// Ledger Live "ready" tone: two quick rising notes (D5 → A5), soft attack, clean decay, under three
+// quarters of a second and quiet — the same figure the iPhone plays. Skips silently if the browser
+// will not let audio start (the glow still shows).
+function liveReadyTone() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    const ctx = liveReadyTone.ctx || (liveReadyTone.ctx = new AC());
+    const go = () => {
+      const t0 = ctx.currentTime + 0.02;
+      const note = (f, at, dur, peak, tau) => {
+        const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), g2 = ctx.createGain();
+        o.type = "sine"; o.frequency.value = f; o2.type = "sine"; o2.frequency.value = f * 2; g2.gain.value = 0.28;
+        o.connect(g); o2.connect(g2); g2.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(peak, at + 0.01); g.gain.setTargetAtTime(0.0001, at + 0.012, tau);
+        o.start(at); o2.start(at); o.stop(at + dur); o2.stop(at + dur);
+      };
+      note(587.33, t0, 0.32, 0.16, 0.11);
+      note(880, t0 + 0.11, 0.64, 0.18, 0.22);
+    };
+    if (ctx.state === "suspended") ctx.resume().then(go).catch(() => {}); else go();
+  } catch {}
+}
 function liveSheet() {
   if (LIVE) { LIVE.draw(); return; }
   wakeStop();
   // drafts = email drafts (rendered on end, as before); cards = every other confirm
   // card voice can now produce (invoice, estimate, booking, reminder, text, print) —
   // stored as renderers and drawn into the chat the moment the session ends.
-  const L = { state: "connecting", err: "", lines: [], cost: 0, pc: null, dc: null, mic: null, audio: null, drafts: [], cards: [] };
+  const L = { state: "connecting", err: "", lines: [], cost: 0, pc: null, dc: null, mic: null, audio: null, drafts: [], cards: [], hearing: false };
   const stop = () => {
     try { L.dc?.close(); } catch {}
     try { L.mic?.getTracks().forEach((t) => t.stop()); } catch {}
@@ -10911,15 +10934,13 @@ function liveSheet() {
     LIVE = null;
     setTimeout(wakeSync, 300);
   };
-  const labels = { connecting: "Connecting…", listening: "Listening", thinking: "Thinking…", speaking: "Ledger is speaking", failed: "Couldn't connect", ended: "Ended" };
+  const labels = { connecting: "Connecting…", listening: "Listening — go ahead", thinking: "Thinking…", speaking: "Ledger is speaking", failed: "Couldn't connect", ended: "Ended" };
   L.draw = () => {
     const live = ["listening", "thinking", "speaking"].includes(L.state);
     sheet(`<h2>&#127908; Ledger Live</h2>
       <p class="sh-sub">${esc(labels[L.state] || L.state)}${L.cost ? ` · $${L.cost.toFixed(2)} this session` : ""}</p>
       ${(L.cards.length + L.drafts.length) ? `<div class="note" style="color:var(--cyan)">${L.cards.length + L.drafts.length} draft${(L.cards.length + L.drafts.length) === 1 ? "" : "s"} waiting for your OK — end the session to review.</div>` : ""}
-      <div style="display:flex;justify-content:center;margin:14px 0">
-        <div style="width:96px;height:96px;border-radius:50%;background:${L.state === "speaking" ? "var(--cyan)" : L.state === "failed" ? "#7f1d1d" : "var(--card2)"};border:2px solid var(--line);box-shadow:0 0 ${live ? "34px" : "0"} rgba(34,211,238,.35);transition:all .3s"></div>
-      </div>
+      <div class="lv-wrap"><div class="lv-halo" id="lvhalo"></div><div class="lv-orb ${L.state}${L.hearing ? " hearing" : ""}"><span class="lv-sweep"></span><img src="assets/logo-mark-96.png" alt=""></div></div>
       ${L.err ? `<div class="note" style="color:#fca5a5">${esc(L.err)}</div>` : ""}
       <div class="note" style="max-height:34vh;overflow:auto">${L.lines.map((l) => `<div style="margin:4px 0"><b>${l.who === "you" ? "You" : "Ledger"}:</b> ${esc(l.text)}</div>`).join("") || "Talk naturally — ask for today's numbers, who owes you, or to draft an invoice. Say \"stop\" or tap End."}</div>
       <div class="rowbtns" style="margin-top:14px">
@@ -10933,12 +10954,18 @@ function liveSheet() {
     const wrap = $("sheetwrap"); if (wrap) wrap.querySelector(".sheet-back").onclick = () => { closeSheet(); if (!live) stop(); };
   };
   const set = (state) => { L.state = state; L.draw(); };
+  // The mic is live: the ring locks bright, one halo rolls outward, and the ready tone plays. Once per session.
+  const liveReady = () => {
+    requestAnimationFrame(() => { const h = document.getElementById("lvhalo"); if (h) h.classList.add("fire"); });
+    liveReadyTone();
+  };
   const send = (ev) => { try { L.dc?.send(JSON.stringify(ev)); } catch {} };
   const onEvent = async (ev) => {
     switch (ev.type) {
-      case "session.created": case "input_audio_buffer.speech_started": if (L.state !== "speaking") set("listening"); break;
-      case "input_audio_buffer.speech_stopped": set("thinking"); break;
-      case "response.created": set("speaking"); break;
+      case "session.created": if (L.state === "connecting") set("listening"); break;
+      case "input_audio_buffer.speech_started": L.hearing = true; if (L.state !== "speaking") set("listening"); else L.draw(); break;
+      case "input_audio_buffer.speech_stopped": L.hearing = false; set("thinking"); break;
+      case "response.created": L.hearing = false; set("speaking"); break;
       case "conversation.item.input_audio_transcription.completed": if (ev.transcript) { L.lines.push({ who: "you", text: ev.transcript }); L.draw(); } break;
       case "response.output_audio_transcript.done": case "response.audio_transcript.done": if (ev.transcript) { L.lines.push({ who: "ledger", text: ev.transcript }); L.draw(); } break;
       case "response.done": {
@@ -10983,7 +11010,7 @@ function liveSheet() {
       L.mic.getTracks().forEach((t) => pc.addTrack(t, L.mic));
       const dc = pc.createDataChannel("oai-events"); L.dc = dc;
       dc.onmessage = (m) => { try { onEvent(JSON.parse(m.data)); } catch {} };
-      dc.onopen = () => { if (L.state === "connecting") set("listening"); };
+      dc.onopen = () => { if (L.state === "connecting") { set("listening"); liveReady(); } };
       dc.onclose = () => { if (LIVE === L && L.state !== "failed") set("ended"); };
       const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
       await new Promise((res) => { if (pc.iceGatheringState === "complete") return res(); const t = setTimeout(res, 2000); pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === "complete") { clearTimeout(t); res(); } }; });

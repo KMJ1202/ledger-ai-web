@@ -2030,8 +2030,27 @@ button,a,input,select,[role="switch"]{touch-action:manipulation}
 .crise{animation:crise .42s cubic-bezier(.2,.8,.3,1) both;animation-delay:calc(var(--i,0)*55ms)}
 @keyframes crise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.crise,.cld::after,.cpill.live i::after,.cradar .sweep,.cradar .cblip.live::after,.cspin.live .cspring,.csweep .csb i{animation:none!important}.csweep .csb i{width:100%}}
+
+/* Ledger Live orb — neon ring, connect sweep, one-shot ready halo (build 165) */
+.lv-wrap{position:relative;width:136px;height:136px;margin:14px auto;display:grid;place-items:center}
+.lv-orb{position:relative;width:112px;height:112px;border-radius:50%;background:var(--card2);display:grid;place-items:center;border:1.5px solid rgba(58,200,245,.32);transition:box-shadow .35s,border-color .35s,transform .35s,opacity .35s}
+.lv-orb img{width:96px;height:96px;border-radius:50%;object-fit:cover;display:block}
+.lv-orb.connecting{animation:lvBreathe 1.7s ease-in-out infinite}
+.lv-sweep{position:absolute;inset:-4px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0 74%,rgba(58,200,245,.95) 94%,transparent 100%);-webkit-mask:radial-gradient(circle,transparent calc(50% - 4.5px),#000 calc(50% - 3px));mask:radial-gradient(circle,transparent calc(50% - 4.5px),#000 calc(50% - 3px));animation:lvSweep 1.6s linear infinite;opacity:0;transition:opacity .3s;pointer-events:none}
+.lv-orb.connecting .lv-sweep{opacity:1}
+.lv-orb.listening,.lv-orb.thinking{border-color:var(--cyan);box-shadow:0 0 6px var(--cyan),0 0 22px rgba(58,200,245,.55),0 0 60px rgba(58,200,245,.22)}
+.lv-orb.hearing{border-width:2.5px;box-shadow:0 0 9px var(--cyan),0 0 30px rgba(58,200,245,.75),0 0 80px rgba(58,200,245,.32);transform:scale(1.03)}
+.lv-orb.speaking{border-color:var(--cyan);box-shadow:0 0 12px var(--cyan),0 0 48px rgba(58,200,245,.8),0 0 110px rgba(58,200,245,.4);animation:lvTalk .6s ease-in-out infinite}
+.lv-orb.failed{border-color:#8b1e1e;box-shadow:0 0 16px rgba(139,30,30,.55)}
+.lv-orb.ended{opacity:.5}
+.lv-halo{position:absolute;inset:12px;border-radius:50%;border:2px solid var(--cyan);opacity:0;pointer-events:none}
+.lv-halo.fire{animation:lvHalo .75s ease-out forwards}
+@keyframes lvSweep{to{transform:rotate(360deg)}}
+@keyframes lvBreathe{0%,100%{transform:scale(.97)}50%{transform:scale(1.03)}}
+@keyframes lvTalk{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+@keyframes lvHalo{0%{transform:scale(1);opacity:.9}100%{transform:scale(1.65);opacity:0}}
 </style>
 </head>
 <body><div id="root"></div>
-<script type="module" src="app.js?v=164"></script>
+<script type="module" src="app.js?v=165"></script>
 </body></html>
