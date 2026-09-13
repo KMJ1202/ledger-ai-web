@@ -4234,47 +4234,124 @@ function crewTextMarks(t, tz) {
   mark("Customer told", t.on_my_way); mark("Arrived text", t.arrived); mark("All-done text", t.done);
   return bits.join(" · ");
 }
-let CREWMAP_STYLE = false;
-function crewMapStyle() {
-  if (CREWMAP_STYLE) return; CREWMAP_STYLE = true;
-  const st = document.createElement("style");
-  st.textContent = `.cpin{position:relative;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:800 14px/1 -apple-system,Segoe UI,Roboto,sans-serif;color:#03181d;border:2px solid rgba(255,255,255,.85);box-shadow:0 4px 14px rgba(0,0,0,.5);transform:translate(-50%,-50%)}
-.cpin.live::before{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid currentColor;opacity:.7;animation:cpinpulse 1.8s ease-out infinite}
-@keyframes cpinpulse{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.9);opacity:0}}
-.cpin .tag{position:absolute;top:36px;left:50%;transform:translateX(-50%);white-space:nowrap;font:700 11px/1.2 -apple-system,Segoe UI,Roboto,sans-serif;color:#f3f5f7;background:rgba(7,9,13,.85);padding:3px 7px;border-radius:8px;border:1px solid rgba(255,255,255,.12)}
-.jpin{width:26px;height:26px;border-radius:8px;background:#a855f7;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid rgba(255,255,255,.8);box-shadow:0 4px 12px rgba(0,0,0,.5);transform:translate(-50%,-50%)}
-.jpin.done{opacity:.45}
-.crewcard{margin:6px 0 10px;padding:12px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
-.crewcard .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-.crewcard .acts a,.crewcard .acts button{flex:1;min-width:90px;text-align:center;text-decoration:none}`;
-  document.head.appendChild(st);
+// ── Crew premium redesign (Kyle 12510 + 1202, 2026-09-12) ─────────────────
+// The web twin of the iPhone Crew screens: hub dashboard with live readouts,
+// map-as-hero (always drawn, centred on the shop when quiet), sigil pins,
+// chip legend, one-row location setting, live sweep; Track Record with period
+// chips + rank plates; Time Cards with a day strip that is always drawn.
+// Pure UI over the feeds the app already has — nothing new on the server.
+const CREW_REDUCE_MOTION = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const crewFirst = (name) => String(name || "").trim().split(/\s+/)[0] || "";
+const crewHours = (sec) => { const s = sec || 0; if (s <= 0) return "0h"; const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); if (!h) return `${m}m`; return m ? `${h}h ${String(m).padStart(2, "0")}m` : `${h}h`; };
+const CREW_RGB = { cyan: "58,200,245", emerald: "47,224,160", orange: "251,146,60", purple: "168,85,247", pink: "244,114,182", yellow: "250,204,21", red: "248,113,113", blue: "59,130,246", silver: "194,209,230", gold: "251,191,36", grey: "110,120,135" };
+const crewRgb = (tag) => CREW_RGB[String(tag || "").toLowerCase()] || CREW_RGB.cyan;
+/** Chamfered crew badge (the sigil), tinted by the member's colour tag. `tick` = emerald | amber | orange | null. */
+function crewSigil(name, tag, size = 44, tick = null) {
+  const t = tick ? `<i class="ctick ${tick}"></i>` : "";
+  return `<span class="csigw" style="--s:${size}px;--sig:${crewRgb(tag)}"><span class="csig">${sigilMark(name)}<i class="rail"></i></span>${t}</span>`;
 }
+function crewKicker(text, tint = "cyan", dot = false) {
+  return `<span class="ck" style="--sig:${crewRgb(tint)}">${dot ? '<i class="ckd"></i>' : ""}${esc(text)}</span>`;
+}
+function crewPill(text, tint = "emerald", live = false) {
+  return `<span class="cpill${live ? " live" : ""}" style="--sig:${crewRgb(tint)}"><i></i>${esc(text)}</span>`;
+}
+/** One stat tile: quiet at zero (dim number, silver glow). `text` overrides the number. */
+function crewStat(number, label, tint = "cyan", { live = false, text = null } = {}) {
+  const quiet = text == null ? !number : (text === "0h" || text === "—");
+  return `<div class="cstat${quiet ? " quiet" : ""}" style="--sig:${crewRgb(quiet ? "silver" : tint)}">
+    <div class="ckrow">${crewKicker(label, quiet ? "silver" : tint)}${live ? '<i class="cld"></i>' : ""}</div>
+    <b ${text == null ? `data-count="${number}"` : ""}>${text == null ? (CREW_REDUCE_MOTION() ? number : 0) : esc(text)}</b>
+  </div>`;
+}
+/** Roll every [data-count] number in `root` from 0 to its value. */
+function crewCountUp(root) {
+  if (!root) return;
+  root.querySelectorAll("[data-count]").forEach((el) => {
+    const target = Number(el.dataset.count) || 0; delete el.dataset.count;
+    if (CREW_REDUCE_MOTION() || !target) { el.textContent = String(target); return; }
+    const t0 = performance.now(), dur = 700;
+    const tick = (now) => { const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3); el.textContent = String(Math.round(target * e)); if (p < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  });
+}
+/** Radar for the hub tile: rings, a slow sweep, one blip per crew member on the clock. */
+function crewRadar(members, tint = "cyan", size = 96) {
+  const blips = members.map((m, i) => {
+    let h = 0; for (const ch of String(m.name || "")) h = (h * 31 + ch.charCodeAt(0)) % 360;
+    const r = size * (0.18 + 0.28 * ((i + 1) % 3) / 2 + 0.06), rad = h * Math.PI / 180;
+    const x = size / 2 + Math.cos(rad) * r, y = size / 2 + Math.sin(rad) * r;
+    return `<i class="cblip${m.live ? " live" : ""}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;--sig:${crewRgb(m.colorTag)}"></i>`;
+  }).join("");
+  return `<div class="cradar" style="--s:${size}px;--sig:${crewRgb(tint)}"><i class="r1"></i><i class="r2"></i><i class="r3"></i><i class="cross"></i><i class="sweep"></i>${blips}<i class="core"></i></div>`;
+}
+function crewLegend() {
+  const chips = [
+    ["live", "cyan", "LIVE", "A pulsing pin is a position under three minutes old. Drive times off it are live.", true],
+    ["way", "gold", "ON THE WAY", "Amber means they tapped On my way. The customer text carries this estimate.", false],
+    ["paused", "grey", "PAUSED", "Grey means no update in ten minutes — updates pause while their job link is closed (like driving with Maps open). It does not mean they stopped moving.", false],
+    ["job", "purple", "JOB", "Today's open jobs with an address. Done jobs leave the map.", false],
+  ];
+  return `<div class="clegend">${chips.map(([k, tint, label, hint, pulse]) => `<button type="button" class="clchip" data-hint="${esc(hint)}" style="--sig:${crewRgb(tint)}"><i class="${pulse ? "cld" : "cdot"}"></i>${label}</button>`).join("")}</div><div class="clhint" hidden></div>`;
+}
+function crewWireLegend(root) {
+  const hint = root.querySelector(".clhint"); if (!hint) return;
+  root.querySelectorAll(".clchip").forEach((b) => b.onclick = () => {
+    const open = !hint.hidden && hint.dataset.for === b.dataset.hint;
+    hint.hidden = open; hint.textContent = open ? "" : b.dataset.hint; hint.dataset.for = open ? "" : b.dataset.hint;
+  });
+}
+function crewSweep(updatedAt) {
+  const t = updatedAt ? new Date(updatedAt).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit", second: "2-digit" }).replace(/\s?([ap])\.m\./i, (m, p) => " " + p.toUpperCase() + "M").toUpperCase() : "";
+  return `<div class="csweep"><div class="cst"><i class="cld"></i><span>${t ? `LIVE · UPDATED ${esc(t)}` : "LIVE · CONNECTING"}</span><em>EVERY 30 S</em></div><div class="csb"><i></i></div></div>`;
+}
+function crewRestartSweep(root) {
+  const bar = root.querySelector(".csb i"); if (!bar) return;
+  bar.style.animation = "none"; void bar.offsetWidth; bar.style.animation = CREW_REDUCE_MOTION() ? "none" : "csweep 30s linear forwards";
+  if (CREW_REDUCE_MOTION()) bar.style.width = "100%";
+}
+const crewShopCentreKey = "crew.shopCentre.v1";
+function crewShopCentreCached() { try { const c = JSON.parse(localStorage.getItem(crewShopCentreKey) || "null"); return c && typeof c.lat === "number" ? c : null; } catch { return null; } }
+function crewShopCentreRemember(lat, lng, address) { try { localStorage.setItem(crewShopCentreKey, JSON.stringify({ lat, lng, address: address || crewShopCentreCached()?.address || "" })); } catch {} }
+
 async function crewLiveMapSheet() {
-  crewMapStyle();
-  const wrap = sheet(`<h2>Live crew map</h2>
-    <p class="sub" id="lmsub">Loading…</p>
-    <div id="lmmap" style="height:340px;border-radius:14px;overflow:hidden;background:#0b1118;margin-top:10px;display:none"></div>
-    <p class="note" id="lmnote" style="margin-top:8px"></p>
-    <div id="lmlist" style="margin-top:12px"></div>
-    <div class="panel" style="margin-top:14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        <div><b>Location on shift</b><div class="note">Required: crew are told the shop needs it while clocked in. Optional: their choice. Neither ever blocks a clock-in.</div></div>
-        <div class="chips" id="lmpolicy" style="display:flex;gap:8px"></div>
+  const wrap = sheet(`<div class="chead">${crewKicker("LIVE MAP", "cyan", true)}<h2>Where your crew is</h2></div>
+    <div class="cmapcard" id="lmcard">
+      <div class="cmapwrap"><div id="lmmap" class="cmap"></div>
+        <div class="cmapcounts" id="lmcounts"></div>
+        <div class="cmapveil" id="lmveil" hidden><div class="cmapmsg" id="lmmsg"></div></div>
       </div>
+      <p class="note cmapdown" id="lmnote" hidden></p>
+      ${crewLegend()}
+      <div id="lmsweep">${crewSweep(null)}</div>
+    </div>
+    <div class="ckrow" style="margin:16px 0 8px">${crewKicker("CREW", "cyan")}<span class="ckr" id="lmcount"></span></div>
+    <div id="lmlist"></div>
+    <div class="cpolicy crise" style="--i:3">
+      <div class="cprow">
+        <div>${crewKicker("LOCATION ON SHIFT", "cyan")}<div class="note" style="margin-top:3px">Never blocks a clock-in.</div></div>
+        <div class="cseg" id="lmpolicy"></div>
+        <button type="button" class="cinfo" id="lminfo" aria-label="How location on shift works">i</button>
+      </div>
+      <div class="cfine" id="lmfine" hidden>Required: crew are told the shop needs their location while clocked in. Optional: sharing is their choice. Either way it shuts off by itself at clock-out, and neither setting ever blocks a clock-in — a crew member with location off still gets clocked in and paid correctly; you see “location off” next to their name.</div>
+      <p class="note" id="lmpnote" hidden></p>
     </div>`);
-  const pane = wrap.querySelector(".sheet");
-  let map = null, mk = null, timer = null, mapFailed = false, marks = new Map(), routeLine = null, openCard = null, last = null;
+  const pane = wrap.querySelector(".sheet"); pane.classList.add("crewsheet");
+  crewWireLegend(pane);
+  pane.querySelector("#lminfo").onclick = () => { const f = pane.querySelector("#lmfine"); f.hidden = !f.hidden; };
+  let map = null, mk = null, timer = null, mapFailed = false, marks = new Map(), routeLine = null, openCard = null, last = null, centred = false;
   const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
   const alive = () => wrap.isConnected && document.body.contains(wrap);
-  const MAP_DOWN = "The map is unavailable right now — the crew list below is still live.";
+  const MAP_DOWN = "Drive times and job pins are unavailable right now — crew positions still show.";
   const paintPolicy = (policy) => {
     const host = pane.querySelector("#lmpolicy"); if (!host) return;
-    host.innerHTML = ["required", "optional"].map((p) => `<button type="button" class="chip${policy === p ? " on" : ""}" data-pol="${p}">${p === "required" ? "Required" : "Optional"}</button>`).join("");
+    host.innerHTML = ["required", "optional"].map((p) => `<button type="button" class="${policy === p ? "on" : ""}" data-pol="${p}">${p === "required" ? "Required" : "Optional"}</button>`).join("");
     host.querySelectorAll("[data-pol]").forEach((b) => b.onclick = async () => {
       if (b.classList.contains("on")) return;
       host.querySelectorAll("button").forEach((x) => x.disabled = true);
+      const note = pane.querySelector("#lmpnote"); note.hidden = true;
       try { const r = await api("/crew", { action: "set-location-policy", policy: b.dataset.pol }); paintPolicy(r.policy); toast(r.policy === "required" ? "Location is required on shift" : "Location is optional for your crew"); }
-      catch (err) { toast(err.status === 403 ? "Only the owner or an admin can change this." : err.message, "err"); paintPolicy(policy); }
+      catch (err) { note.textContent = err.status === 403 ? "Only the owner or an admin can change this." : err.message; note.hidden = false; note.style.color = "var(--orange)"; paintPolicy(policy); }
     });
   };
   const tel = (p) => { const d = String(p || "").replace(/[^\d+]/g, ""); return d.replace(/\D/g, "").length >= 10 ? d : null; };
@@ -4293,35 +4370,42 @@ async function crewLiveMapSheet() {
       });
     } catch { straight(); }
   };
+  const statusTint = (c) => !c.clockedIn ? "grey" : c.status === "on_my_way" ? "gold" : c.status === "on_site" ? "emerald" : "cyan";
   const paintList = (d) => {
     const host = pane.querySelector("#lmlist"); if (!host) return;
     const crew = d.crew || [], tz = d.timezone;
-    if (!crew.length) { host.innerHTML = '<p class="note">No active crew on the roster yet.</p>'; return; }
-    host.innerHTML = crew.map((c) => {
+    const onClock = crew.filter((c) => c.clockedIn).length;
+    const cnt = pane.querySelector("#lmcount"); if (cnt) cnt.textContent = crew.length ? `${onClock} OF ${crew.length} ON THE CLOCK` : "";
+    if (!crew.length) { host.innerHTML = '<div class="cghost">No active crew on the roster yet.</div>'; return; }
+    host.innerHTML = crew.map((c, i) => {
       const off = c.permission === "denied" || c.permission === "unsupported";
-      const dot = !c.clockedIn ? "#39424f" : off ? "var(--orange)" : c.stale ? "#6b7683" : "var(--cyan)";
-      const where = off ? "Location off on their phone" : (c.lat == null ? "No location yet" : (c.clockedIn ? `Seen ${agoWords(c.ageSeconds)}` : (c.clockedOutAt ? `Clocked out at ${crewClock(c.clockedOutAt, tz)}` : `Clocked out · last seen ${agoWords(c.ageSeconds)}`)));
+      const live = c.clockedIn && !c.stale && !off && c.lat != null;
+      const where = off ? "Location off on their phone" : (!c.clockedIn && c.clockedOutAt && crewClock(c.clockedOutAt, tz) ? `Clocked out at ${crewClock(c.clockedOutAt, tz)} · sharing stopped` : (c.lat == null ? (c.clockedIn ? "No position yet" : "No location yet") : (c.clockedIn ? `Seen ${agoWords(c.ageSeconds)}` : `Clocked out · last seen ${agoWords(c.ageSeconds)}`)));
       const job = c.currentJob ? ` · ${esc(c.currentJob.title || "Job")}${c.currentJob.location ? " — " + esc(c.currentJob.location) : ""}` : "";
       const est = c.clockedIn ? crewEstimateLine(c, tz) : "";
       const texts = crewTextMarks(c.texts, tz);
-      const today = c.today && (c.today.seconds > 0 || c.today.jobsTotal > 0) ? `Today: ${hoursWords(c.today.seconds)}${c.today.jobsTotal ? ` · ${c.today.jobsDone} of ${c.today.jobsTotal} job${c.today.jobsTotal === 1 ? "" : "s"} done` : ""}` : "";
+      const today = c.today && (c.today.seconds > 0 || c.today.jobsTotal > 0) ? `TODAY ${crewHours(c.today.seconds).toUpperCase()}${c.today.jobsTotal ? ` · ${c.today.jobsDone} OF ${c.today.jobsTotal} JOB${c.today.jobsTotal === 1 ? "" : "S"} DONE` : ""}` : "";
       const isOpen = openCard === c.id;
-      const card = isOpen ? `<div class="crewcard" data-card="${esc(c.id)}">
-          <div><b>${esc(c.name)}</b> <span class="note">· ${esc(crewStatusWord(c))}</span></div>
-          ${est ? `<div style="margin-top:4px">${est}</div>` : ""}
-          ${today ? `<div class="note" style="margin-top:4px">${today}</div>` : ""}
-          <div class="acts">
-            ${tel(c.phone) ? `<a class="btn" href="tel:${tel(c.phone)}">Call</a><a class="btn" href="sms:${tel(c.phone)}">Text</a>` : '<span class="note" style="flex:1">No phone on their roster card</span>'}
-            ${c.lat != null && c.clockedIn && !off ? `<button class="btn" type="button" data-center="${esc(c.id)}">Show on map</button>` : ""}
-            ${c.lat != null && c.clockedIn && !off && c.currentJob && c.currentJob.lat != null ? `<button class="btn" type="button" data-route="${esc(c.id)}">Route to job</button>` : ""}
-            ${c.lat != null && c.clockedIn && !off ? `<a class="btn" href="https://maps.apple.com/?ll=${c.lat},${c.lng}&q=${encodeURIComponent(c.name)}" target="_blank" rel="noopener">Open in Maps ↗</a>` : ""}
-          </div>
-        </div>` : "";
-      return `<button type="button" class="row" data-crew="${esc(c.id)}" style="width:100%;text-align:left;display:flex;gap:10px;align-items:flex-start;padding:10px 4px;border:0;background:none;color:inherit;border-bottom:${isOpen ? "0" : "1px solid var(--line)"}">
-        <span style="width:10px;height:10px;border-radius:50%;background:${dot};flex-shrink:0;margin-top:5px;box-shadow:${c.clockedIn && !c.stale && !off ? "0 0 8px " + dot : "none"}"></span>
-        <span style="flex:1;min-width:0"><b>${esc(c.name)}</b> <span class="note">${esc(crewStatusWord(c))}${job}</span><br><span class="note">${where}</span>${est ? `<br>${est}` : ""}${texts ? `<br><span class="note">${texts}</span>` : ""}${today ? `<br><span class="note">${today}</span>` : ""}</span>
-        <span class="note" style="flex-shrink:0">${isOpen ? "▴" : "▾"}</span>
-      </button>${card}`;
+      const canPin = c.lat != null && c.clockedIn && !off, canRoute = canPin && c.currentJob && c.currentJob.lat != null, phone = tel(c.phone);
+      const acts = isOpen ? `<div class="cacts">
+          ${phone ? `<a class="cact" style="--sig:${CREW_RGB.emerald}" href="tel:${phone}">${ICON_PHONE}<span>CALL</span></a>` : `<span class="cact off">${ICON_PHONE}<span>CALL</span></span>`}
+          ${phone ? `<a class="cact" style="--sig:${CREW_RGB.cyan}" href="sms:${phone}">${ICON_TEXT}<span>TEXT</span></a>` : `<span class="cact off">${ICON_TEXT}<span>TEXT</span></span>`}
+          <button type="button" class="cact${canRoute ? "" : " off"}" style="--sig:${CREW_RGB.gold}" data-route="${esc(c.id)}" ${canRoute ? "" : "disabled"}>${ICON_ROUTE}<span>ROUTE</span></button>
+          <button type="button" class="cact${canPin ? "" : " off"}" style="--sig:${CREW_RGB.purple}" data-center="${esc(c.id)}" ${canPin ? "" : "disabled"}>${ICON_SCOPE}<span>CENTRE</span></button>
+        </div>
+        <div class="cactfoot">${phone ? "" : '<span class="note">No phone on their roster card</span>'}${canPin ? `<a href="https://maps.apple.com/?ll=${c.lat},${c.lng}&q=${encodeURIComponent(c.name)}" target="_blank" rel="noopener">Open in Apple Maps ↗</a>` : ""}</div>` : "";
+      return `<div class="ccrew crise${live ? " live" : c.clockedIn ? " on" : ""}" style="--i:${Math.min(i + 1, 8)};--sig:${crewRgb(live ? "cyan" : c.clockedIn ? "gold" : "grey")}">
+        <button type="button" class="ccrewtop" data-crew="${esc(c.id)}">
+          ${crewSigil(c.name, c.clockedIn ? c.colorTag : "grey", 42, c.clockedIn ? (off ? "orange" : live ? "emerald" : "amber") : null)}
+          <span class="ccbody">
+            <span class="ccname"><b>${esc(c.name)}</b><span class="cchip" style="--sig:${crewRgb(statusTint(c))}">${esc(crewStatusWord(c)).toUpperCase()}</span></span>
+            <span class="note">${where}${job}</span>
+            ${est ? `<span class="ccest">${est}</span>` : ""}
+            ${texts ? `<span class="note">${texts}</span>` : ""}
+            ${today ? `<span class="ccm">${today}</span>` : ""}
+          </span>
+          <span class="ccchev${isOpen ? " open" : ""}">⌄</span>
+        </button>${acts}</div>`;
     }).join("");
     host.querySelectorAll("[data-crew]").forEach((b) => b.onclick = () => { openCard = openCard === b.dataset.crew ? null : b.dataset.crew; paintList(last || d); });
     host.querySelectorAll("[data-center]").forEach((b) => b.onclick = (ev) => { ev.stopPropagation(); const c = crew.find((x) => x.id === b.dataset.center); if (map && mk && c && c.lat != null) { map.setCenterAnimated(new mk.Coordinate(c.lat, c.lng), true); pane.scrollTo({ top: 0, behavior: "smooth" }); } });
@@ -4330,23 +4414,42 @@ async function crewLiveMapSheet() {
   const pinFactory = (c, tz) => (coord) => {
     const el = document.createElement("div");
     const live = c.clockedIn && c.fresh;
-    const color = c.stale ? "#6b7683" : c.status === "on_my_way" ? "#fbbf24" : "#22d3ee";
-    el.className = "cpin" + (live ? " live" : "");
-    el.style.background = color; el.style.color = color;
+    const tint = c.stale ? "grey" : c.status === "on_my_way" ? "gold" : (c.colorTag || "cyan");
+    el.className = "cspin" + (live ? " live" : "") + (c.stale ? " stale" : "");
+    el.style.setProperty("--sig", crewRgb(tint));
     const e = c.estimate;
     const tag = e && e.kind === "live" ? `${Math.max(1, Math.round(e.etaSeconds / 60))} min` : e && e.kind === "original" ? `est. ${crewClock(e.etaAt, tz)} · not updating` : agoWords(c.ageSeconds);
-    el.innerHTML = `<span style="color:#03181d">${esc((c.name || "?").trim().charAt(0).toUpperCase())}</span><span class="tag">${esc(c.name.split(" ")[0])} · ${esc(tag)}</span>`;
+    el.innerHTML = `<span class="cspring"></span><span class="csig">${sigilMark(c.name)}<i class="rail"></i></span>${live ? '<i class="ctick emerald"></i>' : ""}<span class="tag">${esc(crewFirst(c.name))} · ${esc(tag)}</span>`;
     return el;
+  };
+  const jobFactory = () => () => { const el = document.createElement("div"); el.className = "cjpin"; el.innerHTML = `<span>${ICON_WRENCH}</span><i></i>`; return el; };
+  const centreOnShop = async () => {
+    if (centred || !map || !mk) return;
+    centred = true;
+    const cached = crewShopCentreCached();
+    if (cached) map.region = new mk.CoordinateRegion(new mk.Coordinate(cached.lat, cached.lng), new mk.CoordinateSpan(0.08, 0.08));
+    const address = String(S.profile?.business?.address || "").trim();
+    if (!address || (cached && cached.address === address)) return;
+    try {
+      new mk.Geocoder().lookup(address, (err, data) => {
+        if (err || !data || !data.results || !data.results[0] || !alive() || !map || map.__fitted) return;
+        const c = data.results[0].coordinate;
+        crewShopCentreRemember(c.latitude, c.longitude, address);
+        map.setRegionAnimated(new mk.CoordinateRegion(c, new mk.CoordinateSpan(0.08, 0.08)), true);
+      });
+    } catch {}
   };
   const paintMap = async (d) => {
     const el = pane.querySelector("#lmmap"); if (!el) return;
-    if (!d.mapsConfigured || d.mapsError || mapFailed) { el.style.display = "none"; return; }
+    const note = pane.querySelector("#lmnote");
+    const down = !d.mapsConfigured || d.mapsError;
+    if (note) { note.textContent = down ? MAP_DOWN : ""; note.hidden = !down; }
+    if (mapFailed) return;
     try {
       mk = await ensureMapKit();
       if (!alive()) return;
-      el.style.display = "block";
       if (!map) {
-        map = new mk.Map(el, { colorScheme: mk.Map.ColorSchemes.Dark, showsCompass: mk.FeatureVisibility.Hidden, showsMapTypeControl: false, isRotationEnabled: false });
+        map = new mk.Map(el, { colorScheme: mk.Map.ColorSchemes.Dark, showsCompass: mk.FeatureVisibility.Hidden, showsMapTypeControl: false, isRotationEnabled: false, showsPointsOfInterest: false });
       }
       const wanted = new Set();
       const items = [];
@@ -4355,8 +4458,6 @@ async function crewLiveMapSheet() {
         if (c.lat == null || c.permission === "denied" || !c.clockedIn) continue;
         const key = "crew:" + c.id; wanted.add(key);
         let m = marks.get(key);
-        // Custom DOM pins so a live position can pulse; MapKit re-renders the
-        // element when the factory changes, so the pin is rebuilt each refresh.
         if (m) { map.removeAnnotation(m); marks.delete(key); }
         m = new mk.Annotation(new mk.Coordinate(c.lat, c.lng), pinFactory(c, d.timezone), { title: "", anchorOffset: new DOMPoint(0, 0), displayPriority: 1000 });
         marks.set(key, m); map.addAnnotation(m);
@@ -4367,16 +4468,32 @@ async function crewLiveMapSheet() {
         const key = "job:" + j.assignmentId; wanted.add(key);
         const sub = `${j.employeeName ? j.employeeName + " · " : ""}${{ on_my_way: "On my way", on_site: "On site" }[j.status] || "Assigned"}`;
         let m = marks.get(key);
-        if (!m) { m = new mk.MarkerAnnotation(new mk.Coordinate(j.lat, j.lng), { title: j.title || "Job", subtitle: sub, color: "#a855f7", glyphText: "🔧", displayPriority: 900 }); marks.set(key, m); map.addAnnotation(m); }
+        if (!m) { m = new mk.Annotation(new mk.Coordinate(j.lat, j.lng), jobFactory(), { title: j.title || "Job", subtitle: sub, anchorOffset: new DOMPoint(0, -13), displayPriority: 900 }); marks.set(key, m); map.addAnnotation(m); }
         else { m.subtitle = sub; }
         items.push(m);
       }
       for (const [key, m] of Array.from(marks.entries())) if (!wanted.has(key)) { map.removeAnnotation(m); marks.delete(key); }
-      if (items.length && !map.__fitted) { map.showItems(items, { animate: false, padding: new mk.Padding(50, 30, 50, 30) }); map.__fitted = true; }
+      if (items.length && !map.__fitted) {
+        map.showItems(items, { animate: false, padding: new mk.Padding(60, 30, 50, 30) }); map.__fitted = true;
+        try { const r = map.region; if (r) crewShopCentreRemember(r.center.latitude, r.center.longitude); } catch {}
+      }
+      if (!items.length && !map.__fitted) await centreOnShop();
     } catch (err) {
-      mapFailed = true; el.style.display = "none";
-      const note = pane.querySelector("#lmnote"); if (note) note.textContent = MAP_DOWN;
+      mapFailed = true;
+      if (note) { note.textContent = "The map could not load — the crew list below is still live."; note.hidden = false; }
     }
+  };
+  const paintCounts = (d) => {
+    const crew = d.crew || [], jobs = d.jobs || [];
+    const on = crew.filter((c) => c.clockedIn).length, sharing = crew.filter((c) => c.clockedIn && !c.stale && c.lat != null).length;
+    const open = jobs.filter((j) => j.status !== "done").length, done = jobs.filter((j) => j.status === "done").length;
+    const pinned = crew.some((c) => c.clockedIn && c.lat != null && c.permission !== "denied") || jobs.some((j) => j.status !== "done" && j.lat != null);
+    const host = pane.querySelector("#lmcounts");
+    if (host) host.innerHTML = crewPill(`${on} ON THE CLOCK`, on ? "emerald" : "silver", on > 0) + crewPill(`${sharing} SHARING LIVE`, sharing ? "cyan" : "silver", sharing > 0) + crewPill(done ? `${done}/${open + done} JOBS DONE` : `${open} OPEN JOBS`, (open + done) ? "purple" : "silver");
+    const veil = pane.querySelector("#lmveil"), msg = pane.querySelector("#lmmsg"), card = pane.querySelector("#lmcard");
+    if (veil) veil.hidden = pinned;
+    if (card) card.classList.toggle("quiet", !pinned);
+    if (msg) msg.innerHTML = on ? crewPill("ON THE CLOCK · NO POSITION YET", "gold", true) + '<span>Positions arrive from their job link within a minute of clocking in.</span>' : crewPill("SHOP QUIET · NOBODY ON THE CLOCK", "silver") + '<span>Pins appear the moment someone clocks in from their job link.</span>';
   };
   const load = async () => {
     if (!alive()) { stop(); return; }
@@ -4384,19 +4501,12 @@ async function crewLiveMapSheet() {
       const d = await api("/crew", { action: "locations" }, "POST", { silentUpgrade: true });
       if (!alive()) { stop(); return; }
       last = d;
-      const crew = d.crew || [], jobs = d.jobs || [];
-      const live = crew.filter((c) => c.clockedIn).length, sharing = crew.filter((c) => c.clockedIn && !c.stale && c.lat != null).length;
-      const open = jobs.filter((j) => j.status !== "done").length, done = jobs.filter((j) => j.status === "done").length;
-      const sub = pane.querySelector("#lmsub"); if (sub) sub.textContent = `${live} on the clock · ${sharing} sharing a live location · ${open} open job${open === 1 ? "" : "s"}${done ? ` · ${done} done` : ""} today`;
-      const note = pane.querySelector("#lmnote");
-      if (note && !mapFailed) note.textContent = (d.mapsConfigured && !d.mapsError)
-        ? "Grey = no update in 10 minutes. Updates pause while their job link is closed (like driving with Maps open) — it doesn't mean they stopped moving. Positions come from each crew member's job link and stop when they clock out."
-        : MAP_DOWN;
-      paintPolicy(d.policy); paintList(d); await paintMap(d);
+      paintCounts(d); paintPolicy(d.policy); paintList(d); await paintMap(d);
+      const sw = pane.querySelector("#lmsweep"); if (sw) { sw.innerHTML = crewSweep(Date.now()); crewRestartSweep(sw); }
     } catch (err) {
       if (!alive()) { stop(); return; }
       if (err.status === 402 && err.data?.code === "upgrade_required") { stop(); closeSheet(); upgradeHit(err.data); return; }
-      const sub = pane.querySelector("#lmsub"); if (sub) sub.textContent = err.message || "The crew map could not be read. Try again.";
+      const note = pane.querySelector("#lmnote"); if (note) { note.textContent = err.message || "The crew map could not be read. Try again."; note.hidden = false; }
     }
   };
   await load();
@@ -4404,30 +4514,135 @@ async function crewLiveMapSheet() {
   const obs = new MutationObserver(() => { if (!alive()) { stop(); obs.disconnect(); } });
   obs.observe(document.body, { childList: true });
 }
+const ICON_PHONE = '<svg viewBox="0 0 24 24"><path d="M6.6 10.8a15.1 15.1 0 006.6 6.6l2.2-2.2a1 1 0 011-.25c1.1.37 2.3.57 3.6.57a1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1c0 1.25.2 2.45.57 3.6a1 1 0 01-.25 1L6.6 10.8z"/></svg>';
+const ICON_TEXT = '<svg viewBox="0 0 24 24"><path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/></svg>';
+const ICON_ROUTE = '<svg viewBox="0 0 24 24"><path d="M19 15.2V9a4 4 0 00-4-4H8.8l1.6-1.6L9 2 5 6l4 4 1.4-1.4L8.8 7H15a2 2 0 012 2v6.2a3 3 0 102 0zM18 20a1 1 0 110-2 1 1 0 010 2zM6 8.8a3 3 0 100 0z"/><circle cx="6" cy="18" r="3"/></svg>';
+const ICON_SCOPE = '<svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.9 3H19a7 7 0 00-6-6V3.1h-2V5a7 7 0 00-6 6H3.1v2H5a7 7 0 006 6v1.9h2V19a7 7 0 006-6h1.9v-2zM12 17a5 5 0 110-10 5 5 0 010 10z"/></svg>';
+const ICON_WRENCH = '<svg viewBox="0 0 24 24"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>';
 
-/** The Crew screen (iOS CrewCommandView): Track record, Time cards, Roster. */
+/** The Crew hub — a dashboard, not a menu (iOS CrewCommandView twin). */
 async function crewCommandSheet() {
-  const wrap = sheet('<h2>Crew</h2><div id="crewbody" class="note">Loading crew…</div>');
-  const box=wrap.querySelector("#crewbody");
-  const load=async()=>{
-    box.textContent="Loading crew…";
+  const wrap = sheet(`<div class="chead">${crewKicker("CREW COMMAND", "cyan", true)}<h2>Your crew, live</h2><span id="crewpill"></span></div><div id="crewbody" class="note">Loading crew…</div>`);
+  const pane = wrap.querySelector(".sheet"); pane.classList.add("crewsheet");
+  const box = pane.querySelector("#crewbody");
+  const load = async () => {
+    box.textContent = "Loading crew…";
+    const [from, to] = crewRangeDates("week");
     try {
-      const d=await api("/crew",{action:"track-record"},"POST",{silentUpgrade:true});
-      if(!Array.isArray(d.track_record)) throw new Error("Crew records could not be read. Try again.");
-      if(!wrap.isConnected) return;
-      const rec=d.track_record;
-      box.innerHTML='<p>Roster, time cards, who is on what — and where they are.</p><button class="btn wide em" id="crewmap">Live map</button><button class="btn wide" id="crewtrack">Track record</button><button class="btn wide" id="crewc">Time cards</button><button class="btn wide" id="crewr">Roster</button>';
-      box.querySelector("#crewmap").onclick=()=>crewLiveMapSheet();
-      box.querySelector("#crewtrack").onclick=()=>crewTrackRecordSheet(rec);
-      box.querySelector("#crewc").onclick=()=>crewHoursSheet();
-      box.querySelector("#crewr").onclick=()=>crewRosterSheet();
-    } catch(err) {
-      if(!wrap.isConnected) return;
-      if(err.status===402 && err.data?.code==="upgrade_required") { upgradeHit(err.data); return; }
-      box.innerHTML=`<p>${esc(err.message)}</p><button class="btn" id="crewrtry">Retry</button>`;
-      box.querySelector("#crewrtry").onclick=load;
+      const [rec, roster, live, week] = await Promise.all([
+        api("/crew", { action: "track-record" }, "POST", { silentUpgrade: true }),
+        api("/crew", { action: "list" }).catch(() => ({ employees: [] })),
+        api("/crew", { action: "locations" }).catch(() => null),
+        api("/crew", { action: "timecards", from, to }).catch(() => null),
+      ]);
+      if (!Array.isArray(rec.track_record)) throw new Error("Crew records could not be read. Try again.");
+      if (!wrap.isConnected) return;
+      const record = rec.track_record, crew = (roster.employees || []), liveCrew = (live && live.crew) || [];
+      const active = crew.filter((e) => e.active !== false), inactive = crew.filter((e) => e.active === false);
+      const onClock = liveCrew.filter((c) => c.clockedIn), sharing = onClock.filter((c) => !c.stale && c.lat != null).length;
+      const weekSec = ((week && week.cards) || []).reduce((s, c) => s + (c.total_seconds || 0), 0);
+      const jobsMonth = record.reduce((s, r) => s + (r.thisMonth || 0), 0), jobsTotal = record.reduce((s, r) => s + (r.total || 0), 0);
+      const leader = record.filter((r) => r.total > 0).sort((a, b) => b.total - a.total)[0];
+      const pill = pane.querySelector("#crewpill");
+      if (pill) pill.innerHTML = live ? crewPill(onClock.length ? `${onClock.length} ON THE CLOCK` : "SHOP QUIET", onClock.length ? "emerald" : "silver", onClock.length > 0) : "";
+      let headline, subline;
+      if (!live) { headline = "Where your crew is"; subline = "Positions come from each crew member's job link while clocked in."; }
+      else if (!onClock.length) { headline = "Nobody on the clock"; subline = "Shop quiet. Pins appear the moment someone clocks in."; }
+      else if (onClock.length === 1) {
+        const m = onClock[0], e = m.estimate;
+        headline = e && e.kind === "live" ? `${crewFirst(m.name)} · ${Math.max(1, Math.round(e.etaSeconds / 60))} min from the job` : m.status === "on_my_way" ? `${crewFirst(m.name)} is on the way` : m.status === "on_site" ? `${crewFirst(m.name)} is on site` : `${crewFirst(m.name)} is on the clock`;
+        subline = sharing ? "Tap for the map, drive times and routes." : "No live position yet — tap for the map.";
+      } else { headline = `${onClock.length} on the clock · ${sharing} sharing live`; subline = sharing ? "Tap for the map, drive times and routes." : "No live position yet — tap for the map."; }
+      const liveOf = (id) => liveCrew.find((c) => c.id === id);
+      const tel = (p) => { const d = String(p || "").replace(/[^\d+]/g, ""); return d.replace(/\D/g, "").length >= 10 ? d : null; };
+      const memberCard = (e, i, dim) => {
+        const l = liveOf(e.id), on = !!(l && l.clockedIn), share = on && !l.stale && l.lat != null, r = record.find((x) => x.employeeId === e.id);
+        return `<button type="button" class="cmember crise${on ? " on" : ""}${dim ? " dim" : ""}" style="--i:${Math.min(5 + i, 9)};--sig:${crewRgb(on ? "emerald" : e.colorTag)}" data-crewid="${esc(e.id)}">
+          ${crewSigil(e.name, e.colorTag, 46, on ? (l.permission === "denied" ? "orange" : share ? "emerald" : "amber") : null)}
+          <span class="ccbody">
+            <span class="ccname"><b>${esc(e.name)}</b>${e.roleTitle ? `<span class="cchip" style="--sig:${crewRgb(e.colorTag)}">${esc(e.roleTitle).toUpperCase()}</span>` : ""}</span>
+            <span class="note">${on ? `<span class="ccon"><i class="cld"></i>ON THE CLOCK</span> ` : ""}${esc(e.phone || "no phone")}${e.active === false ? ' · <b style="color:var(--orange)">INACTIVE</b>' : ""}${e.absence ? ' · <b style="color:var(--red)">OFF TODAY</b>' : ""}</span>
+            ${e.absence ? `<span class="note" style="color:var(--red)">${esc(absenceLine(e.absence))}</span>` : e.upcomingAbsence ? `<span class="note" style="color:var(--orange)">Off ${esc(absenceDay(e.upcomingAbsence.startOn))}</span>` : ""}
+          </span>
+          ${r && r.total ? `<span class="ccstats"><b>${r.total} JOB${r.total === 1 ? "" : "S"}</b><span>${r.thisMonth} THIS MONTH</span></span>` : ""}
+          ${tel(e.phone) ? `<a class="ccall" href="tel:${tel(e.phone)}" data-stop="1">${ICON_PHONE}</a>` : ""}
+          <span class="ccchev right">›</span>
+        </button>`;
+      };
+      box.classList.remove("note");
+      box.innerHTML = `
+        <div class="cstats crise" style="--i:1">
+          ${crewStat(onClock.length, "ON THE CLOCK", "emerald", { live: onClock.length > 0 })}
+          ${crewStat(0, "HOURS THIS WEEK", "cyan", { text: crewHours(weekSec) })}
+          ${crewStat(jobsMonth, "JOBS THIS MONTH", "purple")}
+        </div>
+        <button type="button" class="ctile wide crise${onClock.length ? " lit" : ""}" style="--i:2;--sig:${crewRgb(onClock.length ? "cyan" : "silver")}" id="crewmap">
+          ${crewRadar(onClock.map((c) => ({ name: c.name, colorTag: c.colorTag, live: !c.stale && c.lat != null })), onClock.length ? "cyan" : "silver", 96)}
+          <span class="ctbody">${crewKicker("LIVE MAP", "cyan", onClock.length > 0)}<b>${esc(headline)}</b><span>${esc(subline)}</span></span><span class="ccchev right">›</span>
+        </button>
+        <div class="ctiles crise" style="--i:3">
+          <button type="button" class="ctile${jobsTotal ? " lit" : ""}" style="--sig:${crewRgb(jobsTotal ? "purple" : "silver")}" id="crewtrack">
+            ${crewKicker("TRACK RECORD", "purple")}<span class="ctnum"><b data-count="${jobsTotal}">0</b><em>JOBS</em></span>
+            <span>${leader ? `${esc(crewFirst(leader.name))} leads · ${leader.total} job${leader.total === 1 ? "" : "s"}` : "No jobs recorded yet"}</span><span class="ccchev">›</span>
+          </button>
+          <button type="button" class="ctile${weekSec || onClock.length ? " lit" : ""}" style="--sig:${crewRgb(weekSec || onClock.length ? "emerald" : "silver")}" id="crewc">
+            ${crewKicker("TIME CARDS", "emerald", onClock.length > 0)}<span class="ctnum"><b>${crewHours(weekSec)}</b></span>
+            <span>${weekSec ? (onClock.length ? `this week · ${onClock.length} on the clock now` : "this week · payroll-ready") : (onClock.length ? "First hours of the week landing now" : "No hours this week yet")}</span><span class="ccchev">›</span>
+          </button>
+        </div>
+        <div class="ckrow crise" style="--i:4;margin:16px 0 8px"><span>${crewKicker("ROSTER", "cyan")}<b class="crtitle">Crew Members</b></span><button type="button" class="cadd" id="crewadd">＋ ADD</button></div>
+        ${active.length ? active.map((e, i) => memberCard(e, i, false)).join("") : `<button type="button" class="cghost" id="crewadd2">No crew yet — add your field staff, then assign them to jobs from any appointment.</button>`}
+        ${active.length ? `<button type="button" class="cghost crise" style="--i:${Math.min(6 + active.length, 9)}" id="crewadd3">${active.length === 1 ? "Add your next crew member" : "Add a crew member"} <b>+</b></button>` : ""}
+        ${inactive.length ? `<div class="ckrow" style="margin:14px 0 8px">${crewKicker("INACTIVE", "silver")}</div>${inactive.map((e, i) => memberCard(e, i, true)).join("")}` : ""}
+        <button class="btn ghost wide" style="margin-top:14px" id="crewr">Roster &amp; shifts</button>`;
+      crewCountUp(box);
+      box.querySelector("#crewmap").onclick = () => crewLiveMapSheet();
+      box.querySelector("#crewtrack").onclick = () => crewTrackRecordSheet(record);
+      box.querySelector("#crewc").onclick = () => crewHoursSheet();
+      box.querySelector("#crewr").onclick = () => crewRosterSheet();
+      ["#crewadd", "#crewadd2", "#crewadd3"].forEach((id) => { const b = box.querySelector(id); if (b) b.onclick = () => { closeSheet(); crewMemberSheet(null); }; });
+      box.querySelectorAll("[data-stop]").forEach((a) => a.onclick = (ev) => ev.stopPropagation());
+      box.querySelectorAll("[data-crewid]").forEach((b) => b.onclick = () => { const emp = crew.find((x) => x.id === b.dataset.crewid); if (emp) { closeSheet(); crewMemberSheet(emp); } });
+    } catch (err) {
+      if (!wrap.isConnected) return;
+      if (err.status === 402 && err.data?.code === "upgrade_required") { upgradeHit(err.data); return; }
+      box.innerHTML = `<p>${esc(err.message)}</p><button class="btn" id="crewrtry">Retry</button>`;
+      box.querySelector("#crewrtry").onclick = load;
     }
   }; await load();
+}
+
+function crewTrackRecordSheet(rec, period = "all") {
+  const count = (r) => period === "7d" ? (r.last7Days || 0) : period === "month" ? (r.thisMonth || 0) : (r.total || 0);
+  const ranked = [...rec].sort((a, b) => count(b) - count(a) || String(a.name).localeCompare(String(b.name)));
+  const teamTotal = rec.reduce((s, r) => s + count(r), 0), maxCount = Math.max(...rec.map(count), 1);
+  const leader = ranked[0] && count(ranked[0]) > 0 ? ranked[0] : null;
+  const words = period === "7d" ? "LAST 7 DAYS" : period === "month" ? "THIS MONTH" : "ALL TIME";
+  const share = leader ? Math.max(0, Math.min(1, count(leader) / Math.max(teamTotal, 1))) : 0;
+  const wrap = sheet(`<div class="chead">${crewKicker("TRACK RECORD", "purple")}<h2>Jobs per crew member</h2></div>
+    <div class="chips crise" style="--i:0">${[["7d", "7 DAYS"], ["month", "THIS MONTH"], ["all", "ALL TIME"]].map(([k, l]) => `<button type="button" class="chip cchipp${k === period ? " on" : ""}" data-period="${k}">${l}</button>`).join("")}</div>
+    <div class="chero crise${teamTotal ? " lit" : ""}" style="--i:1;--sig:${crewRgb(teamTotal ? "purple" : "silver")}">
+      <div>${crewKicker(`TEAM · ${words}`, "purple", teamTotal > 0)}<span class="ctnum big"><b data-count="${teamTotal}">0</b><em>JOBS</em></span>
+        <span class="note">${leader ? `${esc(crewFirst(leader.name))} leads with ${count(leader)}` : "No jobs in this period yet"}</span></div>
+      <div class="cring" style="--p:${(share * 100).toFixed(1)}"><span>${ICON_WRENCH}</span></div>
+    </div>
+    ${rec.length ? ranked.map((r, i) => { const n = count(r), quiet = !n, solo = rec.length === 1; return `
+      <div class="crank crise${quiet ? " quiet" : ""}" style="--i:${Math.min(2 + i, 9)};--sig:${crewRgb(quiet ? "silver" : r.colorTag)}">
+        <div class="crtop">
+          <span class="cplate ${quiet ? "q" : i === 0 ? "gold" : i === 1 ? "silver" : i === 2 ? "bronze" : ""}">${quiet ? "—" : "#" + (i + 1)}</span>
+          ${crewSigil(r.name, quiet ? "grey" : r.colorTag, 38)}
+          <span class="ccbody"><b>${esc(r.name)}</b><span class="ccm">${r.last7Days} LAST 7 DAYS · ${r.thisMonth} THIS MONTH · ${r.total} ALL TIME</span></span>
+          <span class="ctnum right"><b data-count="${n}">0</b><em>JOBS</em></span>
+        </div>
+        ${solo ? "" : `<div class="cbar"><i style="width:${n ? Math.max(3, Math.round(100 * n / maxCount)) : 0}%"></i></div>`}
+      </div>`; }).join("") + (rec.length === 1 ? '<p class="note" style="text-align:center;margin-top:4px">Rankings appear once you add crew.</p>' : "")
+      : `<div class="cghost">No crew on the roster yet.</div>`}
+    <button class="btn ghost wide" style="margin-top:12px" id="trback">&#8592; Back to Crew</button>`, (sh) => {
+    sh.classList.add("crewsheet");
+    crewCountUp(sh);
+    sh.querySelectorAll("[data-period]").forEach((b) => b.onclick = () => { closeSheet(); crewTrackRecordSheet(rec, b.dataset.period); });
+    sh.querySelector("#trback").onclick = () => { closeSheet(); crewCommandSheet(); };
+  });
 }
 
 function crewEmailDispatchSheet(event, employeeId) {
@@ -4460,16 +4675,6 @@ function crewEmailDispatchSheet(event, employeeId) {
   };
 }
 
-function crewTrackRecordSheet(rec) {
-  sheet(`<h2>Track record</h2>
-    <p class="sh-sub">Jobs per crew member — total, 7 days, this month</p>
-    ${rec.length ? `<div class="list">${rec.map((r) => `<div class="item"><div class="main"><div class="ttl">${esc(r.name)}</div>
-      <div class="sub">${r.total} job${r.total === 1 ? "" : "s"} · ${r.last7Days} in 7 days · ${r.thisMonth} this month</div></div></div>`).join("")}</div>`
-      : `<div class="empty">No jobs dispatched yet. Put crew on an appointment and they show up here.</div>`}
-    <button class="btn ghost wide" style="margin-top:12px" id="trback">&#8592; Back to Crew</button>`, (sh) => {
-    sh.querySelector("#trback").onclick = () => { closeSheet(); crewCommandSheet(); };
-  });
-}
 const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const evDayKey = (iso) => { const d = new Date(iso && iso.length === 10 ? iso + "T12:00:00" : iso); return isNaN(d) ? "" : dayKey(d); };
@@ -6402,7 +6607,32 @@ function crewCsv(d) {
   return rows.map(r=>r.map(cell).join(",")).join("\r\n");
 }
 
-const CREW_RANGES = [["today", "Today"], ["week", "This week"], ["last-week", "Last week"], ["month", "Month"]];
+const CREW_RANGES = [["today", "TODAY"], ["week", "THIS WEEK"], ["last-week", "LAST WEEK"], ["month", "MONTH"]];
+
+/** The always-drawn strip under the total: Mon–Sun for week views, one bar for Today, one per week for Month. */
+function crewStrip(d, range, from, to) {
+  const perDay = {};
+  for (const c of d.cards || []) for (const day of c.days || []) perDay[day.date] = (perDay[day.date] || 0) + (day.seconds || 0);
+  const today = businessDay();
+  const addDays = (iso, n) => { const x = new Date(iso + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+  let days = [];
+  if (range === "today") days = [{ id: from, label: "TODAY", seconds: perDay[from] || 0, today: true }];
+  else if (range === "month") {
+    let cursor = from, week = 1;
+    while (cursor <= to && week <= 6) {
+      const stop = addDays(cursor, 6) < to ? addDays(cursor, 6) : to;
+      let secs = 0, hasToday = false;
+      for (let x = cursor; x <= stop; x = addDays(x, 1)) { secs += perDay[x] || 0; if (x === today) hasToday = true; }
+      days.push({ id: "w" + week, label: "WK " + week, seconds: secs, today: hasToday });
+      cursor = addDays(cursor, 7); week += 1;
+    }
+  } else {
+    const names = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+    days = names.map((n, i) => { const k = addDays(from, i); return { id: k, label: n, seconds: perDay[k] || 0, today: k === today }; });
+  }
+  const peak = Math.max(...days.map((x) => x.seconds), 1);
+  return `<div class="cstrip">${days.map((x) => `<div class="cday${x.today ? " today" : ""}"><div class="ccol">${x.seconds ? `<i style="height:${Math.max(4, Math.round(54 * x.seconds / peak))}px"></i>` : (x.today ? '<i class="base"></i>' : "")}</div><span>${x.label}</span></div>`).join("")}</div>`;
+}
 
 async function crewHoursSheet(range = "week") {
   const [from, to] = crewRangeDates(range);
@@ -6410,33 +6640,45 @@ async function crewHoursSheet(range = "week") {
   try { d = await api("/crew", { action: "timecards", from, to }); }
   catch (err) { toast(err.message, "err"); return; }
   if (d.timezone) S.businessTimezone = d.timezone;
-  const cards = (d.cards || []).filter((c) => c.total_seconds > 0 || c.on_clock || c.active || c.needs_review);
+  const all = d.cards || [];
+  const cards = all.filter((c) => c.total_seconds > 0 || c.on_clock || c.needs_review);
+  const total = all.reduce((s, c) => s + (c.total_seconds || 0), 0), onClock = all.filter((c) => c.on_clock).length;
   const otBits = [];
   if (d.ot_daily_hours != null) otBits.push(`over ${d.ot_daily_hours}h/day`);
   if (d.ot_weekly_hours != null) otBits.push(`over ${d.ot_weekly_hours}h/week`);
   const otLabel = otBits.length ? `Overtime counts hours ${otBits.join(" or ")}.` : "Overtime tracking is off.";
-  sheet(`<h2>Crew hours</h2>
-    <p class="sh-sub">${esc(from)} → ${esc(to)}</p>
-    <div class="rowbtns" style="margin-top:8px">${CREW_RANGES.map(([k, l]) =>
-      `<button class="btn ${k === range ? "em" : ""}" data-crange="${k}">${l}</button>`).join("")}</div>
-    ${cards.length ? cards.map((c) => `
-      <div class="panel" style="margin-top:12px">
-        <h3 style="display:flex;gap:8px;align-items:center">${esc(c.name)}
-          ${c.on_clock ? '<span class="pill live">ON THE CLOCK</span>' : ""}
-          <span style="margin-left:auto;font-weight:800">${crewH(c.total_seconds)}</span></h3>
-        <p class="note" style="margin-top:2px">Regular ${crewH(c.regular_seconds)}${c.ot_seconds > 0 ? ` · <b style="color:var(--gold)">OT ${crewH(c.ot_seconds)}</b>` : " · no OT"}</p>
-        ${(c.days || []).map((day) => `
-          <div class="kv" style="margin-top:6px"><span>${esc(day.date)}</span><span>${crewH(day.seconds)}</span></div>
-          ${(day.punches || []).map((p) => `<p class="note" style="margin:2px 0 0 4px">${crewT(p.in)} → ${p.needs_review ? "<b>needs correction — hours not counted</b>" : p.out ? crewT(p.out) : "<b>still on the clock — provisional</b>"}${p.corrected ? " · corrected" : ""}${p.review_note || p.note ? " · " + esc(p.review_note || p.note) : ""}</p>`).join("")}
-        `).join("") || '<p class="note" style="margin-top:6px">No punches in this range.</p>'}
+  const rangeWord = (CREW_RANGES.find(([k]) => k === range) || [])[1] || "";
+  sheet(`<div class="chead">${crewKicker("TIME CARDS", "emerald")}<h2>Clock-in hours</h2></div>
+    <div class="chips crise" style="--i:0">${CREW_RANGES.map(([k, l]) => `<button type="button" class="chip cchipe${k === range ? " on" : ""}" data-crange="${k}">${l}</button>`).join("")}</div>
+    <div class="chero col crise${total || onClock ? " lit" : ""}" style="--i:1;--sig:${crewRgb(total || onClock ? "emerald" : "silver")}">
+      <div class="chtop">
+        <div>${crewKicker(`TOTAL HOURS · ${rangeWord}`, total ? "emerald" : "silver", onClock > 0)}<span class="ctnum big${total ? "" : " quiet"}"><b>${crewHours(total)}</b></span></div>
+        ${crewPill(onClock ? `${onClock} ON THE CLOCK` : "NOBODY ON THE CLOCK", onClock ? "gold" : "silver", onClock > 0)}
+      </div>
+      ${crewStrip(d, range, from, to)}
+    </div>
+    ${cards.length ? cards.map((c, i) => `
+      <div class="ctime crise" style="--i:${Math.min(2 + i, 9)};--sig:${crewRgb(c.on_clock ? "gold" : c.color_tag)}">
+        <div class="crtop">
+          ${crewSigil(c.name, c.color_tag, 40, c.on_clock ? "amber" : null)}
+          <span class="ccbody"><b>${esc(c.name)}</b>
+            <span class="ccm ${c.on_clock ? "amber" : ""}">${c.on_clock ? `<i class="cld"></i>ON THE CLOCK · SINCE ${esc(crewT(c.open_since)).toUpperCase()}` : "OFF THE CLOCK"}</span></span>
+          <span class="ctnum right"><b>${crewHours(c.total_seconds)}</b></span>
+        </div>
+        ${c.ot_seconds > 0 ? `<div class="ccm" style="margin-top:8px">REG ${crewHours(c.regular_seconds).toUpperCase()} <span class="cchip" style="--sig:${CREW_RGB.gold}">OT ${crewHours(c.ot_seconds).toUpperCase()}</span></div>` : ""}
+        ${(c.days || []).slice().sort((a, b) => b.date.localeCompare(a.date)).map((day) => `
+          <div class="cdayrow"><span class="ccm">${esc(day.date)}</span>${day.punches.some((p) => p.needs_review) ? '<span class="cchip" style="--sig:248,113,113">NEVER CLOCKED OUT</span>' : day.punches.some((p) => p.corrected) ? '<span class="cchip" style="--sig:58,200,245">CORRECTED</span>' : ""}<span class="cdayh">${crewHours(day.seconds)}</span></div>
+          ${(day.punches || []).map((p) => `<p class="note cpunch">${crewT(p.in)} → ${p.needs_review ? "<b>needs correction — hours not counted</b>" : p.out ? crewT(p.out) : "<b>still on the clock — provisional</b>"}${p.review_note || p.note ? " · " + esc(p.review_note || p.note) : ""}</p>`).join("")}
+        `).join("")}
       </div>`).join("")
-      : '<div class="panel" style="margin-top:12px;text-align:center"><p class="sub" style="margin:0">No crew members yet — add them under Roster &amp; shifts.</p></div>'}
-    <p class="note" style="margin-top:10px">${esc(otLabel)}</p>
+      : `<div class="cghost crise" style="--i:2">${all.length ? "No hours yet — they land here the moment crew tap Clock in on their job link." : "No crew members yet — add them under Roster &amp; shifts."}</div>`}
+    <p class="note" style="margin-top:12px">${esc(otLabel)}</p>
     <div class="rowbtns" style="margin-top:10px">
-      <button class="btn" id="crewroster">Roster &amp; shifts</button>
-      <button class="btn" id="crewot">Overtime rules</button>
-      ${cards.length ? '<button class="btn" id="crewcsv">Export CSV</button>' : ""}
+      <button class="btn ghost" id="crewroster">Roster &amp; shifts</button>
+      <button class="btn ghost" id="crewot">Overtime rules</button>
+      ${cards.length ? '<button class="btn ghost" id="crewcsv">Export CSV</button>' : ""}
     </div>`, (sh) => {
+    sh.classList.add("crewsheet");
     on("[data-crange]", "click", (e) => { closeSheet(); crewHoursSheet(e.currentTarget.dataset.crange); }, sh);
     sh.querySelector("#crewroster").onclick = () => { closeSheet(); crewRosterSheet(); };
     sh.querySelector("#crewot").onclick = () => { closeSheet(); crewOtSheet(d, range); };
