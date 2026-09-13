@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 159;
+const APP_BUILD = 160;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -490,6 +490,7 @@ function pageHead(title) {
 document.addEventListener("click", (e) => { if (e.target.closest("[data-qledger]")) openChat(); });
 
 function appView() {
+  WAKE.ready = true; setTimeout(wakeSync, 800);
   const logo = S.profile?.business?.logo_url;
   root.innerHTML = `
   <header>
@@ -9206,6 +9207,16 @@ async function businessSheet() {
         <div style="height:100%;width:${Math.min(pct, 100)}%;background:${pct >= 80 ? "var(--orange)" : "linear-gradient(90deg,var(--cyan),var(--purple))"}"></div></div>
       <button class="btn ghost wide" style="margin-top:11px" id="bpu">⚡ Power-Ups</button>
     </div>
+
+    <div class="eyebrow" style="margin-top:20px">“HEY LEDGER”</div>
+    <div class="panel" style="margin-top:8px">
+      <div class="kv" style="align-items:center;border-bottom:0;padding-top:2px"><span style="color:var(--text)"><b>Say “Hey Ledger” to open Ledger Live</b></span>
+        <button class="pswx${WAKE.on ? " on" : ""}" id="wakeTog" role="switch" aria-checked="${WAKE.on}" aria-label="Hey Ledger"${wakeSupported() ? "" : " disabled"}><i></i></button></div>
+      <p class="note" style="margin-top:4px">${wakeSupported()
+        ? "Works while this tab is open and on screen — your browser does the listening, and the mic stays on while the switch is on. On a phone, the Ledger AI iPhone app has the same switch."
+        : "This browser can't listen for a wake word. Use Chrome or Edge on a computer, or the Ledger AI iPhone app."}</p>
+      <p class="note" style="margin-top:6px;color:var(--cyan)">On iPhone, “Hey Siri, talk to Ledger” works anywhere — even with the app closed.</p>
+    </div>
     ${u?.sms ? `<div class="eyebrow" style="margin-top:20px">TEXTING CREDIT</div>
     <div class="panel" style="margin-top:8px">
       ${u.sms.metered ? `${smsMeterHtml(u.sms)}
@@ -9404,6 +9415,7 @@ async function businessSheet() {
       } catch { slot.textContent = "Plan unavailable right now."; }
     })();
     sh.querySelector("#bpu").onclick = powerUpSheet;
+    const wakeTog = sh.querySelector("#wakeTog"); if (wakeTog) wakeTog.onclick = () => wakeToggle(wakeTog);
     const bsms = sh.querySelector("#bsms"); if (bsms) bsms.onclick = textingSheet;
     sh.querySelector("#bnew").onclick = () => { newConversation(); closeSheet(); openChat(); };
     sh.querySelector("#bbill").onclick = async () => {
@@ -9694,6 +9706,7 @@ const emailOf = () => ($("email")?.value || "").trim().toLowerCase();
 const pwField = (id, ph, ct) => `<input id="${id}" type="password" placeholder="${ph}" autocomplete="${ct}" minlength="8">`;
 
 function loginView(mode = "signin", email = "") {
+  WAKE.ready = false; wakeSync();
   if (mode === "signup") {
     const go = authCard("Create your account", "14-day free trial · no card needed · cancel any time.",
       `<input id="email" type="email" placeholder="you@business.com" autocomplete="email" value="${esc(email)}">${pwField("pw", "Choose a password (8+ characters)", "new-password")}`,
@@ -10364,9 +10377,60 @@ function pushSettingsCard(slot) {
    the browser's own WebRTC. Tool calls arrive on the "oai-events" data channel
    and run through /ledger-ai tool-exec with the user's own sign-in, exactly as
    iOS does. Usage is reported back per response so the AI allowance holds. */
+/* ---------------- "Hey Ledger" (web, 2026-09-13, v160) ----------------
+   The browser's own speech recognition, on only while the switch is on, the
+   app is signed in, this tab is visible and Ledger Live isn't already open.
+   Hearing "hey ledger" opens Ledger Live. Chrome/Edge stop after silence and
+   are restarted; Safari on iPhone drops the mic when the screen locks, which is
+   why the switch points phone users at the iPhone app. */
+const WAKE = { on: localStorage.getItem("ledger.wakeWord") === "1", rec: null, ready: false, denied: false, last: 0 };
+const WAKE_PHRASES = ["hey ledger", "hey ledgers", "hey ledge", "hey leger", "hey lodger", "hey lecher", "hey letcher"];
+function wakeSupported() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+function wakeSync() {
+  const want = WAKE.on && WAKE.ready && !WAKE.denied && wakeSupported() && document.visibilityState === "visible" && !LIVE;
+  if (want && !WAKE.rec) wakeStart();
+  if (!want && WAKE.rec) wakeStop();
+}
+function wakeStart() {
+  const R = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec;
+  try { rec = new R(); } catch { return; }
+  rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
+  rec.onresult = (e) => {
+    let heard = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) heard += " " + (e.results[i][0]?.transcript || "");
+    const text = heard.toLowerCase().replace(/[^a-z ]/g, " ");
+    if (WAKE_PHRASES.some((p) => text.includes(p)) && Date.now() - WAKE.last > 3000) {
+      WAKE.last = Date.now();
+      wakeStop();
+      liveSheet();
+    }
+  };
+  rec.onerror = (e) => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      WAKE.denied = true; wakeStop();
+      toast("Ledger can't hear you — allow the microphone for this site in your browser, then switch “Hey Ledger” on again.", "err");
+    }
+  };
+  // Chrome ends a session after silence or ~a minute; come straight back.
+  rec.onend = () => { if (WAKE.rec === rec) { WAKE.rec = null; setTimeout(wakeSync, 500); } };
+  WAKE.rec = rec;
+  try { rec.start(); } catch { WAKE.rec = null; }
+}
+function wakeStop() { const r = WAKE.rec; WAKE.rec = null; try { r?.stop(); } catch {} }
+function wakeToggle(btn) {
+  WAKE.on = !WAKE.on; WAKE.denied = false;
+  localStorage.setItem("ledger.wakeWord", WAKE.on ? "1" : "0");
+  if (btn) { btn.classList.toggle("on", WAKE.on); btn.setAttribute("aria-checked", String(WAKE.on)); }
+  wakeSync();
+  toast(WAKE.on ? "Listening for “Hey Ledger” while this tab is open" : "“Hey Ledger” is off");
+}
+document.addEventListener("visibilitychange", () => wakeSync());
+
 let LIVE = null;
 function liveSheet() {
   if (LIVE) { LIVE.draw(); return; }
+  wakeStop();
   const L = { state: "connecting", err: "", lines: [], cost: 0, pc: null, dc: null, mic: null, audio: null, drafts: [] };
   const stop = () => {
     try { L.dc?.close(); } catch {}
@@ -10374,6 +10438,7 @@ function liveSheet() {
     try { L.pc?.close(); } catch {}
     if (L.audio) { L.audio.pause(); L.audio.srcObject = null; }
     LIVE = null;
+    setTimeout(wakeSync, 300);
   };
   const labels = { connecting: "Connecting…", listening: "Listening", thinking: "Thinking…", speaking: "Ledger is speaking", failed: "Couldn't connect", ended: "Ended" };
   L.draw = () => {
