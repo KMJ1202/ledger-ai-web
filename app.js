@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 163;
+const APP_BUILD = 164;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -10899,7 +10899,10 @@ let LIVE = null;
 function liveSheet() {
   if (LIVE) { LIVE.draw(); return; }
   wakeStop();
-  const L = { state: "connecting", err: "", lines: [], cost: 0, pc: null, dc: null, mic: null, audio: null, drafts: [] };
+  // drafts = email drafts (rendered on end, as before); cards = every other confirm
+  // card voice can now produce (invoice, estimate, booking, reminder, text, print) —
+  // stored as renderers and drawn into the chat the moment the session ends.
+  const L = { state: "connecting", err: "", lines: [], cost: 0, pc: null, dc: null, mic: null, audio: null, drafts: [], cards: [] };
   const stop = () => {
     try { L.dc?.close(); } catch {}
     try { L.mic?.getTracks().forEach((t) => t.stop()); } catch {}
@@ -10913,6 +10916,7 @@ function liveSheet() {
     const live = ["listening", "thinking", "speaking"].includes(L.state);
     sheet(`<h2>&#127908; Ledger Live</h2>
       <p class="sh-sub">${esc(labels[L.state] || L.state)}${L.cost ? ` · $${L.cost.toFixed(2)} this session` : ""}</p>
+      ${(L.cards.length + L.drafts.length) ? `<div class="note" style="color:var(--cyan)">${L.cards.length + L.drafts.length} draft${(L.cards.length + L.drafts.length) === 1 ? "" : "s"} waiting for your OK — end the session to review.</div>` : ""}
       <div style="display:flex;justify-content:center;margin:14px 0">
         <div style="width:96px;height:96px;border-radius:50%;background:${L.state === "speaking" ? "var(--cyan)" : L.state === "failed" ? "#7f1d1d" : "var(--card2)"};border:2px solid var(--line);box-shadow:0 0 ${live ? "34px" : "0"} rgba(34,211,238,.35);transition:all .3s"></div>
       </div>
@@ -10922,7 +10926,7 @@ function liveSheet() {
         ${live ? `<button class="btn ghost" id="livemute">${L.muted ? "Unmute" : "Mute"}</button>` : ""}
         <button class="btn primary" id="liveend">${L.state === "failed" || L.state === "ended" ? "Close" : "End"}</button>
       </div>`, (sh) => {
-      sh.querySelector("#liveend").onclick = () => { stop(); closeSheet(); L.drafts.forEach(emailDraftCard); };
+      sh.querySelector("#liveend").onclick = () => { stop(); closeSheet(); L.drafts.forEach(emailDraftCard); L.cards.forEach((render) => render()); L.cards = []; L.drafts = []; };
       const m = sh.querySelector("#livemute");
       if (m) m.onclick = () => { L.muted = !L.muted; L.mic?.getAudioTracks().forEach((t) => { t.enabled = !L.muted; }); L.draw(); };
     });
@@ -10949,6 +10953,14 @@ function liveSheet() {
           try {
             const r = await api("/ledger-ai", { action: "tool-exec", name: c.name, input: JSON.parse(c.arguments || "{}") });
             output = r.output || "{}"; if (r.email_drafts) L.drafts.push(...r.email_drafts);
+            // Same card renderers the text chat uses — voice now drafts everything text can.
+            (r.invoice_drafts || []).forEach((x) => L.cards.push(() => draftCard(x, "INVOICE DRAFT", "/quickbooks-invoice/confirm", "/quickbooks-invoice/cancel")));
+            (r.estimate_drafts || []).forEach((x) => L.cards.push(() => draftCard(x, "ESTIMATE DRAFT", "/quickbooks-invoice/estimate-confirm", "/quickbooks-invoice/estimate-cancel")));
+            (r.booking_drafts || []).forEach((x) => L.cards.push(() => bookingCard(x)));
+            (r.reminder_drafts || []).forEach((x) => L.cards.push(() => reminderCard(x)));
+            (r.sms_drafts || []).forEach((x) => L.cards.push(() => smsDraftCard(x)));
+            (r.print_jobs || []).forEach((x) => L.cards.push(() => printJobCard(x)));
+            if (r.email_drafts || r.invoice_drafts || r.estimate_drafts || r.booking_drafts || r.reminder_drafts || r.sms_drafts || r.print_jobs) L.draw();
           } catch (e) { output = JSON.stringify({ error: e.message || "tool failed" }); }
           send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: c.call_id, output } });
         }
@@ -10962,7 +10974,7 @@ function liveSheet() {
   (async () => {
     try {
       if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error("This browser can't do live voice.");
-      const info = await api("/realtime/session", {});
+      const info = await api("/realtime/session", { capabilities: { drafts: "all" } });
       L.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
       L.pc = pc;
