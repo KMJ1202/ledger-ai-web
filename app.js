@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 161;
+const APP_BUILD = 162;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -7573,21 +7573,23 @@ function gpRender() {
     : !s.enabled ? ["Off — post by hand any time", "var(--dim)"]
     : s.mode === "auto" ? [`Autopilot · ${cadence} · ${gpHour(s.post_hour)}`, "var(--emerald)"]
     : [`Asks you first · ${cadence} · ${gpHour(s.post_hour)}`, "var(--cyan)"];
-  const photoCard = (p) => `<div class="gpph${p.status === "flagged" ? " flag" : ""}" data-gpphoto="${esc(p.id)}" title="${esc(p.caption || "")}">
-      <img src="${esc(p.url)}" alt="${esc(p.caption || "Photo")}" loading="lazy">
-      ${p.status === "flagged" ? `<span class="tag warn">Needs your OK</span>` : p.last_used_at ? `<span class="tag">Used ${esc(gpRel(p.last_used_at))}</span>` : `<span class="tag fresh">Fresh</span>`}
-    </div>`;
+  // The bin is a single strip that scrolls sideways — it never grows the desk,
+  // however many photos land in it. Needs-OK first, then fresh, then used.
+  const binOrder = gpBinOrder(photos);
+  const stripCount = 12;
   const draftCard = (d) => {
     const open = GP.expanded.has(d.id);
+    const n = gpLen(d.summary);
     return `<div class="gpdraft" data-gpdraft="${esc(d.id)}">
       <div class="t"><b>${esc(GP_TOPIC_LABEL[d.topic_type] || "Update")}${d.source === "ai_scheduled" ? " · scheduled" : d.source === "ai_chat" ? " · from chat" : ""}</b>
         <small>${esc(gpRel(d.created_at))}${d.cta_type ? ` · ${esc(GP_CTA_LABEL[d.cta_type] || d.cta_type)} button` : " · no button"}</small></div>
       <div class="body">${d.photo ? `<img class="ph" src="${esc(d.photo.url)}" alt="">` : ""}
-        <textarea class="gptext" data-gpsum="${esc(d.id)}" rows="${open ? 8 : 4}" maxlength="1500">${esc(d.summary)}</textarea></div>
+        <textarea class="gptext" data-gpsum="${esc(d.id)}" rows="${open ? 8 : 4}">${esc(d.summary)}</textarea></div>
+      <div class="gpcount${n > GP_MAX ? " over" : n >= GP_WARN ? " warn" : ""}" data-gpcount="${esc(d.id)}">${gpCountText(n)}</div>
       ${d.error ? `<p class="note" style="color:var(--orange)">${esc(d.error)}</p>` : ""}
       <div class="rowbtns">
-        <button class="btn em" data-gppost="${esc(d.id)}">Post to Google</button>
-        <button class="btn" data-gpsave="${esc(d.id)}">Save edit</button>
+        <button class="btn em" data-gppost="${esc(d.id)}" ${n > GP_MAX ? "disabled" : ""}>Post to Google</button>
+        <button class="btn" data-gpsave="${esc(d.id)}" ${n > GP_MAX ? "disabled" : ""}>Save edit</button>
         <button class="btn ghost" data-gpcancel="${esc(d.id)}">Discard</button>
       </div>
     </div>`;
@@ -7613,9 +7615,10 @@ function gpRender() {
     ${s.last_skip_reason && s.enabled ? `<p class="note" style="color:var(--orange)">&#9888; ${esc(s.last_skip_reason)}</p>` : ""}
 
     <div class="gpsec"><div class="t"><b>Photo bin</b>
-        <label class="pillbtn sm" style="cursor:pointer"><b>+ Add photos</b><input type="file" id="gpfiles" accept="image/*" multiple hidden></label></div>
+        <span class="gpbinacts">${photos.length ? `<button class="pillbtn sm" id="gpseeall">See all ${photos.length}</button>` : ""}
+        <label class="pillbtn sm" style="cursor:pointer"><b>+ Add photos</b><input type="file" id="gpfiles" accept="image/*" multiple hidden></label></span></div>
       <p class="note">On your iPhone, anything you put in the <b>Ledger AI</b> album lands here on its own. Ledger checks each photo for faces, licence plates and paperwork — those wait for your OK.</p>
-      ${photos.length ? `<div class="gpgrid">${photos.map(photoCard).join("")}</div>` : `<p class="note" style="margin-top:8px">No photos yet — add a few shots of your work, your shop, your crew.</p>`}
+      ${photos.length ? `<div class="gpstrip" aria-label="Photo bin">${binOrder.slice(0, stripCount).map(gpPhotoCard).join("")}${binOrder.length > stripCount ? `<button class="gpph more" id="gpmore" aria-label="See all photos"><b>+${binOrder.length - stripCount}</b><small>more</small></button>` : ""}</div>` : `<p class="note" style="margin-top:8px">No photos yet — add a few shots of your work, your shop, your crew.</p>`}
       <div id="gpprog" class="note" style="display:none"></div>
     </div>
 
@@ -7634,12 +7637,50 @@ function gpRender() {
   $("gpnew").onclick = () => gpDraftSheet();
   $("gpsettings").onclick = () => gpSettingsSheet();
   if ($("gphist")) $("gphist").onclick = () => { GP.showHistory = !GP.showHistory; gpRender(); };
+  if ($("gpseeall")) $("gpseeall").onclick = () => gpBinSheet();
+  if ($("gpmore")) $("gpmore").onclick = () => gpBinSheet();
   on("[data-gpphoto]", "click", (e) => gpPhotoSheet(e.currentTarget.dataset.gpphoto), slot);
   on("[data-gppost]", "click", (e) => gpPublish(e.currentTarget.dataset.gppost, e.currentTarget), slot);
   on("[data-gpsave]", "click", (e) => gpSaveEdit(e.currentTarget.dataset.gpsave, e.currentTarget), slot);
   on("[data-gpcancel]", "click", (e) => gpCancel(e.currentTarget.dataset.gpcancel), slot);
   on("[data-gpdel]", "click", (e) => gpDelete(e.currentTarget.dataset.gpdel), slot);
   on("[data-gpsum]", "focus", (e) => { GP.expanded.add(e.currentTarget.dataset.gpsum); e.currentTarget.rows = 8; }, slot);
+  on("[data-gpsum]", "input", (e) => gpCountUpdate(e.currentTarget), slot);
+}
+
+// Google's cap on post text, counted the way Google counts it (an emoji is two).
+const GP_MAX = 1500;
+const GP_WARN = 1400;
+const gpLen = (s) => (s || "").length;
+const gpCountText = (n) => n > GP_MAX ? `${n.toLocaleString()} / ${GP_MAX.toLocaleString()} — ${(n - GP_MAX).toLocaleString()} over Google's limit` : `${n.toLocaleString()} / ${GP_MAX.toLocaleString()}`;
+function gpCountUpdate(ta) {
+  const id = ta.dataset.gpsum; const n = gpLen(ta.value);
+  const c = document.querySelector(`[data-gpcount="${CSS.escape(id)}"]`);
+  if (c) { c.textContent = gpCountText(n); c.classList.toggle("over", n > GP_MAX); c.classList.toggle("warn", n <= GP_MAX && n >= GP_WARN); }
+  for (const sel of [`[data-gppost="${CSS.escape(id)}"]`, `[data-gpsave="${CSS.escape(id)}"]`]) {
+    const b = document.querySelector(sel); if (b) b.disabled = n > GP_MAX;
+  }
+}
+function gpBinOrder(photos) {
+  const rank = (p) => p.status === "flagged" ? 0 : !p.last_used_at ? 1 : 2;
+  return [...photos].sort((a, b) => rank(a) - rank(b));
+}
+function gpPhotoCard(p) {
+  return `<div class="gpph${p.status === "flagged" ? " flag" : ""}" data-gpphoto="${esc(p.id)}" title="${esc(p.caption || "")}" role="button" tabindex="0">
+      <img src="${esc(p.url)}" alt="${esc(p.caption || "Photo")}" loading="lazy">
+      ${p.status === "flagged" ? `<span class="tag warn">Needs OK</span>` : p.last_used_at ? `<span class="tag">Used</span>` : `<span class="tag fresh">Fresh</span>`}
+    </div>`;
+}
+// Every photo, as a grid, in its own sheet — the desk stays one strip tall.
+function gpBinSheet() {
+  const photos = gpBinOrder((GP.board.photos || []).filter((p) => p.status !== "removed"));
+  const flagged = photos.filter((p) => p.status === "flagged").length;
+  const fresh = photos.filter((p) => p.status !== "flagged" && !p.last_used_at).length;
+  sheet(`<div class="pcc-kicker">PHOTO BIN</div><h2>${photos.length} photo${photos.length === 1 ? "" : "s"}</h2>
+    <p class="sub">${flagged ? `${flagged} need your OK · ` : ""}${fresh} fresh · ${photos.length - fresh - flagged} used. Tap one to approve it, draft a post with it, or remove it.</p>
+    <div class="gpgrid">${photos.map(gpPhotoCard).join("")}</div>`, (sh) => {
+    on("[data-gpphoto]", "click", (e) => { closeSheet(); setTimeout(() => gpPhotoSheet(e.currentTarget.dataset.gpphoto), 60); }, sh);
+  });
 }
 
 async function gpUpload(files) {
