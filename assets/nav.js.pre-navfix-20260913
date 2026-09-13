@@ -13,7 +13,7 @@ document.addEventListener("click", () => {
 
 document.querySelectorAll("nav.sitenav .brand").forEach((brand) => {
   brand.addEventListener("click", (e) => {
-    if (!window.matchMedia("(max-width:900px)").matches) return;
+    if (!window.matchMedia("(max-width:780px)").matches) return;
     e.preventDefault();
     e.stopPropagation();
     brand.closest("nav").classList.toggle("mopen");

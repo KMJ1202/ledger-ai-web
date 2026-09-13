@@ -20,7 +20,7 @@
 <meta name="twitter:description" content="Ledger AI support — how to reach us and what to include in a support request.">
 <meta name="twitter:image" content="https://heyledger.ai/assets/og-card.png">
 <link rel="canonical" href="https://heyledger.ai/support/">
-<link rel="stylesheet" href="/assets/styles.css?v=52">
+<link rel="stylesheet" href="/assets/styles.css?v=51">
 <link rel="stylesheet" href="/assets/support-widget.css?v=2">
 <style>
 
@@ -77,9 +77,10 @@ footer a{color:var(--dim)}
           </div>
         </div>
         <a href="/#platform">See it work</a>
-        <a href="/#pricing">Pricing</a>
+        <a href="#pricing">Pricing</a>
         <a href="/talk/">Book a call</a>
         <a href="/support/">Support</a>
+        <a href="/privacy/">Privacy</a>
       </div>
       <div class="navcta">
         <a class="btn ghost sm" href="/app.html">Sign in</a>
@@ -165,7 +166,7 @@ footer a{color:var(--dim)}
   </div>
 </footer>
 </div>
-<script src="/assets/nav.js?v=30"></script>
+<script src="/assets/nav.js?v=29"></script>
 <script src="/assets/support-widget.js?v=1" defer></script>
 </body>
 </html>
