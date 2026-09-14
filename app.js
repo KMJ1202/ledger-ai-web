@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 168;
+const APP_BUILD = 169;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -7271,7 +7271,7 @@ function apptReminderCard(d) {
     <div class="rowbtns" style="margin-top:12px">
       <button class="btn" id="rempreview">See tonight's list</button>
       <button class="btn ${on ? "" : "em"}" id="remtoggle">${on ? "Turn off" : "Turn on reminders"}</button>
-      ${on ? '<button class="btn" id="remtune">Change time</button>' : ""}
+      <button class="btn" id="remtune">Time &amp; wording</button>
     </div>
   </div>`;
 }
@@ -7295,10 +7295,36 @@ async function toggleApptReminders(d) {
     toast(r.enabled !== true ? "Reminders are on" : "Reminders are off");
 }
 
+// Reminder wording (Kyle 2026-09-13, 1202): the greeting "Hey {first name}!" is
+// locked — shown here read-only so the owner can see it — and the note under it
+// is theirs, prefilled with the standard wording so changing it is optional.
+// Blank = the standard note comes back (the server stores ''). {shop} and
+// {when} fill in at send time; the example under the box mirrors the server's
+// rendering so the owner sees the exact text before saving.
+const REM_FALLBACK_NOTE = "Reminder from {shop} — you're booked in {when}. Reply Y to confirm, or C if you need to change it.";
+function apptRenderNote(note, shop, when, name) {
+  return String(note || "").replace(/\{\s*(shop|business|when|time|name|first ?name|customer(?: ?name)?)\s*\}/gi, (_m, k) => {
+    k = k.toLowerCase().replace(/\s+/g, "");
+    return k === "shop" || k === "business" ? shop : k === "when" || k === "time" ? when : name;
+  }).replace(/[ \t]{2,}/g, " ").trim();
+}
+
 function apptReminderSheet(d) {
   const r = d.reminders || {};
+  const defaultNote = r.defaultNote || REM_FALLBACK_NOTE;
+  const noteMax = Number(r.noteMax || 300);
+  const shop = r.shopName || "your business";
+  const example = (note) => "Hey Amy! " + apptRenderNote(String(note || "").trim() || defaultNote, shop, "Tuesday at 9:00am", "Amy");
   sheet(`<h2>Reminder settings</h2>
-    <label class="lab">What time to send</label>
+    <label class="lab">What the text says</label>
+    <div class="inp" style="opacity:.7;cursor:default">&#128274; Hey {customer's first name}!</div>
+    <p class="note">This part always stays. Ledger puts each customer's own name in.</p>
+    <label class="lab" style="margin-top:12px">Your note</label>
+    <textarea class="inp" id="remnote" rows="4" maxlength="${noteMax}" style="resize:vertical;min-height:96px">${esc(r.note || defaultNote)}</textarea>
+    <p class="note">{shop} and {when} fill themselves in. Leave it as is, or make it yours. <a href="#" id="remreset">Use the standard note</a></p>
+    <label class="lab" style="margin-top:10px">How it will read</label>
+    <div id="remexample" style="padding:9px 11px;border-radius:10px;background:rgba(255,255,255,.05);font-size:13px;line-height:1.4"></div>
+    <label class="lab" style="margin-top:12px">What time to send</label>
     <input class="inp" id="remtime" type="time" value="${esc(r.time || "18:00")}">
     <p class="note">Your local time. Evening works best — late enough that the day is settled, early enough not to bother anyone.</p>
     <label class="lab" style="margin-top:12px">How far ahead</label>
@@ -7306,12 +7332,18 @@ function apptReminderSheet(d) {
       ${[1, 2, 3].map((n) => `<option value="${n}" ${Number(r.daysAhead || 1) === n ? "selected" : ""}>${n === 1 ? "The night before" : `${n} days ahead`}</option>`).join("")}
     </select>
     <div class="rowbtns" style="margin-top:16px"><button class="btn em" id="remsave">Save</button></div>`, (sh) => {
+    const box = sh.querySelector("#remnote"), ex = sh.querySelector("#remexample");
+    const refresh = () => { ex.textContent = example(box.value); };
+    box.oninput = refresh; refresh();
+    sh.querySelector("#remreset").onclick = (e) => { e.preventDefault(); box.value = defaultNote; refresh(); };
     sh.querySelector("#remsave").onclick = async () => {
       try {
+        const note = box.value.trim();
         await api("/phone", {
           action: "settings-save",
           reminderTime: sh.querySelector("#remtime").value || "18:00",
           reminderDaysAhead: Number(sh.querySelector("#remahead").value || 1),
+          reminderNote: note === defaultNote ? "" : note,
         });
         toast("Saved"); closeSheet(); renderPhone();
       } catch (err) { toast(err.message); }
@@ -7333,6 +7365,7 @@ async function apptReminderPreviewSheet() {
       <p class="note">Nothing has been sent. This is exactly what would go out.</p>
       ${items.length ? items.map((it) => `<div class="kv" style="display:block"><div>${label[it.state] || ""} <b>${esc(it.title)}</b></div>
         <div><small style="color:var(--dim)">${esc(it.when)}${it.to ? " · " + esc(it.to) : ""}</small></div>
+        ${it.message && !it.name ? `<div style="margin-top:4px"><small style="color:#f0a030">No name on this booking — this one opens with "Hey there!". Put the customer's name on the appointment to fix it.</small></div>` : ""}
         ${it.message ? `<div style="margin-top:6px;padding:9px 11px;border-radius:10px;background:rgba(255,255,255,.05)"><small>${esc(it.message)}</small></div>` : ""}</div>`).join("")
         : '<p class="note">Nothing booked for that day.</p>'}`;
   });
