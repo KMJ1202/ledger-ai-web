@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 166;
+const APP_BUILD = 167;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -1319,7 +1319,8 @@ async function loadHomeSetup() {
   const paid = !!bill && (["active", "past_due"].includes(bill.subscription_status) || !!bill.card_on_file);
   const shop = !!S.shop?.completed;
   const billingReady = !!bill?.billing_ready;
-  if (shop && books && cal && paid) { slot.innerHTML = ""; try { localStorage.removeItem(SETUP_CACHE_KEY); } catch {} return; }
+  // Google Calendar is optional since the built-in calendar (2026-09-13): it never blocks "set up".
+  if (shop && books && paid) { slot.innerHTML = ""; try { localStorage.removeItem(SETUP_CACHE_KEY); } catch {} return; }
   // Stalled = still not set up a day after signing up. Only then offer the
   // founder's calendar — most shops never need the call (Kyle, 2026-09-05).
   const since = S.profile?.business?.member_since ? Date.parse(S.profile.business.member_since) : Date.now();
@@ -1342,7 +1343,7 @@ async function loadHomeSetup() {
         `<button class="btn primary" id="setupshop">Start</button>`)}
       ${step(books, 2, "Choose your books", books ? "" : `Already on QuickBooks? Connect it. Otherwise Ledger's built-in books handle invoices, estimates and payment links.
           <span style="display:flex;gap:8px;margin-top:9px"><button class="btn primary" data-connect="/quickbooks-oauth/start">QuickBooks</button><button class="btn ghost" id="setupnative">Built-in books</button></span>`, "")}
-      ${step(cal, 3, "Connect Google Calendar", "See your week, book from the app, and let Front Desk put real appointments on your calendar for you.",
+      ${step(cal, 3, "Google Calendar (optional)", "Ledger has its own calendar, so booking already works. Connect Google if you also want your appointments there.",
         `<button class="btn ghost" data-connect="/google-calendar/start">Connect</button>`)}
       ${step(paid, 4, "Add a card", trialLine,
         billingReady && !inAndroidApp() ? `<button class="btn ghost" id="setupcard">Add card</button>` : "")}
@@ -4917,6 +4918,7 @@ function drawCalendar() {
 
   view().innerHTML = `<div class="sect">
     ${pageHead("Calendar")}
+    ${S.cal?.calendar?.provider === "ledger" ? `<div class="note" style="margin:-4px 0 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>Ledger calendar — your appointments live right here in the app.</span><button class="btn ghost" data-connect="/google-calendar/start" style="padding:5px 10px">Connect Google Calendar</button></div>` : ""}
     ${next ? `<button class="nexthero" data-ev="${esc(next.id)}">
       <div class="t"><span class="dot"></span><span class="lbl">NEXT UP</span><span class="go">&#10132;</span></div>
       <div class="big">${esc(countdown(next.start))}</div>
@@ -4978,6 +4980,7 @@ function drawCalendar() {
   </div>`;
 
   const search = $("calsearch");
+  wireConnect(view());
   search.addEventListener("input", () => { CAL.q = search.value; const at = search.selectionStart; drawCalendar();
     const n = $("calsearch"); if (n) { n.focus(); n.setSelectionRange(at, at); } });
   on("[data-mo]", "click", (e) => {
