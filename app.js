@@ -29,7 +29,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 167;
+const APP_BUILD = 168;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -5076,16 +5076,75 @@ function bookingSheet(dayISO, editing, prefill) {
       <label class="fld">DETAILS</label><textarea id="bkNotes" class="cmpinput" rows="4">${esc(editing.description || "")}</textarea>`
       : `<div class="eyebrow" style="margin-top:13px">Crew dispatch</div>
     <div class="cmpsect"><div class="chips" id="bkCrew" style="display:flex;flex-wrap:wrap;gap:8px"><span class="note">Loading crew…</span></div></div>
-    <div class="eyebrow" style="margin-top:13px">Source &amp; job details</div>
+    <div class="eyebrow" style="margin-top:13px">Pricing — invoice-ready</div>
+    <div class="cmpsect">
+      <div id="bkLines"></div>
+      <button type="button" class="btn ghost wide" id="bkAddLine" style="margin-top:4px">+ Add a line</button>
+      <div class="note" id="bkTotals" style="margin-top:6px"></div>
+      <datalist id="bkItems"></datalist>
+    </div>
+    <div class="eyebrow" style="margin-top:13px">Source &amp; job notes</div>
     <div class="cmpsect">
       <select id="bkSource" class="cmpinput">${BOOK_SOURCES.map((x) => `<option>${x}</option>`).join("")}</select>
-      <textarea id="bkNotes" class="cmpinput" rows="4" placeholder="Pricing, order status and job notes"></textarea>
+      <textarea id="bkNotes" class="cmpinput" rows="3" placeholder="Order status and job notes — pricing goes in the lines above"></textarea>
     </div>`}
     <button class="btn primary wide" style="margin-top:13px" id="bkGo">${editing ? "Save changes" : "Create Appointment"}</button>
     <p class="note" style="margin-top:9px">The calendar is checked live for conflicts before anything is created.</p>
     <div class="note" id="bkNote" style="margin-top:6px"></div>`, (sh) => {
     const note = sh.querySelector("#bkNote");
     const val = (id) => (sh.querySelector("#" + id)?.value || "").trim();
+    // Pricing lines (four-point minimum, Kyle 2026-09-13): every booking is
+    // invoice-ready, so the form takes the priced lines and the server writes
+    // the PRICING block and does the maths. Items come from the business's own
+    // price list (QuickBooks items or the built-in item list).
+    const priceItems = new Map();
+    const linesBox = sh.querySelector("#bkLines");
+    const totalsBox = sh.querySelector("#bkTotals");
+    const readLines = () => [...(linesBox ? linesBox.querySelectorAll(".bkline") : [])].map((row) => ({
+      name: row.querySelector('[data-f="name"]').value.trim(),
+      qty: Number(row.querySelector('[data-f="qty"]').value || 1),
+      unit_price: row.querySelector('[data-f="price"]').value === "" ? null : Number(row.querySelector('[data-f="price"]').value),
+    })).filter((l) => l.name || l.unit_price !== null);
+    const showTotals = () => {
+      if (!totalsBox) return;
+      const ls = readLines().filter((l) => l.unit_price !== null);
+      const sub = ls.reduce((s, l) => s + (l.qty > 0 ? l.qty : 0) * l.unit_price, 0);
+      totalsBox.textContent = ls.length ? `Subtotal ${money(sub)} · tax and the total are added when you save` : "Add every charge: the service, levies or fees, supplies. Tax is added on save.";
+    };
+    const addLine = (pre) => {
+      if (!linesBox) return;
+      const row = document.createElement("div"); row.className = "bkline";
+      row.style.cssText = "display:grid;grid-template-columns:1fr 58px 90px 30px;gap:6px;margin-bottom:6px";
+      row.innerHTML = `<input class="cmpinput" list="bkItems" placeholder="Item from your price list" data-f="name" value="${esc((pre && pre.name) || "")}">
+        <input class="cmpinput" type="number" step="1" min="0.01" data-f="qty" value="${esc(String((pre && pre.qty) || 1))}" title="Quantity">
+        <input class="cmpinput" type="number" step="0.01" min="0" placeholder="$ each" data-f="price" value="${pre && pre.unit_price != null ? esc(String(pre.unit_price)) : ""}">
+        <button type="button" class="btn ghost" data-rm title="Remove line">×</button>`;
+      row.querySelector("[data-rm]").onclick = () => { row.remove(); showTotals(); };
+      row.querySelector('[data-f="name"]').addEventListener("change", (e) => {
+        const hit = priceItems.get(e.target.value.trim().toLowerCase());
+        const priceEl = row.querySelector('[data-f="price"]');
+        if (hit !== undefined && priceEl.value === "") priceEl.value = hit;
+        showTotals();
+      });
+      row.querySelectorAll("input").forEach((i) => i.addEventListener("input", showTotals));
+      linesBox.appendChild(row);
+    };
+    if (linesBox) {
+      addLine(); showTotals();
+      sh.querySelector("#bkAddLine").onclick = () => addLine();
+      (async () => {
+        try {
+          let items = [];
+          const r = await api("/quickbooks-invoice/items", null, "GET", { silentUpgrade: true });
+          if (r.native_books) { const s = await booksApi({ action: "shortcuts" }); items = (s.shortcuts || []).map((x) => ({ name: x.name, price: x.rate })); }
+          else items = (r.items || []).map((x) => ({ name: x.name, price: x.unit_price, description: x.description }));
+          const dl = sh.querySelector("#bkItems");
+          if (!dl || !sh.contains(dl)) return;
+          dl.innerHTML = items.map((x) => `<option value="${esc(x.name)}">${esc(x.description ? `${x.description} — ` : "")}${money(Number(x.price || 0))}</option>`).join("");
+          items.forEach((x) => priceItems.set(String(x.name).toLowerCase(), Number(x.price || 0)));
+        } catch { /* no price list yet — lines are still typed by hand */ }
+      })();
+    }
     // Crew dispatch (web parity, Kyle 2026-09-06): the roster as tap-chips,
     // each picked name is put on the new job the moment it exists.
     const picked = new Set();
@@ -5118,20 +5177,24 @@ function bookingSheet(dayISO, editing, prefill) {
         }
         const required = ["bkFirst", "bkLast", "bkPhone", "bkEmail", "bkVehicle", "bkService"];
         if (required.some((id) => !val(id))) { note.className = "note err"; note.textContent = `Fill in name, phone, email, ${isAuto() ? "vehicle" : "job details"} and service.`; return; }
+        const lines = readLines();
+        if (!lines.length || lines.some((l) => !l.name || l.unit_price === null || !(l.qty > 0))) {
+          note.className = "note err"; note.textContent = "Every booking is invoice-ready: add at least one priced line, each with an item, a quantity and a price."; return;
+        }
         if (!confirm(`Create this booking?\n\n${val("bkService")} for ${val("bkFirst")} ${val("bkLast")}\n${start.toLocaleString()}`)) return;
         ev.currentTarget.disabled = true;
-        const details = [
-          `Phone: ${val("bkPhone")}`, `Email: ${val("bkEmail")}`, `${isAuto() ? "Vehicle" : "Job"}: ${val("bkVehicle")}`,
-          val("bkTire") ? `Tire size: ${val("bkTire")}` : null,
-          `Source: ${val("bkSource")}`, val("bkNotes") ? `Notes: ${val("bkNotes")}` : null,
-        ].filter(Boolean).join("\n");
-        const payload = {
-          title: `${val("bkFirst")} ${val("bkLast")} — ${val("bkService")}`,
-          description: details, email: val("bkEmail"),
-          start: start.toISOString(), end: end.toISOString(),
+        const title = `${val("bkFirst")} ${val("bkLast")} — ${val("bkService")}`;
+        // The server composes the CUSTOMER / VEHICLE (or JOB DETAILS) / SERVICE /
+        // PRICING blocks from these fields and refuses anything incomplete.
+        const booking = {
+          customer: { first_name: val("bkFirst"), last_name: val("bkLast"), phone: val("bkPhone"), email: val("bkEmail"), source: val("bkSource") },
+          vehicle: isAuto() ? val("bkVehicle") : "", tire_size: val("bkTire"), job_details: isAuto() ? "" : val("bkVehicle"),
+          service: { summary: val("bkService") }, pricing: { lines }, notes: val("bkNotes"),
         };
+        const payload = { title, booking, email: val("bkEmail"), start: start.toISOString(), end: end.toISOString() };
         const finish = async (created) => {
           const eventId = created?.event?.id;
+          const details = created?.event?.description || "";
           for (const employeeId of picked) {
             if (!eventId) break;
             try {
@@ -9461,6 +9524,7 @@ function bookingCard(d) {
     <table><tr><td>Starts</td><td>${esc(new Date(d.start).toLocaleString())}</td></tr>
     <tr><td>Ends</td><td>${esc(new Date(d.end).toLocaleString())}</td></tr>
     ${d.location ? `<tr><td>Where</td><td>${esc(d.location)}</td></tr>` : ""}</table>
+    ${d.description ? `<pre class="bkdesc" style="white-space:pre-wrap;font:12px/1.45 -apple-system,system-ui,sans-serif;color:var(--fg,#eee);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px;margin:8px 0 2px;max-height:280px;overflow:auto">${esc(d.description)}</pre>` : ""}
     <div class="row"><button class="btn cancel">Cancel</button><button class="btn confirm">Book it</button></div>`);
   const btns = () => [card.querySelector(".confirm"), card.querySelector(".cancel")].filter(Boolean);
   card.querySelector(".confirm").onclick = async () => {
@@ -9923,7 +9987,16 @@ async function businessSheet() {
             if (rq && fresh.length) {
               rq.innerHTML = `<div class="eyebrow" style="margin-top:12px;font-size:10px">NEW REQUESTS</div>` + fresh.map((r) =>
                 `<div class="kv"><span>${esc(r.name)}<br><small style="color:var(--dim)">${esc(r.service || r.preferredText || "")}</small></span>
-                 <span><button class="btn ghost" data-bkdone="${esc(r.id)}" style="padding:6px 11px;font-size:12px">Handled</button></span></div>`).join("");
+                 <span style="display:flex;gap:6px"><button class="btn ghost" data-bkbook="${esc(r.id)}" style="padding:6px 11px;font-size:12px">Book with Ledger</button><button class="btn ghost" data-bkdone="${esc(r.id)}" style="padding:6px 11px;font-size:12px">Handled</button></span></div>`).join("");
+              // Every booking is a four-block work order (Kyle 2026-09-13): hand
+              // the request to Ledger, which prices it from the business's own
+              // list and drafts the appointment for a Confirm tap.
+              rq.querySelectorAll("[data-bkbook]").forEach((btn) => btn.onclick = () => {
+                const r = fresh.find((x) => x.id === btn.dataset.bkbook); if (!r) return;
+                openChat();
+                $("box").value = `Book this booking-page request: ${r.name}, phone ${r.phone || "not given"}, email ${r.email || "not given"}, wants "${r.service || "(no service given)"}"${r.preferredText ? `, preferred time ${r.preferredText}` : ""}${r.notes ? `, notes: ${r.notes}` : ""}. Ask me for anything missing, price it from our price list, and draft the appointment.`;
+                send();
+              });
               rq.querySelectorAll("[data-bkdone]").forEach((btn) => btn.onclick = async () => {
                 btn.disabled = true;
                 try { await api("/bookings", { action: "mark-handled", id: btn.dataset.bkdone }); renderBooking(); }
