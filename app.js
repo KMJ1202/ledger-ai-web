@@ -1920,7 +1920,7 @@ async function loadNativeInvoices() {
         <em>${chargesOn ? "MANAGE" : "SET UP"} &#8599;</em></button>
       <button class="opcard" data-op="bsettings"><span class="ic">&#9881;</span><b>Books settings</b>
         <span>Tax, invoice numbering, payment info</span><em>OPEN &#8599;</em></button>
-      <button class="opcard" data-op="barchive"><span class="ic">&#128230;</span><b>Complete Books archive</b><span>Quotes, approvals, messages and accounting records</span><em>DOWNLOAD &#8599;</em></button>
+      <button class="opcard" data-op="barchive"><span class="ic">&#128230;</span><b>Business records archive</b><span>Quotes, approvals, messages and accounting records</span><em>DOWNLOAD &#8599;</em></button>
       <button class="opcard" data-op="bexport"><span class="ic">&#128228;</span><b>Export CSV</b>
         <span>Invoices, payments, customers</span><em>EXPORT &#8599;</em></button>
     </div>`;
@@ -2209,6 +2209,8 @@ function suggestShortcutCode(name, taken) {
 }
 
 async function nativeComposerSheet(kind) {
+  try { const setup=await booksApi({action:"settings"}); if(setup.tax?.requires_review) { toast("First, confirm whether you charge sales tax and review your rates."); await booksSettingsSheet(); return; } }
+  catch(e) { toast(e.message,"err"); return; }
   // kind "estimate": EST numbering, VALID FOR instead of payment terms, and the
   // create posts nothing to the books — money moves only on convert-to-invoice.
   const isEst = kind === "estimate";
@@ -2559,13 +2561,15 @@ async function booksSettingsSheet() {
     <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Line-item shortcuts</span></div>
     <div id="sclist"></div>
     <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Tax &amp; numbering</span></div>
+    <label class="emailrow">Sales-tax setup<select id="sregistration" class="cmpinput"><option value="unreviewed"${s.tax.requires_review ? " selected" : ""}>Choose your tax setup</option>${[["registered","Registered — charge the taxes below"],["not_registered","Not registered — do not charge sales tax"],["custom","I have reviewed these custom tax settings"]].map(([v,t])=>`<option value="${v}"${!s.tax.requires_review && (s.tax.registration_status === v || (s.tax.registration_status === "unreviewed" && v === "custom")) ? " selected" : ""}>${t}</option>`).join("")}</select></label>
+    <p class="note">Your province suggests rates; it does not determine registration or service exemptions. Confirm your own setup. Mark exempt services separately. Existing choices will not change when your address changes.</p>
     <label class="emailrow">Tax name<input id="stax" class="cmpinput" value="${esc(s.tax.name)}"></label>
     <label class="emailrow">Tax rate %<input id="srate" type="number" min="0" max="100" step="0.001" class="cmpinput" value="${(Number(s.tax.rate) * 100).toFixed(3).replace(/\.?0+$/, "")}"></label>
     <label class="emailrow">Second tax name (PST / RST / QST — leave blank if none)<input id="stax2" class="cmpinput" value="${esc(s.tax.second_name || "")}" placeholder="e.g. PST"></label>
     <label class="emailrow">Second tax rate %<input id="srate2" type="number" min="0" max="100" step="0.001" class="cmpinput" value="${(Number(s.tax.second_rate || 0) * 100).toFixed(3).replace(/\.?0+$/, "")}"></label>
     <p class="note">${s.tax.second_name ? "Both taxes print as separate lines. The second tax can be switched off per line when you write an invoice — most services are exempt from it." : Number(s.tax.rate) > 0 ? "" : "Tax is 0% — nothing is added to your invoices. Set the rate your area requires, or leave it at 0 if you don't charge sales tax."}</p>
     <label class="emailrow">Tax registration # (shown on invoices)<input id="sreg" class="cmpinput" value="${esc(s.tax.registration_number || "")}"></label>
-    ${Number(s.tax.rate) > 0 && !String(s.tax.registration_number || "").trim() ? `<p class="note err">You're charging ${esc(s.tax.name || "tax")} with no registration number. It prints on every invoice, and without it your customers can't claim the tax back.</p>` : ""}
+    ${Number(s.tax.rate) > 0 && !String(s.tax.registration_number || "").trim() ? `<p class="note err">You're charging ${esc(s.tax.name || "tax")} with no registration number. Add it if required for your business and verify your registration before invoicing.</p>` : ""}
     <label class="emailrow">Invoice prefix<input id="spre" class="cmpinput" value="${esc(s.numbering.prefix)}"></label>
     <p class="note">Next invoice: ${esc(s.numbering.prefix)}${s.numbering.next_number}</p>
     <label class="emailrow">How customers pay you (shown on unpaid invoices when card payments are off)
@@ -2594,9 +2598,10 @@ async function booksSettingsSheet() {
       btn.disabled = false; btn.textContent = "Replace logo"; toast("Logo updated");
     } catch (err) { btn.disabled = false; btn.textContent = "Upload logo"; wrap.querySelector("#serr").textContent = err.message; }
   };
+  wrap.querySelector("#sregistration").onchange=e=>{if(e.target.value==="not_registered"){wrap.querySelector("#srate").value="0";wrap.querySelector("#srate2").value="0"}};
   wrap.querySelector("#ssave").onclick = async () => {
     try {
-      await booksApi({ action: "settings-save",
+      await booksApi({ action: "settings-save",registration_status:wrap.querySelector("#sregistration").value,
         tax_name: wrap.querySelector("#stax").value, tax_rate: Number(wrap.querySelector("#srate").value) / 100,
         second_name: wrap.querySelector("#stax2").value.trim(),
         second_rate: wrap.querySelector("#stax2").value.trim() ? Number(wrap.querySelector("#srate2").value) / 100 : 0,
@@ -4972,7 +4977,7 @@ function drawCalendar() {
     ${dayEvents.length ? `<div class="list">${dayEvents.map((e) => {
       const past = new Date(e.end || e.start) < now;
       return `<button class="item${past ? " past" : ""}" data-ev="${esc(e.id)}">
-        <div class="main"><div class="ttl">${e.id === nextSelId ? '<span class="tag new">NEXT</span> ' : ""}${esc(e.title)}</div>
+        <div class="main"><div class="ttl">${e.id === nextSelId ? '<span class="tag new">NEXT</span> ' : ""}${esc(e.title)} <span class="tag">${e.provider === "google" ? (e.cached ? "Google · cached" : "Google") : "Built-in"}</span></div>
           <div class="sub">${esc(timeLabel(e.start))}${e.location ? " · " + esc(e.location) : ""}</div>
           ${isAuto() && !past ? `<div class="scanlink" data-evscan="${esc(e.id)}">&#128663; Scan vehicle &amp; close job</div>` : ""}</div>
         <div class="amt"><small>${esc((e.status || "").toUpperCase())}</small></div></button>`;
@@ -4994,6 +4999,7 @@ function drawCalendar() {
   on("[data-ev]", "click", (e) => eventSheet(all.find((x) => x.id === e.currentTarget.dataset.ev)));
   $("bookday").onclick = () => bookingSheet(CAL.sel);
   $("crewbtn").onclick = () => crewCommandSheet();
+  const resourceButton=document.createElement("button");resourceButton.className="btn ghost wide";resourceButton.textContent="Staff & resource availability";resourceButton.onclick=()=>schedulingResourcesSheet();$("bizhours").after(resourceButton);
   $("bizhours").onclick = () => calendarHoursSheet();
   loadCalendarHoursLine();
   loadRunSheetCover(todayTimed);
@@ -5010,6 +5016,11 @@ function drawCalendar() {
 // the only way out.
 function eventSheet(e, back) {
   if (!e) return;
+  if(e.recovery_id) {
+    sheet(`<h2>Awaiting Google confirmation</h2><p>${esc(e.title)}</p><p class="note">This time remains reserved while Google’s response is uncertain. Recovery checks the same booking; it does not create another one.</p><button class="btn primary wide" id="recover-booking">Recover this confirmation</button><p role="status" id="recover-status"></p>`,sh=>{
+      sh.querySelector('#recover-booking').onclick=async ev=>{ev.currentTarget.disabled=true;try{await api('/google-calendar/reservation-retry',{reservation_id:e.recovery_id});S.cal=null;closeSheet();toast('Booking confirmation recovered');renderCalendar();}catch(err){sh.querySelector('#recover-status').textContent=err.message;ev.target.disabled=false;}};
+    });return;
+  }
   sheet(`<h2>${esc(e.title)}</h2>
     <p class="sh-sub">${esc(dayLabel(e.start))} · ${esc(timeLabel(e.start))}${e.end ? " – " + esc(timeLabel(e.end)) : ""}</p>
     <div class="kv"><span>Status</span><span>${esc((e.status || "confirmed").replace(/^./, (c) => c.toUpperCase()))}</span></div>
@@ -5068,6 +5079,8 @@ function bookingSheet(dayISO, editing, prefill) {
       <input id="bkVehicle" class="cmpinput" placeholder="${isAuto() ? "Vehicle — year, make, model, trim" : "Job details — what needs doing, where"}">
       ${isAuto() ? `<input id="bkTire" class="cmpinput" placeholder="Tire size, if relevant">` : ""}
     </div>`}
+    <label class="fld">STAFF OR RESOURCE</label><select id="bkResource" class="cmpinput"><option value="">Unassigned · one appointment at a time</option></select>
+    ${!editing ? `<label class="fld">SERVICE FROM YOUR MENU</label><select id="bkMenu" class="cmpinput"><option value="">Choose or enter the service above</option></select>` : ""}
     <label class="fld">STARTS</label>
     <input id="bkStart" class="cmpinput" type="datetime-local" value="${localVal(startAt)}">
     <label class="fld">DURATION</label>
@@ -5093,6 +5106,8 @@ function bookingSheet(dayISO, editing, prefill) {
     <p class="note" style="margin-top:9px">The calendar is checked live for conflicts before anything is created.</p>
     <div class="note" id="bkNote" style="margin-top:6px"></div>`, (sh) => {
     const note = sh.querySelector("#bkNote");
+    api("/google-calendar/resources",{}).then(r=>{const picker=sh.querySelector("#bkResource");if(picker)picker.innerHTML='<option value="">Unassigned · one appointment at a time</option>'+(r.resources||[]).filter(x=>x.active).map(x=>`<option value="${esc(x.id)}"${editing?.resource_id===x.id?' selected':''}>${esc(x.name)}</option>`).join('')}).catch(e=>{note.textContent=e.message});
+
     const val = (id) => (sh.querySelector("#" + id)?.value || "").trim();
     // Pricing lines (four-point minimum, Kyle 2026-09-13): every booking is
     // invoice-ready, so the form takes the priced lines and the server writes
@@ -5130,6 +5145,11 @@ function bookingSheet(dayISO, editing, prefill) {
       row.querySelectorAll("input").forEach((i) => i.addEventListener("input", showTotals));
       linesBox.appendChild(row);
     };
+    if (sh.querySelector("#bkMenu")) booksApi({action:"shortcuts"}).then(r=>{
+      const services=(r.shortcuts||[]).filter(s=>s.bookable!==false && s.duration_minutes != null),picker=sh.querySelector("#bkMenu");if(!picker)return;
+      picker.innerHTML='<option value="">Choose or enter the service above</option>'+services.map(s=>`<option value="${esc(s.id)}">${esc(s.name)} · ${money(s.rate)} · ${s.duration_minutes} min</option>`).join('');
+      picker.onchange=()=>{const svc=services.find(s=>s.id===picker.value);if(!svc)return;sh.querySelector("#bkService").value=svc.name;const d=sh.querySelector("#bkDur");if(![...d.options].some(o=>Number(o.value)===svc.duration_minutes))d.add(new Option(`${svc.duration_minutes} minutes`,String(svc.duration_minutes)));d.value=String(svc.duration_minutes);linesBox.innerHTML='';addLine({name:svc.name,qty:1,unit_price:svc.rate});showTotals()};
+    }).catch(e=>{note.textContent=e.message});
     if (linesBox) {
       addLine(); showTotals();
       sh.querySelector("#bkAddLine").onclick = () => addLine();
@@ -5192,7 +5212,7 @@ function bookingSheet(dayISO, editing, prefill) {
           vehicle: isAuto() ? val("bkVehicle") : "", tire_size: val("bkTire"), job_details: isAuto() ? "" : val("bkVehicle"),
           service: { summary: val("bkService") }, pricing: { lines }, notes: val("bkNotes"),
         };
-        const payload = { title, booking, email: val("bkEmail"), start: start.toISOString(), end: end.toISOString() };
+        const payload = { title, booking, email: val("bkEmail"), start: start.toISOString(), end: end.toISOString(),resource_id:val("bkResource") || null,service_ids:val("bkMenu") ? [val("bkMenu")] : [] };
         const finish = async (created) => {
           const eventId = created?.event?.id;
           const details = created?.event?.description || "";
@@ -5572,15 +5592,16 @@ function formatE164(n) {
 async function renderPhone(cachedBoard = null) {
   if (phonePendingSave) cachedBoard = S.phone || cachedBoard;
   const request = S.phoneRequest = (S.phoneRequest || 0) + 1;
-  if (!cachedBoard && !S.phone) skeleton(3);
+  if (!cachedBoard) view().innerHTML = `<div class="sect" aria-busy="true">${pageHead("Phone")}<p role="status">Loading your phone…</p></div>`;
   try {
     const d = cachedBoard || await api("/phone", { action: "board" });
     if (request !== S.phoneRequest || S.tab !== "phone" || (phonePendingSave && !cachedBoard)) return;
     S.phone = d;
     tabBadge("phone", (d.needsYou || []).length);
     view().innerHTML = `<div class="sect phone-command-center phone-os">
-      ${d.hasNumber ? phoneOSHeader(d) + '<div class="phone-os-content">' + phoneLaneBody(d) + '</div>' + phoneOSDock(d) : pageHead("Phone") + requestNumberCard(d.pendingRequest, d.numberLocked)}
+      ${d.hasNumber ? phoneOSHeader(d) + '<div class="phone-os-content">' + phoneLaneBody(d) + '</div>' + phoneOSDock(d) : pageHead("Phone") + `<button class="btn wide" id="phone-guided-demo">Try the phone walkthrough</button><p class="note">Sample conversation only — no live calls, texts or bookings.</p>` + requestNumberCard(d.pendingRequest, d.numberLocked)}
     </div>`;
+    if($("phone-guided-demo")) $("phone-guided-demo").onclick=phoneGuidedDemo;
     if (!d.hasNumber) wireRequestNumber(d.pendingRequest, d.numberLocked);
     if (d.hasNumber && phoneLane() === "activity") on("[data-pevt]", "click", (e) => phoneEventSheet(d.events.find((ev) => ev.id === e.currentTarget.dataset.pevt)));
 
@@ -5648,7 +5669,9 @@ async function renderPhone(cachedBoard = null) {
       if (phoneLane() === "activity") loadVoicemails(d);
     }
   } catch (e) {
-    view().innerHTML = `<div class="sect">${pageHead("Phone")}<div class="empty">${esc(e.message)}</div></div>`;
+    if (request !== S.phoneRequest || S.tab !== "phone") return;
+    view().innerHTML = `<div class="sect">${pageHead("Phone")}<div class="empty">${esc(e.message)}</div><button class="btn" id="phone-retry">Retry</button></div>`;
+    $("phone-retry").onclick = () => renderPhone();
   }
 }
 
@@ -7512,7 +7535,7 @@ function requestNumberCard(pending, locked) {
     return `<div class="panel">
       <h3>&#128241; Your own business line</h3>
       <p class="sub">A local number of your own, included with your subscription: missed calls text the caller back automatically, every lead lands in your Leads list, and you can reply right from this tab.</p>
-      <p class="note" style="margin-top:10px">Included with Ledger AI &mdash; after you subscribe, tell us your area code and we set your line up, usually the same business day.</p>
+      <p class="note" style="margin-top:10px">Live calling and texting require a subscription, an available number and provider activation. Setup is usually the same business day, but carrier checks can take longer. Front Desk requires Pro. Try the sample walkthrough before subscribing.</p>
       ${inAndroidApp() ? `<p class="note" style="margin-top:13px">${SUBSCRIPTION_REQUIRED}</p>`
         : `<button class="btn em wide" style="margin-top:13px" id="rnsubscribe">Subscribe to get your number</button>`}
       <div class="note" id="rnnote" style="margin-top:8px"></div>
@@ -7521,7 +7544,7 @@ function requestNumberCard(pending, locked) {
   if (pending) {
     return `<div class="panel">
       <h3>&#128241; Business number requested</h3>
-      <p class="sub">We're provisioning <b>${esc(pending.businessName)}</b>'s number now — you'll be texted here the moment it's live.</p>
+      <p class="sub">Your number request for <b>${esc(pending.businessName)}</b> is queued. Activation depends on number availability and provider checks. This tab will show the number when it is ready.</p>
       <p class="note" style="margin-top:8px">Requested ${esc(dayLabel(pending.createdAt))}</p>
     </div>`;
   }
@@ -9691,10 +9714,10 @@ function renderConnectionRows(slot, map) {
 const CAT_FIELDS = [
   ["sku", "Item / SKU"], ["brand", "Brand"], ["model", "Model"], ["size", "Size"],
   ["description", "Description"], ["price", "Price"], ["cost", "Cost"],
-  ["quantity", "In stock"], ["unit", "Unit"], ["location", "Location"],
+  ["quantity", "In stock"], ["unit", "Unit"], ["location", "Location"], ["duration_minutes","Duration (minutes)"], ["taxable","Taxable (yes/no)"], ["bookable","Bookable (yes/no)"],
 ];
 
-async function renderCatalog(sh) {
+async function renderCatalog(sh, initialImportType = "products") {
   const slot = sh.querySelector("#catslot");
   if (!slot) return;
   let board;
@@ -9733,9 +9756,9 @@ async function renderCatalog(sh) {
   const rows = sources.length
     ? sources.map((s) => {
         const st = s.kind === "api" ? (BRIDGE_LABEL[bridges[s.id]?.state] || BRIDGE_LABEL.offline) : null;
-        return `<div class="kv"><span>${esc(s.name)}${s.kind === "api" ? ' <small style="color:var(--cyan)">· live feed</small> ' + st[0] : ""}<br>
+        return `<div class="kv"><span>${esc(s.name)}${s.archived_at ? " · archived (restorable from History)" : ""}${s.kind === "api" ? ' <small style="color:var(--cyan)">· live feed</small> ' + st[0] : ""}<br>
         <small style="color:var(--dim)">${s.kind === "api" ? (st[1] ? esc(st[1]) : "Prices are fetched at the moment you ask, so they are never stale.") : (s.item_count ? esc(String(s.item_count)) + " items · " : "") + esc(s.as_of || "")}</small></span>
-        <span><button class="btn ghost" data-catdel="${esc(s.id)}" style="padding:6px 11px;font-size:12px;color:var(--red)">Remove</button></span></div>`;
+        <span>${s.kind === "csv" ? `<button class="btn ghost" data-cathistory="${esc(s.id)}">History</button>` : ""}<button class="btn ghost" data-catdel="${esc(s.id)}" style="padding:6px 11px;font-size:12px;color:var(--red)">Remove</button></span></div>`;
       }).join("")
     : `<p class="note" style="margin:0 0 10px">Nothing loaded yet. Ledger will say it doesn't know rather than guess a price.</p>`;
 
@@ -9743,7 +9766,7 @@ async function renderCatalog(sh) {
   slot.innerHTML = `${rows}
     <div class="panel" style="margin-top:12px">
       <b style="font-size:13.5px">📄 Upload a price list</b>
-      <p class="note" style="margin:6px 0 10px">Any spreadsheet — Excel, CSV or tab-separated, any column names. Ledger reads the header and works out which column is the product, the price and the stock count. Uploading a file with the same name replaces the old list.</p>
+      <p class="note" style="margin:6px 0 10px">Excel, CSV or tab-separated files with a single header row. Choose the worksheet, review the proposed columns and any exceptions, then choose a new list or explicitly update an existing one.</p>
       <button class="btn ghost wide" id="catpick">Choose a file</button>
       <input type="file" id="catfile" accept=".csv,.tsv,.txt,.xlsx,.xls,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
       <p class="note" style="margin-top:8px">Need a starting point? <a href="#" id="cattpl">Price list template</a></p>
@@ -9764,11 +9787,12 @@ async function renderCatalog(sh) {
       <p class="note" style="margin-top:8px;font-size:11.5px">Stored encrypted at rest and never shown back to anyone, including us.</p>
     </div>` : ""}`;
 
+  slot.querySelectorAll("[data-cathistory]").forEach(btn=>btn.onclick=()=>catalogHistorySheet(sources.find(s=>s.id===btn.dataset.cathistory)));
   slot.querySelectorAll("[data-catdel]").forEach((btn) => {
     btn.onclick = async () => {
-      if (!confirm("Remove this price list? Ledger will stop quoting from it.")) return;
+      if (!confirm("Archive this uploaded price list? Its items stop appearing in catalog search, and History can restore them. Services already added to your service menu remain there until you remove them in Your business.")) return;
       btn.disabled = true;
-      try { await api("/catalog", { action: "delete-source", source_id: btn.dataset.catdel }); toast("Removed"); renderCatalog(sh); }
+      try { await api("/catalog", { action: "delete-source", source_id: btn.dataset.catdel }); toast("List archived — History can restore it"); renderCatalog(sh); }
       catch (err) { btn.disabled = false; toast(err.message, "err"); }
     };
   });
@@ -9792,7 +9816,7 @@ async function renderCatalog(sh) {
     // Show what it decided BEFORE anything is stored, and let the owner fix a
     // wrong guess right here — a mis-read price column is the one mistake that
     // would quote a customer badly (audit 2026-09-14: Cancel was the only way out).
-    const C = { map: null };
+    const C = { map: null, importType:initialImportType, sourceId: "", requestId: crypto.randomUUID() };
     const paint = (look) => {
       const fields = look.fields || CAT_FIELDS.map(([k]) => k);
       const labelOf = Object.fromEntries(CAT_FIELDS);
@@ -9801,9 +9825,9 @@ async function renderCatalog(sh) {
           ${(look.headers || []).filter(Boolean).map((h) => `<option value="${esc(h)}"${look.column_map?.[f] === h ? " selected" : ""}>${esc(h)}</option>`).join("")}</select></label>`;
       const found = CAT_FIELDS.filter(([key]) => look.column_map?.[key])
         .map(([key, label]) => `<div class="kv"><span>${esc(label)}</span><span style="color:var(--cyan);font-size:12.5px">${esc(look.column_map[key])}</span></div>`).join("");
-      const preview = (look.preview || []).slice(0, 3).map((p) => `<div class="note" style="margin-top:4px">${esc([p.description || p.model || p.sku, p.brand, p.size].filter(Boolean).join(" · "))}${p.price != null ? ` — <b>${esc(money(p.price))}</b>` : ""}${p.quantity != null ? ` · ${esc(String(p.quantity))} in stock` : ""}</div>`).join("");
+      const preview = (look.preview || []).slice(0, 3).map((p) => `<div class="note" style="margin-top:4px">${esc([p.description || p.model || p.sku, p.brand, p.size].filter(Boolean).join(" · "))}${p.price != null ? ` — <b>${esc(money(p.price))}</b>` : ""}${p.quantity != null ? ` · ${esc(String(p.quantity))} in stock` : ""}${Object.keys(p.attributes||{}).some(k=>!k.startsWith("__")) ? `<details><summary>All preserved extra fields</summary>${Object.entries(p.attributes).filter(([k])=>!k.startsWith("__")).map(([k,v])=>`<p style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(k)}: ${esc(String(v))}</p>`).join("")}</details>` : ""}</div>`).join("");
       stage.innerHTML = `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
-        <b style="font-size:13px">${esc(String(look.row_count))} rows${look.truncated ? " (first 25,000)" : ""}</b>
+        <p class="note">${esc(file.name)}${file.ledgerSheet ? ` · ${esc(file.ledgerSheet)}` : ""}</p><label>What is in this file?<select id="cat-kind" class="cmpinput"><option value="products"${C.importType==="products" ? " selected" : ""}>Products &amp; inventory</option><option value="services"${C.importType==="services" ? " selected" : ""}>Services for invoices &amp; booking</option></select></label>${C.importType==="services" ? `<p class="note">Services go into your business menu and invoice choices. Duration is needed for booking. Taxable defaults to Yes; map a Taxable column for exemptions. Existing services are updated by name; other menu items stay.</p>` : ""}<label>Import destination<select id="cat-intent" class="cmpinput"><option value="">Add a new price list</option>${(board.sources || []).filter(s=>s.kind==="csv").map(s=>`<option value="${esc(s.id)}"${C.sourceId===s.id ? " selected" : ""}>Update: ${esc(s.name)}</option>`).join("")}</select></label><b style="font-size:13px">${esc(String(look.row_count))} rows${look.truncated ? " (first 25,000)" : ""}</b>
         ${look.summary ? `<p class="note" style="margin:5px 0 9px">${esc(look.summary)}</p>` : ""}
         ${look.note ? `<p class="note" style="margin:5px 0 9px">${esc(look.note)}</p>` : ""}
         ${look.warning ? `<p class="note" style="color:var(--orange);margin:5px 0 9px">⚠️ ${esc(look.warning)}</p>` : ""}
@@ -9812,14 +9836,17 @@ async function renderCatalog(sh) {
         <details${look.can_import === false ? " open" : ""}><summary class="eyebrow" style="cursor:pointer;margin:10px 0">Fix a column</summary>
           <div class="cmpsect">${fields.map(pick).join("")}</div></details>
         ${preview ? `<div class="eyebrow" style="margin-top:8px">PREVIEW</div>${preview}` : ""}
+        ${look.issue_count ? `<details><summary>${look.issue_count} issues to review before import</summary>${look.issues.map(i=>`<p class="note">Row ${i.line}: ${esc(i.issues.join("; "))}</p>`).join("")}</details>` : ""}
         ${look.unmapped?.length ? `<p class="note" style="margin-top:8px;font-size:11.5px">Kept alongside each item: ${esc(look.unmapped.slice(0, 8).join(", "))}${look.unmapped.length > 8 ? "…" : ""}</p>` : ""}
         <button class="btn primary wide" style="margin-top:12px" id="catgo"${look.can_import === false ? " disabled" : ""}>Import ${esc(String(look.row_count))} items</button>
         <button class="btn ghost wide" style="margin-top:8px" id="catcancel">Cancel</button></div>`;
+      stage.querySelector("#cat-kind").onchange=async e=>{C.importType=e.target.value;C.requestId=crypto.randomUUID();paint(await api("/catalog",{action:"analyze",filename:file.name,csv,column_map:C.map || look.column_map,import_type:C.importType}))};
+      stage.querySelector("#cat-intent").onchange=e=>{C.sourceId=e.target.value;C.requestId=crypto.randomUUID()};
       stage.querySelectorAll("[data-catf]").forEach((sel) => sel.onchange = async () => {
         C.map = { ...(look.column_map || {}) };
         if (sel.value) C.map[sel.dataset.catf] = sel.value; else delete C.map[sel.dataset.catf];
         stage.querySelector("#catgo").disabled = true;
-        try { paint(await api("/catalog", { action: "analyze", filename: file.name, csv, column_map: C.map })); }
+        try { paint(await api("/catalog", { action: "analyze", filename: file.name, csv, import_type:C.importType, column_map: C.map })); }
         catch (err) { toast(err.message, "err"); }
       });
       stage.querySelector("#catcancel").onclick = () => { stage.innerHTML = ""; };
@@ -9827,14 +9854,14 @@ async function renderCatalog(sh) {
         const go = ev.currentTarget;
         go.disabled = true; go.textContent = "Importing…";
         try {
-          const done = await api("/catalog", { action: "import", filename: file.name, csv, column_map: look.column_map });
+          const done = await api("/catalog", { action: "import", filename: file.name, csv, column_map: look.column_map,import_type:C.importType,request_id:C.requestId,keep_existing:!C.sourceId,replace_source_id:C.sourceId || undefined,expected_revision:(board.sources || []).find(s=>s.id===C.sourceId)?.revision });
           toast(`${done.imported} items loaded${done.replaced ? " — old copy replaced" : ""}`);
           renderCatalog(sh);
         } catch (err) { go.disabled = false; go.textContent = "Try import again"; toast(err.message, "err"); }
       };
     };
     stage.innerHTML = `<p class="note" style="margin-top:10px">Working out your columns…</p>`;
-    try { paint(await api("/catalog", { action: "analyze", filename: file.name, csv })); }
+    try { paint(await api("/catalog", { action: "analyze", filename: file.name, csv,import_type:C.importType })); }
     catch (err) { stage.innerHTML = `<p class="note" style="color:var(--red);margin-top:10px">${esc(err.message)}</p>`; return; }
   };
 
@@ -10538,7 +10565,8 @@ function onboardInterview(bizName) {
     S.cal = null; setTab("home");
     openChat();
     sys("🎉 " + bizName + " is set up — your 14-day free trial is live." +
-      (saved ? " I know what you do, what you charge and when you're open — ask me anything." : " Ask me anything. Tell me about the business any time from Home → Get set up."));
+      " Review your setup checklist before the first real job.");
+    firstWorkingDaySheet();
   }, { firstRun: true, bizName });
 }
 
@@ -11239,7 +11267,7 @@ supa.auth.onAuthStateChange((event, s) => {
 // The server never writes during the check step; import is idempotent, so a
 // nervous second run adds nothing.
 const MIGRATE_FIELD_LABELS = {
-  first_name: "First name", last_name: "Last name", full_name: "Full name (one column)", company: "Company", email: "Email",
+  first_name: "First name", last_name: "Last name", full_name: "Full name (one column)", display_name: "Display name", company: "Company", email: "Email",
   phone: "Phone", phone2: "Second phone", address: "Address", address2: "Unit / address line 2", city: "City", province: "Province / state",
   postal: "Postal / zip code", country: "Country", notes: "Notes", tags: "Tags", lead_source: "Lead source", customer_type: "Customer type",
   access_code: "Gate / access code", customer_source_id: "Customer ID",
@@ -11249,15 +11277,26 @@ const MIGRATE_FIELD_LABELS = {
 // Excel (.xlsx/.xls) is what most shops actually export. Read the first sheet in the browser and hand the
 // backend the same CSV text a .csv file would give — SheetJS is fetched only when an Excel file is chosen.
 async function readSpreadsheetAsCsv(file) {
-  if (!/\.xlsx?$/i.test(file.name || "")) {
-    return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsText(file); });
-  }
+  if (!/\.(xlsx|xlsm|xls)$/i.test(file.name || "")) return file.text();
+  if (file.size > 6000000) throw new Error("That file is over 6 MB. Split it before importing; nothing was saved.");
   const XLSX = await import("https://esm.sh/xlsx@0.18.5");
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(new Uint8Array(buf), { type: "array" });
-  const first = wb.SheetNames[0];
-  if (!first) throw new Error("That Excel file has no sheets in it.");
-  return XLSX.utils.sheet_to_csv(wb.Sheets[first], { blankrows: false });
+  const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
+  if (!wb.SheetNames.length) throw new Error("That Excel file has no sheets in it.");
+  let selected = wb.SheetNames[0];
+  if (wb.SheetNames.length > 1) selected = await new Promise((resolve, reject) => {
+    const dialog = document.createElement("dialog");
+    dialog.style.cssText = "max-width:90vw;width:430px;padding:24px;border-radius:18px;background:var(--bg,#111827);color:var(--text,#fff);border:1px solid #777;z-index:99999";
+    dialog.innerHTML = `<h2>Choose a worksheet</h2><p>${esc(file.name)} has ${wb.SheetNames.length} sheets. Only the sheet you choose will be imported.</p><select aria-label="Worksheet" class="cmpinput" style="width:100%">${wb.SheetNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("")}</select><pre style="white-space:pre-wrap;max-height:240px;overflow:auto"></pre><button class="btn primary" data-choose>Use this sheet</button> <button class="btn" data-cancel>Cancel</button>`;
+    const choice = dialog.querySelector("select"), preview=dialog.querySelector("pre");
+    const show=()=>{preview.textContent=XLSX.utils.sheet_to_csv(wb.Sheets[choice.value],{blankrows:false}).split("\n").slice(0,6).join("\n")}; choice.onchange=show; show();
+    const close=()=>{dialog.close();dialog.remove()};
+    dialog.querySelector("[data-choose]").onclick=()=>{const name=choice.value;close();resolve(name)};
+    const cancel=()=>{close();reject(new Error("Worksheet selection cancelled. Nothing was imported."))};
+    dialog.querySelector("[data-cancel]").onclick=cancel; dialog.oncancel=e=>{e.preventDefault();cancel()};
+    document.body.append(dialog);dialog.showModal();
+  });
+  file.ledgerSheet = selected;
+  return XLSX.utils.sheet_to_csv(wb.Sheets[selected], { blankrows: false });
 }
 // The address lives in notes as "Address: …" — show it in the preview so a plumber can see their service addresses came through.
 const previewAddress = (c) => ((c?.notes || "").split("\n").find((l) => l.startsWith("Address: ")) || "").slice(9, 80);
@@ -11265,8 +11304,11 @@ function downloadCsv(name, csv) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = name; a.click();
 }
+function catalogImportSheet(kind="products") {
+  sheet(`<h2>${kind==="services" ? "Import services" : "Import products"}</h2><p class="note">Choose the worksheet, check the columns and review every exception before saving.</p><div id="catslot"></div>`,sh=>renderCatalog(sh,kind));
+}
 function bringDataSheet() {
-  const C = { file: null, csv: "", analysis: null, map: {}, busy: false, result: null, error: "" };
+  const C = { file: null, csv: "", analysis: null, map: {}, busy: false, result: null, error: "", mergeMode:"keep" };
   const paint = () => {
     const box = document.querySelector("#mgbox"); if (!box) return;
     if (C.result) {
@@ -11290,11 +11332,16 @@ function bringDataSheet() {
     }
     if (!C.analysis) {
       box.innerHTML = `
-        <p class="sh-sub">Export your customers${isAuto() ? " (and vehicles)" : ""} from your old system as an Excel file or CSV, then drop the file here. Works with any export — Jobber, Housecall Pro, ServiceTitan, QuickBooks, Square, Fresha, Vagaro, Jane, Booksy, Shopmonkey, Tekmetric, Google Contacts or a plain spreadsheet — in English or French.</p>
+        <button class="btn wide" id="mgfirst">Your first working day — setup checklist</button><button class="btn ghost wide" id="mghistory">Import history &amp; recovery</button><div class="cmpsect"><b>Bring your business data</b><p class="note">Choose where this file belongs.</p><button class="btn" id="mgproducts">Products &amp; inventory</button> <button class="btn" id="mgservices">Service menu</button></div>
+        <p class="sh-sub">Export your customers${isAuto() ? " (and vehicles)" : ""} from your old system as an Excel file or CSV, then drop the file here. Preview and map customer exports from systems such as Jobber, Housecall Pro, ServiceTitan, QuickBooks, Square, Fresha, Vagaro, Jane, Booksy, Shopmonkey, Tekmetric, Google Contacts or a plain spreadsheet — in English or French.</p>
         <input type="file" id="mgfile" accept=".csv,.tsv,.txt,.xlsx,.xls,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
         <button class="btn primary wide" id="mgpick" ${C.busy ? "disabled" : ""}>${C.busy ? "Reading…" : "Choose a file"}</button>
         <p class="note" style="margin-top:10px">Need a starting point? <a href="#" id="mgtplc">Customer template</a>${isAuto() ? ` · <a href="#" id="mgtplv">Vehicle template</a>` : ""}</p>
         ${C.error ? `<p class="note err">${esc(C.error)}</p>` : ""}`;
+      box.querySelector("#mgfirst").onclick=firstWorkingDaySheet;
+      box.querySelector("#mghistory").onclick=importHistorySheet;
+      box.querySelector("#mgproducts").onclick=()=>catalogImportSheet("products");
+      box.querySelector("#mgservices").onclick=()=>catalogImportSheet("services");
       const input = box.querySelector("#mgfile");
       box.querySelector("#mgpick").onclick = () => input.click();
       input.onchange = async () => {
@@ -11318,10 +11365,10 @@ function bringDataSheet() {
     const pick = (f) => `<label class="emailrow">${esc(MIGRATE_FIELD_LABELS[f] || f)}<select data-mgf="${f}" class="cmpinput">
         <option value="">— not in this file —</option>
         ${a.headers.filter(Boolean).map((h) => `<option value="${esc(h)}"${C.map[f] === h ? " selected" : ""}>${esc(h)}</option>`).join("")}</select></label>`;
-    const nameOk = C.map.first_name || C.map.last_name || C.map.full_name || C.map.company;
+    const nameOk = C.map.first_name || C.map.last_name || C.map.full_name || C.map.company || C.map.display_name;
     box.innerHTML = `
       <div class="cmpsect">
-        <div class="lanehead"><span class="eyebrow">${esc(C.file?.name || "file")}</span><b>${a.row_count.toLocaleString()} row${a.row_count === 1 ? "" : "s"}</b></div>
+        <div class="lanehead"><span class="eyebrow">${esc(C.file?.name || "file")}${C.file?.ledgerSheet ? ` · ${esc(C.file.ledgerSheet)}` : ""}</span><b>${a.row_count.toLocaleString()} row${a.row_count === 1 ? "" : "s"}</b></div>
         <p>Found <b>${a.summary.customers}</b> customer${a.summary.customers === 1 ? "" : "s"}${a.kind === "vehicles" ? ` and <b>${a.summary.vehicles}</b> vehicle${a.summary.vehicles === 1 ? "" : "s"}` : ""}. ${a.summary.with_email} with an email, ${a.summary.with_phone} with a phone.${a.needs_review ? ` <b>${a.needs_review}</b> need a look after import.` : ""}</p>
         ${a.truncated ? `<p class="note err">Only the first 20,000 rows will import — split the file for the rest.</p>` : ""}
         ${nameOk ? "" : `<p class="note err">Pick which column holds the customer's name.</p>`}
@@ -11330,8 +11377,9 @@ function bringDataSheet() {
         <div class="cmpsect">${fields.map(pick).join("")}</div></details>
       ${a.kept_in_notes?.length ? `<p class="note" style="margin:8px 0 0">Also kept on each customer, as notes: ${esc(a.kept_in_notes.slice(0, 8).join(", "))}${a.kept_in_notes.length > 8 ? "…" : ""}</p>` : ""}
       <div class="cmpsect"><div class="eyebrow">Preview</div>
-        ${(a.preview || []).map((p) => `<div class="note" style="margin-top:6px">${p.customer ? esc(`${p.customer.first_name} ${p.customer.last_name}`.trim() + (p.customer.company ? ` · ${p.customer.company}` : "") + (p.customer.email ? ` · ${p.customer.email}` : "") + (p.customer.phone ? ` · ${p.customer.phone}` : "") + (previewAddress(p.customer) + (p.customer.extras ? ` · ${p.customer.extras}` : "") ? ` · ${previewAddress(p.customer)}` : "")) : "<i>no customer</i>"}${p.vehicle ? esc(` — ${[p.vehicle.year, p.vehicle.make, p.vehicle.model].filter(Boolean).join(" ")}${p.vehicle.vin ? ` (${p.vehicle.vin})` : p.vehicle.plate ? ` (${p.vehicle.plate})` : ""}`) : ""}${p.issues.length ? ` <span style="color:var(--gold)">· ${esc(p.issues.join("; "))}</span>` : ""}</div>`).join("")}
+        ${(a.preview || []).map((p) => `<div class="note" style="margin-top:6px">${p.customer ? esc(`${p.customer.first_name} ${p.customer.last_name}`.trim() + (p.customer.company ? ` · ${p.customer.company}` : "") + (p.customer.email ? ` · ${p.customer.email}` : "") + (p.customer.phone ? ` · ${p.customer.phone}` : "") + (p.customer.extras ? ` · ${p.customer.extras}` : "")) : "<i>no customer</i>"}${p.customer?.notes ? `<details><summary>All saved notes and extra fields</summary><pre style="white-space:pre-wrap">${esc(p.customer.notes)}</pre></details>` : ""}${p.vehicle ? esc(` — ${[p.vehicle.year, p.vehicle.make, p.vehicle.model].filter(Boolean).join(" ")}${p.vehicle.vin ? ` (${p.vehicle.vin})` : p.vehicle.plate ? ` (${p.vehicle.plate})` : ""}`) : ""}${p.issues.length ? ` <span style="color:var(--gold)">· ${esc(p.issues.join("; "))}</span>` : ""}</div>`).join("")}
       </div>
+      ${(a.merge_preview || []).some(r=>r.existing) ? `<div class="cmpsect"><label>When uploaded values conflict<select id="mgmerge" class="cmpinput"><option value="keep"${C.mergeMode === "keep" ? " selected" : ""}>Keep saved values</option><option value="replace"${C.mergeMode === "replace" ? " selected" : ""}>Use uploaded nonblank values</option></select></label><p class="note">Blank cells never erase saved information. All original values stay in the import archive.</p><details><summary>Review repeat-upload changes</summary>${a.merge_preview.filter(r=>r.existing).map(r=>`<p class="note">Row ${r.line}</p>${r.changes.map(c=>`<p class="note">${esc(c.field)}: ${esc(c.status)} · saved: ${esc(String(c.previous ?? ""))} · uploaded: ${esc(String(c.incoming ?? ""))}</p>`).join("")}`).join("")}</details></div>` : ""}
       <button class="btn primary wide" id="mggo" ${C.busy || !nameOk ? "disabled" : ""}>${C.busy ? "Importing…" : `Import ${a.summary.customers} customer${a.summary.customers === 1 ? "" : "s"}${a.kind === "vehicles" ? ` + ${a.summary.vehicles} vehicles` : ""}`}</button>
       <button class="linkbtn" id="mgback" style="margin-top:8px">Choose a different file</button>
       <p class="note" style="margin-top:8px">Already-known customers are matched by email, phone or name and never duplicated. Running the same file twice adds nothing.</p>
@@ -11344,9 +11392,10 @@ function bringDataSheet() {
       C.busy = false; paint();
     });
     box.querySelector("#mgback").onclick = () => { Object.assign(C, { file: null, csv: "", analysis: null, map: {}, error: "" }); paint(); };
+    if(box.querySelector("#mgmerge")) box.querySelector("#mgmerge").onchange=e=>{C.mergeMode=e.target.value};
     box.querySelector("#mggo").onclick = async () => {
       C.busy = true; C.error = ""; paint();
-      try { C.result = await api("/migrate/import", { csv: C.csv, file_name: C.file?.name, column_map: C.map, kind: a.kind, source: (C.file?.name || "import").replace(/\.[^.]+$/, "").slice(0, 40) }); toast("Import finished"); }
+      try { C.result = await api("/migrate/import", { csv: C.csv, file_name: C.file?.name, column_map: C.map, kind: a.kind, merge_mode:C.mergeMode, source: (C.file?.name || "import").replace(/\.[^.]+$/, "").slice(0, 40) }); toast("Import finished"); }
       catch (e) { C.error = e.message; }
       C.busy = false; paint();
     };
@@ -11356,9 +11405,9 @@ function bringDataSheet() {
 
 function exportDataSheet() {
   sheet(`<h2>Export your data</h2>
-    <p class="sh-sub">Everything downloads as a spreadsheet you can open anywhere, in the same layout Ledger can import again.</p>
+    <p class="sh-sub">Choose a spreadsheet for everyday use or an exact-data archive. CSV text is made safe to open in spreadsheets; archives retain the original values. Archives are for portability, not a one-click whole-business restore.</p>
     <div class="cmpsect">
-      <button class="btn primary wide" id="mgxc">Customers</button>
+      <button class="btn primary wide" id="mgxc">Customers</button><button class="btn wide" id="mgxbusiness">Business records archive (ZIP)</button><button class="btn wide" id="mgxcat">Catalog &amp; import history archive</button><button class="btn wide" id="mgxhistory">Customer import originals &amp; recovery</button>
       <button class="btn wide" id="mgxv" style="margin-top:8px">Vehicles (with their customers)</button>
       <button class="btn wide" id="mgxi" style="margin-top:8px">Invoices &amp; payments</button>
     </div>
@@ -11369,6 +11418,9 @@ function exportDataSheet() {
       try { const r = await api("/migrate/export", { kind }); downloadCsv(name, r.csv); note.textContent = `${r.count.toLocaleString()} ${kind} exported.`; }
       catch (e) { note.textContent = e.message; }
     };
+    sh.querySelector("#mgxbusiness").onclick=async()=>{note.textContent="Preparing…";try{downloadBooksExport(await booksApi({action:"archive"}));note.textContent="Business records archive prepared. See its manifest for coverage and exclusions."}catch(e){note.textContent=e.message}};
+    sh.querySelector("#mgxcat").onclick=async()=>{note.textContent="Preparing…";try{const r=await api("/catalog",{action:"export"});downloadJson("ledger-catalog-archive.json",r.archive);note.textContent="Catalog, original values and retained versions exported."}catch(e){note.textContent=e.message}};
+    sh.querySelector("#mgxhistory").onclick=importHistorySheet;
     sh.querySelector("#mgxc").onclick = () => run("customers", "ledger-customers.csv");
     sh.querySelector("#mgxv").onclick = () => run("vehicles", "ledger-vehicles.csv");
     sh.querySelector("#mgxi").onclick = async () => {
@@ -11465,3 +11517,66 @@ setInterval(async()=>{
   await renderPhone(d);
  } catch (_) {}
 },20000);
+
+async function schedulingResourcesSheet() {
+ const sh=sheet('<h2>Staff & resource availability</h2><p class="note">Each named resource has its own capacity, supported services, hours and time off. Crew dispatch is separate.</p><div id="resources"><p role="status">Loading…</p></div>');
+ try {const r=await api('/google-calendar/resources',{});if(!sh.isConnected)return;const box=sh.querySelector('#resources');box.innerHTML=(r.resources||[]).map(x=>`<button class="btn wide" data-resource="${esc(x.id)}">${esc(x.name)} · capacity ${x.capacity}${x.active?'':' · inactive'}</button>`).join('')+'<button class="btn primary wide" id="resource-new">Add staff member or resource</button>';box.querySelectorAll('[data-resource]').forEach(b=>b.onclick=()=>schedulingResourceEditor(r.resources.find(x=>x.id===b.dataset.resource)));box.querySelector('#resource-new').onclick=()=>schedulingResourceEditor();}
+ catch(e){sh.querySelector('#resources').textContent=e.message;}
+}
+async function schedulingResourceEditor(existing=null) {
+ const days=['mon','tue','wed','thu','fri','sat','sun'];let services=[];
+ try{services=(await booksApi({action:'shortcuts'})).shortcuts||[]}catch(e){toast(e.message,'err');return}
+ const r=existing||{name:'',capacity:1,active:true,services:[],working_hours:{},time_off:[]};const off=[...r.time_off];
+ const custom=Object.keys(r.working_hours||{}).length>0;
+ const sh=sheet(`<h2>${existing?'Edit resource':'New resource'}</h2><label class="emailrow">Name<input id="rs-name" class="cmpinput" value="${esc(r.name)}"></label><label class="emailrow">Capacity<input id="rs-cap" class="cmpinput" type="number" min="1" max="100" value="${r.capacity}"></label><label class="resource-option"><input id="rs-active" type="checkbox"${r.active?' checked':''}> Available for new appointments</label>
+ <h3>Working hours · business local time</h3><label class="resource-option"><input id="rs-custom" type="checkbox"${custom?' checked':''}> Use individual working hours</label><p class="note">Otherwise the business's opening hours apply.</p><div id="rs-hours">${days.map(d=>`<div class="resource-hours-row"><label class="resource-option"><input type="checkbox" data-rs-day="${d}"${r.working_hours?.[d]?' checked':''}> ${d.toUpperCase()}</label><input type="time" data-rs-open="${d}" value="${esc(r.working_hours?.[d]?.open||'09:00')}"><span>to</span><input type="time" data-rs-close="${d}" value="${esc(r.working_hours?.[d]?.close||'17:00')}"></div>`).join('')}</div>
+ <h3>Supported services</h3><p class="note">Leave all unchecked to accept any service.</p>${services.map(s=>`<label class="resource-option"><input type="checkbox" data-rs-skill="${esc(s.id)}"${r.services.includes(s.id)?' checked':''}> ${esc(s.name)}</label>`).join('')}
+ <h3>Time off · your device's local time</h3><div id="rs-off"></div><label>From<input id="rs-from" class="cmpinput" type="datetime-local"></label><label>Until<input id="rs-until" class="cmpinput" type="datetime-local"></label><button class="btn" id="rs-add-off">Add time off</button><p class="note err" id="rs-error"></p><button class="btn primary wide" id="rs-save">Save resource</button>`);
+ const paintOff=()=>{sh.querySelector('#rs-off').innerHTML=off.map((t,i)=>`<p class="note">${esc(new Date(t.start).toLocaleString())} to ${esc(new Date(t.end).toLocaleString())} <button data-rs-remove="${i}">Remove</button></p>`).join('');sh.querySelectorAll('[data-rs-remove]').forEach(b=>b.onclick=()=>{off.splice(Number(b.dataset.rsRemove),1);paintOff()})};paintOff();
+ const toggleHours=()=>{sh.querySelector('#rs-hours').hidden=!sh.querySelector('#rs-custom').checked};sh.querySelector('#rs-custom').onchange=toggleHours;toggleHours();
+ sh.querySelector('#rs-add-off').onclick=()=>{const a=new Date(sh.querySelector('#rs-from').value),b=new Date(sh.querySelector('#rs-until').value);if(!Number.isFinite(a.getTime())||!Number.isFinite(b.getTime())||b<=a){sh.querySelector('#rs-error').textContent='Choose a valid start and later end.';return}off.push({start:a.toISOString(),end:b.toISOString()});paintOff()};
+ sh.querySelector('#rs-save').onclick=async e=>{const button=e.currentTarget;button.disabled=true;sh.querySelector('#rs-error').textContent='';const hours={};if(sh.querySelector('#rs-custom').checked)for(const d of days)hours[d]=sh.querySelector(`[data-rs-day="${d}"]`).checked?{open:sh.querySelector(`[data-rs-open="${d}"]`).value,close:sh.querySelector(`[data-rs-close="${d}"]`).value}:null;
+ try{await api('/google-calendar/resource-save',{id:existing?.id,name:sh.querySelector('#rs-name').value,capacity:Number(sh.querySelector('#rs-cap').value),active:sh.querySelector('#rs-active').checked,working_hours:hours,time_off:off,services:[...sh.querySelectorAll('[data-rs-skill]:checked')].map(x=>x.dataset.rsSkill)});toast('Resource saved');schedulingResourcesSheet()}catch(error){sh.querySelector('#rs-error').textContent=error.message;button.disabled=false}};
+}
+
+function downloadJson(filename,value) {
+ const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:"application/json"}));
+ const link=document.createElement("a");link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function importHistorySheet() {
+ sheet(`<h2>Import history &amp; recovery</h2><p class="note">Download original values and row exceptions. Customer-only imports can be undone if no later edits or linked records would be lost. Vehicle and QuickBooks imports need record-by-record review.</p><div id="ihrows">Loading…</div>`,async sh=>{
+ const slot=sh.querySelector("#ihrows");
+ try {const r=await api("/migrate/history",{});slot.innerHTML=(r.imports||[]).map(i=>`<div class="cmpsect"><b>${esc(i.file_name||"Import")}</b><p class="note">${esc(new Date(i.created_at).toLocaleString())} · ${i.row_count} rows${i.undone_at ? " · Undone" : ""}</p><button class="btn" data-original="${i.id}">Download original &amp; exceptions</button>${i.can_undo ? `<button class="btn ghost" data-undo="${i.id}">Undo this import</button>` : ""}<p class="note" data-result="${i.id}"></p></div>`).join("") || '<p class="note">No imports yet.</p>';
+ slot.querySelectorAll("[data-original]").forEach(btn=>btn.onclick=async()=>{btn.disabled=true;try{const data=await api("/migrate/original",{import_id:btn.dataset.original});downloadJson("ledger-import-original.json",data.archive)}catch(e){slot.querySelector(`[data-result="${btn.dataset.original}"]`).textContent=e.message}finally{btn.disabled=false}});
+ slot.querySelectorAll("[data-undo]").forEach(btn=>btn.onclick=async()=>{if(!confirm("Undo the customer changes from this import? Ledger will refuse if later changes or linked records would be lost."))return;btn.disabled=true;try{await api("/migrate/undo",{import_id:btn.dataset.undo});toast("Import undone");importHistorySheet()}catch(e){slot.querySelector(`[data-result="${btn.dataset.undo}"]`).textContent=e.message;btn.disabled=false}});
+ }catch(e){slot.textContent=e.message;}
+ });
+}
+function catalogHistorySheet(source) {
+ sheet(`<h2>${esc(source.name)} — history</h2><p class="note">Restore a previous version as the current list. The current version remains in history. Service restores also update the linked service menu.</p><div id="chrows">Loading…</div>`,async sh=>{
+ const slot=sh.querySelector("#chrows");
+ try {const r=await api("/catalog",{action:"history",source_id:source.id});slot.innerHTML=(r.versions||[]).map(v=>`<div class="cmpsect"><b>Version ${v.revision}</b><p class="note">${esc(new Date(v.created_at).toLocaleString())}</p>${v.revision===source.revision ? '<p>Current version</p>' : `<button class="btn" data-restore="${v.revision}">Restore this version</button>`}</div>`).join("")||"No retained versions yet.";
+ slot.querySelectorAll("[data-restore]").forEach(btn=>btn.onclick=async()=>{if(!confirm("Replace the current list with this retained version? The current version stays in history."))return;btn.disabled=true;try{await api("/catalog",{action:"restore",source_id:source.id,revision:Number(btn.dataset.restore),expected_revision:source.revision,request_id:crypto.randomUUID()});toast("Version restored");catalogImportSheet(source.import_type||"products")}catch(e){toast(e.message);btn.disabled=false}});
+ }catch(e){slot.textContent=e.message;}
+ });
+}
+
+function phoneGuidedDemo(){
+ let step=0,choice="booking";
+ const paint=()=>{const b=document.querySelector("#pdcontent");if(!b)return;
+ const stages=[
+ `<h3>A customer calls while you are busy</h3><p>The sample business misses Alex's call. With auto-text enabled, Ledger sends the owner's saved reply.</p><blockquote>Thanks for calling Example Services. Sorry we missed you — what can we help with?</blockquote><button class="btn primary" id="pdnext">See the customer's reply</button>`,
+ `<h3>The conversation continues</h3><p>Choose a sample reply. These are scripted examples, not answers from your own business.</p><button class="btn" data-choice="booking">I would like an appointment</button> <button class="btn" data-choice="human">I need to speak to the owner</button>`,
+ choice==="booking" ? `<h3>Front Desk checks before offering a time</h3><blockquote>Alex: I would like a consultation.</blockquote><p>In this sample, the saved service takes 30 minutes and the calendar has an opening. Front Desk collects the required contact details, offers a real available time, and waits for the customer's agreement.</p><blockquote>Alex: Tuesday at 10 works for me.</blockquote><button class="btn primary" id="pdnext">See the outcome</button>` : `<h3>A person takes over</h3><p>A request needing human judgment goes to Needs you. The owner can open the conversation and reply directly; Front Desk does not invent an answer.</p><button class="btn primary" id="pdnext">See the outcome</button>`,
+ `<h3>${choice==="booking" ? "A reviewed booking" : "A clear handoff"}</h3><p>${choice==="booking" ? "The live service checks the slot again before confirming. If it was taken, it offers another time. The owner sees the appointment and conversation." : "The owner sees the customer's message and the reason help is needed."}</p><p><b>Nothing was sent or saved in this walkthrough.</b> Live calling/texting needs a paid subscription and provider activation. Front Desk is a Pro feature. This sample does not test carrier delivery or your business's setup.</p><button class="btn" id="pdreset">Try again</button>`];b.innerHTML=stages[step];
+ b.querySelectorAll("[data-choice]").forEach(x=>x.onclick=()=>{choice=x.dataset.choice;step=2;paint()});if(b.querySelector("#pdnext"))b.querySelector("#pdnext").onclick=()=>{step++;paint()};if(b.querySelector("#pdreset"))b.querySelector("#pdreset").onclick=()=>{step=0;paint()};};
+ sheet(`<h2>Phone walkthrough</h2><p class="eyebrow">SCRIPTED SAMPLE · NO LIVE ACTIVITY</p><div id="pdcontent" aria-live="polite"></div>`,paint);
+}
+
+function firstWorkingDaySheet(){
+ sheet(`<h2>Your first working day</h2><p class="note">Start with a small representative import. Review saved details, prices, taxes and availability before confirming real work.</p><div id="first-steps">Checking saved setup…</div><p><a href="/business-fit.html" target="_blank" rel="noopener">Business-fit guide</a></p>`,async sh=>{
+ const slot=sh.querySelector("#first-steps");try{const r=await api("/workspace-profile",{action:"readiness"});slot.innerHTML=r.steps.map(s=>`<button class="btn wide" data-first="${s.id}" style="margin:7px 0;text-align:left">${s.done ? "✓" : "○"} ${esc(s.title)}</button>`).join("")+`<p class="note">${esc(r.note)}</p><button class="btn wide" id="first-staff">Staff, resource capacity &amp; time off</button><button class="btn wide" id="first-demo">Try the phone walkthrough</button>`;
+ const actions={profile:()=>shopProfileSheet(),customers:bringDataSheet,services:()=>catalogImportSheet("services"),tax:()=>booksSettingsSheet(),invoice:()=>composerSheet("invoice"),booking:()=>bookingSheet()};
+ slot.querySelectorAll("[data-first]").forEach(btn=>btn.onclick=()=>actions[btn.dataset.first]());slot.querySelector("#first-staff").onclick=schedulingResourcesSheet;slot.querySelector("#first-demo").onclick=phoneGuidedDemo;
+ }catch(e){slot.textContent=e.message;const retry=document.createElement("button");retry.className="btn";retry.textContent="Retry";retry.onclick=firstWorkingDaySheet;slot.append(retry);}});
+}
