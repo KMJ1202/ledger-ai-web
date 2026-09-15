@@ -30,7 +30,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 172;
+const APP_BUILD = 173;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -2604,7 +2604,7 @@ async function booksSettingsSheet() {
       await booksApi({ action: "settings-save",registration_status:wrap.querySelector("#sregistration").value,
         tax_name: wrap.querySelector("#stax").value, tax_rate: Number(wrap.querySelector("#srate").value) / 100,
         second_name: wrap.querySelector("#stax2").value.trim(),
-        second_rate: wrap.querySelector("#stax2").value.trim() ? Number(wrap.querySelector("#srate2").value) / 100 : 0,
+        second_rate: Number(wrap.querySelector("#srate2").value) / 100,
         registration_number: wrap.querySelector("#sreg").value, prefix: wrap.querySelector("#spre").value,
         payment_instructions: wrap.querySelector("#spay").value,
         accent_color: wrap.querySelector("#saccent").value,
