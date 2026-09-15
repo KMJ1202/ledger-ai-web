@@ -158,7 +158,7 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
   <div class="expired" id="expired">
     <div class="icon">✕</div>
     <h2>Link expired</h2>
-    <p id="expiredmsg">Ask the shop for a new one.</p>
+    <p id="expiredmsg">Ask the office for a new one.</p>
   </div>
 </div>
 <p class="foot">Powered by <a href="https://heyledger.ai">Ledger AI</a></p>
@@ -319,7 +319,7 @@ function renderNotice(loc) {
   if (!loc || loc.noticeAcknowledged || noticeDismissed) { host.innerHTML = ""; return; }
   host.innerHTML = `<div class="notice"><div class="in">
     <h3>📍 Where you are, only while you're working</h3>
-    <div class="row"><span>🕒</span><span>Your shop sees your location <b>only while you're clocked in</b>.</span></div>
+    <div class="row"><span>🕒</span><span>Your employer sees your location <b>only while you're clocked in</b>.</span></div>
     <div class="row"><span>⏹</span><span>It <b>stops by itself</b> the moment you clock out. Nothing is sent off the clock.</span></div>
     <div class="row"><span>👀</span><span>You see what they see — this page shows the same status.</span></div>
     <p>Location is used for drive times to your jobs and to tell customers when you're on the way.</p>
@@ -366,7 +366,7 @@ function renderClock(clock) {
   const on = clock.clockedIn && !stale;
   const staleBlock = stale ? `<div class="stalecard">
       <div class="staletitle">You never clocked out ${escapeHtml(prettyDay(stale.day))}</div>
-      <div class="stalesub">That shift is still open from ${new Date(stale.clockInAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. Close it here — the shop will set the real end time. Clocking in also closes it.</div>
+      <div class="stalesub">That shift is still open from ${new Date(stale.clockInAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. Close it here — the office will set the real end time. Clocking in also closes it.</div>
       <button class="clockbtn out stalebtn" id="stalebtn">CLOSE THAT SHIFT</button>
     </div>` : "";
   const noticeBlock = staleNotice ? `<div class="stalenote">${escapeHtml(staleNotice)}</div>` : "";
@@ -487,7 +487,7 @@ function renderLocation(loc) {
     now = "Location off";
     sub = loc.permission === "unsupported"
       ? "This phone can't share location from a web page."
-      : (required ? "Your shop needs your location while you're on the clock. Allow it in your browser settings for this site." : "Optional at your shop. Allow it in your browser settings if you want to share.");
+      : (required ? "Your employer needs your location while you're on the clock. Allow it in your browser settings for this site." : "Optional here. Allow it in your browser settings if you want to share.");
     cls = "off";
   } else if (loc.sharing) {
     const granted = loc.permission === "granted";
@@ -503,7 +503,7 @@ function renderLocation(loc) {
     sub = "Location sharing stopped when you clocked out. Nothing is sent off the clock.";
   } else {
     now = "Off — you're off the clock";
-    sub = required ? "Your shop needs your location while you're on the clock. Starts when you clock in." : "Optional at your shop. Starts when you clock in.";
+    sub = required ? "Your employer needs your location while you're on the clock. Starts when you clock in." : "Optional here. Starts when you clock in.";
   }
   host.innerHTML = `<div class="loccard ${cls}">
     <div>
@@ -673,7 +673,7 @@ function renderRestricted(data){
  $("loading").style.display="none";$("expired").style.display="none";$("app").style.display="none";
  const prior=$("restricted");if(prior)prior.remove();
  const div=document.createElement("div");div.id="restricted";div.style.cssText="padding:28px 12px;text-align:center";
- div.innerHTML=`<h2>Crew tools paused</h2><p>${escapeHtml(data.error || "The shop needs an active Pro plan.")}</p>${data.openShift?'<p>You can still close your existing shift. This will not start another shift.</p><button class="clockbtn out" id="restricted-out">Close existing shift</button>':'<p>No open shift remains.</p>'}<p id="restricted-note" role="status"></p>`;
+ div.innerHTML=`<h2>Crew tools paused</h2><p>${escapeHtml(data.error || "This business needs an active Pro plan.")}</p>${data.openShift?'<p>You can still close your existing shift. This will not start another shift.</p><button class="clockbtn out" id="restricted-out">Close existing shift</button>':'<p>No open shift remains.</p>'}<p id="restricted-note" role="status"></p>`;
  $("app").before(div);
  const btn=$("restricted-out");if(btn)btn.onclick=async()=>{
   if(busy)return;busy=true;btn.disabled=true;

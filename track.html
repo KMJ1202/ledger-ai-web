@@ -78,7 +78,7 @@ h1{font-size:24px;margin:8px 0 0;letter-spacing:-.02em;line-height:1.2}
   <div class="expired" id="expired">
     <div class="icon">✕</div>
     <h2>This link has expired</h2>
-    <p id="expiredmsg">Tracking links only work for the day of the job. Call the shop if you have a question.</p>
+    <p id="expiredmsg">Tracking links only work for the day of the job. Call us if you have a question.</p>
   </div>
 </div>
 <p class="foot">Powered by <a href="https://heyledger.ai">Ledger AI</a></p>
@@ -125,7 +125,7 @@ function render(d) {
       <div class="step-time">${i <= idx && s.at ? esc(clock(s.at, tz)) : ""}</div>
     </div>`).join("");
   const tel = telHref(d.shop?.phone);
-  const callRow = tel ? `<div class="callrow"><a class="callbtn" href="${tel}">Call ${esc(shop || "the shop")}</a></div>` : "";
+  const callRow = tel ? `<div class="callrow"><a class="callbtn" href="${tel}">Call ${esc(shop || "us")}</a></div>` : "";
 
   let head = "", sub = "", body = "", icon = "🚗", foot = "";
   if (status === "done") {
@@ -151,7 +151,7 @@ function render(d) {
       sub = "Location isn't updating right now, so this is the estimate you were sent — not a live one.";
       body = `<div class="eta"><div class="label">Original arrival estimate</div><div class="big orig">${esc(clock(e.etaAt, tz))}</div>
         <span class="live warn"><span class="dot"></span>${e.staleSince ? "LOCATION NOT UPDATING SINCE " + esc(clock(e.staleSince, tz)).toUpperCase() : "LOCATION NOT UPDATING"}</span>
-        <div class="line">${e.asOf ? `Texted to you at ${esc(clock(e.asOf, tz))}. ` : ""}${tel ? "Need a firmer time? Call the shop." : ""}</div></div>
+        <div class="line">${e.asOf ? `Texted to you at ${esc(clock(e.asOf, tz))}. ` : ""}${tel ? "Need a firmer time? Give us a call." : ""}</div></div>
         <div class="track">${track}</div>${callRow}`;
     } else {
       sub = t.onMyWayAt ? `Left for you at ${esc(clock(t.onMyWayAt, tz))}.` : "";
@@ -192,7 +192,7 @@ async function load() {
 function showExpired(msg) {
   clearTimeout(timer);
   $("loading").style.display = "none"; $("app").style.display = "none";
-  if (msg) $("expiredmsg").textContent = msg + " Call the shop if you have a question.";
+  if (msg) $("expiredmsg").textContent = msg + " Call us if you have a question.";
   $("expired").style.display = "block";
 }
 if (!token) showExpired("This link is missing its code."); else load();

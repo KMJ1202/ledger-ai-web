@@ -1,4 +1,5 @@
 // Ledger AI — web/PWA client.
+// audit-20260914 web: calendar guard, outage bubble, CSV screens, copy sweep (build 170)
 // One file, no build step: GitHub Pages serves it straight. Every screen talks to the
 // same Supabase edge functions the iOS app uses, so there is no second backend to keep in sync.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -29,7 +30,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 169;
+const APP_BUILD = 170;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -105,7 +106,6 @@ async function token() { const { data } = await supa.auth.getSession(); return d
 const CONNECTOR_PATHS = [
   ["/quickbooks-data", "quickbooks", "QuickBooks is not connected"],
   ["/quickbooks-invoice", "quickbooks", "QuickBooks is not connected"],
-  ["/google-calendar/", "google_calendar", "Google Calendar is not connected"],
   ["/gmail/", "gmail", "Gmail is not connected"],
   ["/google-business-profile/", "google_business_profile", "Business Profile is not connected"],
 ];
@@ -539,7 +539,7 @@ function appView() {
       if ($("chat").childElementCount !== 1) return;
       sys(S.booksProvider === "native"
         ? "Your built-in books are on. Already use QuickBooks? Choose it on the Home tab and I'll work from your real numbers."
-        : "Nothing's connected yet — choose your books on the Home tab to bring them in.");
+        : "One thing left: choose your books on the Home tab — built-in books or QuickBooks — and I'll work from your real numbers.");
     });
   }
   renderTab();
@@ -1177,7 +1177,7 @@ function shopProfileSheet(onDone, opts = {}) {
   const svcRow = (s, i) => `<div class="svcrow" data-i="${i}" style="display:grid;grid-template-columns:1.7fr .75fr .6fr 26px;gap:6px;align-items:center;margin-top:6px">
       <input class="cmpinput" data-sn placeholder="Service or product" maxlength="200" value="${esc(String(s.name ?? ""))}">
       <input class="cmpinput" data-sp type="number" min="0" step="0.01" inputmode="decimal" placeholder="Price" value="${esc(String(s.price ?? ""))}">
-      <input class="cmpinput" data-sd type="number" min="5" max="1440" step="5" inputmode="numeric" placeholder="Min" value="${esc(String(s.duration_minutes ?? ""))}">
+      <input class="cmpinput" data-sd type="number" min="5" max="1440" step="5" inputmode="numeric" placeholder="Minutes" value="${esc(String(s.duration_minutes ?? ""))}">
       <button type="button" class="linkbtn" data-sx title="Remove" aria-label="Remove this line" style="font-size:20px;line-height:1;padding:0">&times;</button></div>`;
   const first = !!opts.firstRun;
   sheet(`<h2>${first ? `Welcome — tell Ledger about ${esc(opts.bizName || "your business")}` : "Your business"}</h2>
@@ -1190,6 +1190,7 @@ function shopProfileSheet(onDone, opts = {}) {
     </div>
     <div class="cmpsect">
       <label class="fld">Your services and prices</label>
+      <div style="display:grid;grid-template-columns:1.7fr .75fr .6fr 26px;gap:6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:0 4px"><span>Service</span><span>Price $</span><span>Minutes</span><span></span></div>
       <div id="svcbox">${svc.map(svcRow).join("")}</div>
       <button type="button" class="linkbtn" id="svcadd" style="margin-top:8px">+ Add another</button>
       <p class="note" style="margin-top:6px">Price before tax, and how many minutes each one takes. These become your price list — invoices, quotes and the Front Desk all use them. Long list? Skip this and upload it under Inventory &amp; pricing.</p>
@@ -7509,7 +7510,7 @@ function requestNumberCard(pending, locked) {
   // get it, rather than a form whose only possible answer is "subscribe first".
   if (locked && !pending) {
     return `<div class="panel">
-      <h3>&#128241; Your own business line &#128664;</h3>
+      <h3>&#128241; Your own business line</h3>
       <p class="sub">A local number of your own, included with your subscription: missed calls text the caller back automatically, every lead lands in your Leads list, and you can reply right from this tab.</p>
       <p class="note" style="margin-top:10px">Included with Ledger AI &mdash; after you subscribe, tell us your area code and we set your line up, usually the same business day.</p>
       ${inAndroidApp() ? `<p class="note" style="margin-top:13px">${SUBSCRIPTION_REQUIRED}</p>`
@@ -7525,7 +7526,7 @@ function requestNumberCard(pending, locked) {
     </div>`;
   }
   return `<div class="panel">
-    <h3>&#128241; Request a business number &#128664;</h3>
+    <h3>&#128241; Request a business number</h3>
     <p class="sub">Get a dedicated business line: missed calls auto-text the caller and land them in your Leads list.</p>
     <label class="fld" style="margin-top:10px">BUSINESS NAME</label>
     <input id="rnbiz" placeholder="Your business name">
@@ -9463,9 +9464,17 @@ async function send() {
     (d.print_jobs || []).forEach(printJobCard);
     S.qboStale = true; S.board = null; // books may have moved — refetch on next tab visit
   } catch (e) {
-    t.remove(); bubble("msg ai err", "⚠️ " + esc(e.message));
-    if (e.status === 402) { if (/subscription|trial|renew/i.test(e.message)) billingCheck(); else powerUpSheet(); }
-    else if (/allowance|power-up/i.test(e.message)) powerUpSheet();
+    t.remove();
+    if (e.data?.code === "ai_unavailable" || e.status === 503) {
+      // Provider outage: one plain sentence, never the raw error, and the
+      // question goes back in the box so a retry is one tap.
+      bubble("msg ai err", "⚠️ " + esc(e.message || "Ledger's AI helper is unavailable right now — try again in a few minutes."));
+      box.value = text; box.style.height = "auto"; box.style.height = Math.min(box.scrollHeight, 120) + "px";
+    } else {
+      bubble("msg ai err", "⚠️ " + esc(e.message));
+      if (e.status === 402) { if (/subscription|trial|renew/i.test(e.message)) billingCheck(); else powerUpSheet(); }
+      else if (/allowance|power-up/i.test(e.message)) powerUpSheet();
+    }
   }
   $("send").disabled = false;
 }
@@ -9730,15 +9739,17 @@ async function renderCatalog(sh) {
       }).join("")
     : `<p class="note" style="margin:0 0 10px">Nothing loaded yet. Ledger will say it doesn't know rather than guess a price.</p>`;
 
+  const liveFeeds = providers.some((p) => p.live);
   slot.innerHTML = `${rows}
     <div class="panel" style="margin-top:12px">
       <b style="font-size:13.5px">📄 Upload a price list</b>
-      <p class="note" style="margin:6px 0 10px">Any spreadsheet, any column names — CSV or tab-separated. Ledger reads the header and works out which column is the price, the size and the stock count. Nothing to set up.</p>
+      <p class="note" style="margin:6px 0 10px">Any spreadsheet — Excel, CSV or tab-separated, any column names. Ledger reads the header and works out which column is the product, the price and the stock count. Uploading a file with the same name replaces the old list.</p>
       <button class="btn ghost wide" id="catpick">Choose a file</button>
-      <input type="file" id="catfile" accept=".csv,.tsv,.txt,text/csv,text/plain" hidden>
+      <input type="file" id="catfile" accept=".csv,.tsv,.txt,.xlsx,.xls,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+      <p class="note" style="margin-top:8px">Need a starting point? <a href="#" id="cattpl">Price list template</a></p>
       <div id="catstage"></div>
     </div>
-    <div class="panel" style="margin-top:10px">
+    ${liveFeeds ? `<div class="panel" style="margin-top:10px">
       <b style="font-size:13.5px">🔌 Connect a live feed</b>
       <p class="note" style="margin:6px 0 10px">A key on its own is just a string — pick the system it belongs to so Ledger knows where to send it. Prices stay live, nothing goes stale.</p>
       <label class="fld">WHICH SYSTEM</label>
@@ -9751,7 +9762,7 @@ async function renderCatalog(sh) {
       <input id="catdealer" placeholder="If that system gave you one" autocomplete="off">
       <button class="btn ghost wide" style="margin-top:11px" id="catconn">Save key</button>
       <p class="note" style="margin-top:8px;font-size:11.5px">Stored encrypted at rest and never shown back to anyone, including us.</p>
-    </div>`;
+    </div>` : ""}`;
 
   slot.querySelectorAll("[data-catdel]").forEach((btn) => {
     btn.onclick = async () => {
@@ -9761,6 +9772,11 @@ async function renderCatalog(sh) {
       catch (err) { btn.disabled = false; toast(err.message, "err"); }
     };
   });
+  slot.querySelector("#cattpl").onclick = async (e) => {
+    e.preventDefault();
+    try { const t = await api("/catalog", { action: "template" }); downloadCsv(t.filename || "ledger-price-list-template.csv", t.csv); }
+    catch (err) { toast(err.message, "err"); }
+  };
 
   const stage = slot.querySelector("#catstage");
   slot.querySelector("#catpick").onclick = () => slot.querySelector("#catfile").click();
@@ -9770,44 +9786,60 @@ async function renderCatalog(sh) {
     if (file.size > 6_000_000) { toast("That file is over 6 MB — trim unused columns or split it", "err"); return; }
     stage.innerHTML = `<p class="note" style="margin-top:10px">Reading ${esc(file.name)}…</p>`;
     let csv;
-    try {
-      csv = await new Promise((res, rej) => {
-        const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsText(file);
+    try { csv = await readSpreadsheetAsCsv(file); }
+    catch (err) { stage.innerHTML = `<p class="note" style="color:var(--red)">${esc(err.message || "Couldn't read that file.")}</p>`; return; }
+
+    // Show what it decided BEFORE anything is stored, and let the owner fix a
+    // wrong guess right here — a mis-read price column is the one mistake that
+    // would quote a customer badly (audit 2026-09-14: Cancel was the only way out).
+    const C = { map: null };
+    const paint = (look) => {
+      const fields = look.fields || CAT_FIELDS.map(([k]) => k);
+      const labelOf = Object.fromEntries(CAT_FIELDS);
+      const pick = (f) => `<label class="emailrow">${esc(labelOf[f] || f)}<select data-catf="${f}" class="cmpinput">
+          <option value="">— not in this file —</option>
+          ${(look.headers || []).filter(Boolean).map((h) => `<option value="${esc(h)}"${look.column_map?.[f] === h ? " selected" : ""}>${esc(h)}</option>`).join("")}</select></label>`;
+      const found = CAT_FIELDS.filter(([key]) => look.column_map?.[key])
+        .map(([key, label]) => `<div class="kv"><span>${esc(label)}</span><span style="color:var(--cyan);font-size:12.5px">${esc(look.column_map[key])}</span></div>`).join("");
+      const preview = (look.preview || []).slice(0, 3).map((p) => `<div class="note" style="margin-top:4px">${esc([p.description || p.model || p.sku, p.brand, p.size].filter(Boolean).join(" · "))}${p.price != null ? ` — <b>${esc(money(p.price))}</b>` : ""}${p.quantity != null ? ` · ${esc(String(p.quantity))} in stock` : ""}</div>`).join("");
+      stage.innerHTML = `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+        <b style="font-size:13px">${esc(String(look.row_count))} rows${look.truncated ? " (first 25,000)" : ""}</b>
+        ${look.summary ? `<p class="note" style="margin:5px 0 9px">${esc(look.summary)}</p>` : ""}
+        ${look.note ? `<p class="note" style="margin:5px 0 9px">${esc(look.note)}</p>` : ""}
+        ${look.warning ? `<p class="note" style="color:var(--orange);margin:5px 0 9px">⚠️ ${esc(look.warning)}</p>` : ""}
+        <div class="eyebrow" style="margin-top:6px">COLUMNS I FOUND${look.mapped_by === "headers" ? ' <small style="color:var(--dim);letter-spacing:0;text-transform:none">· matched by column names</small>' : ""}</div>
+        ${found || '<p class="note">None yet — pick them below.</p>'}
+        <details${look.can_import === false ? " open" : ""}><summary class="eyebrow" style="cursor:pointer;margin:10px 0">Fix a column</summary>
+          <div class="cmpsect">${fields.map(pick).join("")}</div></details>
+        ${preview ? `<div class="eyebrow" style="margin-top:8px">PREVIEW</div>${preview}` : ""}
+        ${look.unmapped?.length ? `<p class="note" style="margin-top:8px;font-size:11.5px">Kept alongside each item: ${esc(look.unmapped.slice(0, 8).join(", "))}${look.unmapped.length > 8 ? "…" : ""}</p>` : ""}
+        <button class="btn primary wide" style="margin-top:12px" id="catgo"${look.can_import === false ? " disabled" : ""}>Import ${esc(String(look.row_count))} items</button>
+        <button class="btn ghost wide" style="margin-top:8px" id="catcancel">Cancel</button></div>`;
+      stage.querySelectorAll("[data-catf]").forEach((sel) => sel.onchange = async () => {
+        C.map = { ...(look.column_map || {}) };
+        if (sel.value) C.map[sel.dataset.catf] = sel.value; else delete C.map[sel.dataset.catf];
+        stage.querySelector("#catgo").disabled = true;
+        try { paint(await api("/catalog", { action: "analyze", filename: file.name, csv, column_map: C.map })); }
+        catch (err) { toast(err.message, "err"); }
       });
-    } catch { stage.innerHTML = `<p class="note" style="color:var(--red)">Couldn't read that file.</p>`; return; }
-
-    stage.innerHTML = `<p class="note" style="margin-top:10px">Working out your columns…</p>`;
-    let look;
-    try { look = await api("/catalog", { action: "analyze", filename: file.name, csv }); }
-    catch (err) { stage.innerHTML = `<p class="note" style="color:var(--red);margin-top:10px">${esc(err.message)}</p>`; return; }
-
-    // Show what it decided BEFORE anything is stored. A mapping the owner can
-    // see is a mapping they can catch — and a wrong price column is the one
-    // mistake that would quote a customer badly.
-    const mapped = CAT_FIELDS.filter(([key]) => look.column_map?.[key])
-      .map(([key, label]) => `<div class="kv"><span>${esc(label)}</span><span style="color:var(--cyan);font-size:12.5px">${esc(look.column_map[key])}</span></div>`).join("");
-    stage.innerHTML = `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
-      <b style="font-size:13px">${esc(String(look.row_count))} rows${look.truncated ? " (first 25,000)" : ""}</b>
-      ${look.summary ? `<p class="note" style="margin:5px 0 9px">${esc(look.summary)}</p>` : ""}
-      ${look.warning ? `<p class="note" style="color:var(--orange);margin:5px 0 9px">⚠️ ${esc(look.warning)}</p>` : ""}
-      <div class="eyebrow" style="margin-top:6px">COLUMNS I FOUND</div>
-      ${mapped || '<p class="note">None — this file may not be a product list.</p>'}
-      ${look.unmapped?.length ? `<p class="note" style="margin-top:8px;font-size:11.5px">Kept alongside each item: ${esc(look.unmapped.slice(0, 8).join(", "))}${look.unmapped.length > 8 ? "…" : ""}</p>` : ""}
-      <button class="btn primary wide" style="margin-top:12px" id="catgo">Import ${esc(String(look.row_count))} items</button>
-      <button class="btn ghost wide" style="margin-top:8px" id="catcancel">Cancel</button></div>`;
-    stage.querySelector("#catcancel").onclick = () => { stage.innerHTML = ""; };
-    stage.querySelector("#catgo").onclick = async (ev) => {
-      const go = ev.currentTarget;
-      go.disabled = true; go.textContent = "Importing…";
-      try {
-        const done = await api("/catalog", { action: "import", filename: file.name, csv, column_map: look.column_map });
-        toast(`${done.imported} items loaded`);
-        renderCatalog(sh);
-      } catch (err) { go.disabled = false; go.textContent = "Try import again"; toast(err.message, "err"); }
+      stage.querySelector("#catcancel").onclick = () => { stage.innerHTML = ""; };
+      stage.querySelector("#catgo").onclick = async (ev) => {
+        const go = ev.currentTarget;
+        go.disabled = true; go.textContent = "Importing…";
+        try {
+          const done = await api("/catalog", { action: "import", filename: file.name, csv, column_map: look.column_map });
+          toast(`${done.imported} items loaded${done.replaced ? " — old copy replaced" : ""}`);
+          renderCatalog(sh);
+        } catch (err) { go.disabled = false; go.textContent = "Try import again"; toast(err.message, "err"); }
+      };
     };
+    stage.innerHTML = `<p class="note" style="margin-top:10px">Working out your columns…</p>`;
+    try { paint(await api("/catalog", { action: "analyze", filename: file.name, csv })); }
+    catch (err) { stage.innerHTML = `<p class="note" style="color:var(--red);margin-top:10px">${esc(err.message)}</p>`; return; }
   };
 
-  slot.querySelector("#catconn").onclick = async (ev) => {
+  const conn = slot.querySelector("#catconn");
+  if (conn) conn.onclick = async (ev) => {
     const btn = ev.currentTarget;
     const key = slot.querySelector("#catkey").value.trim();
     if (!key) { toast("Paste the API key first", "err"); return; }
@@ -11296,8 +11328,9 @@ function bringDataSheet() {
       </div>
       <details ${nameOk ? "" : "open"}><summary class="eyebrow" style="cursor:pointer;margin:10px 0">Check the columns</summary>
         <div class="cmpsect">${fields.map(pick).join("")}</div></details>
+      ${a.kept_in_notes?.length ? `<p class="note" style="margin:8px 0 0">Also kept on each customer, as notes: ${esc(a.kept_in_notes.slice(0, 8).join(", "))}${a.kept_in_notes.length > 8 ? "…" : ""}</p>` : ""}
       <div class="cmpsect"><div class="eyebrow">Preview</div>
-        ${(a.preview || []).map((p) => `<div class="note" style="margin-top:6px">${p.customer ? esc(`${p.customer.first_name} ${p.customer.last_name}`.trim() + (p.customer.company ? ` · ${p.customer.company}` : "") + (p.customer.email ? ` · ${p.customer.email}` : "") + (p.customer.phone ? ` · ${p.customer.phone}` : "") + (previewAddress(p.customer) ? ` · ${previewAddress(p.customer)}` : "")) : "<i>no customer</i>"}${p.vehicle ? esc(` — ${[p.vehicle.year, p.vehicle.make, p.vehicle.model].filter(Boolean).join(" ")}${p.vehicle.vin ? ` (${p.vehicle.vin})` : p.vehicle.plate ? ` (${p.vehicle.plate})` : ""}`) : ""}${p.issues.length ? ` <span style="color:var(--gold)">· ${esc(p.issues.join("; "))}</span>` : ""}</div>`).join("")}
+        ${(a.preview || []).map((p) => `<div class="note" style="margin-top:6px">${p.customer ? esc(`${p.customer.first_name} ${p.customer.last_name}`.trim() + (p.customer.company ? ` · ${p.customer.company}` : "") + (p.customer.email ? ` · ${p.customer.email}` : "") + (p.customer.phone ? ` · ${p.customer.phone}` : "") + (previewAddress(p.customer) + (p.customer.extras ? ` · ${p.customer.extras}` : "") ? ` · ${previewAddress(p.customer)}` : "")) : "<i>no customer</i>"}${p.vehicle ? esc(` — ${[p.vehicle.year, p.vehicle.make, p.vehicle.model].filter(Boolean).join(" ")}${p.vehicle.vin ? ` (${p.vehicle.vin})` : p.vehicle.plate ? ` (${p.vehicle.plate})` : ""}`) : ""}${p.issues.length ? ` <span style="color:var(--gold)">· ${esc(p.issues.join("; "))}</span>` : ""}</div>`).join("")}
       </div>
       <button class="btn primary wide" id="mggo" ${C.busy || !nameOk ? "disabled" : ""}>${C.busy ? "Importing…" : `Import ${a.summary.customers} customer${a.summary.customers === 1 ? "" : "s"}${a.kind === "vehicles" ? ` + ${a.summary.vehicles} vehicles` : ""}`}</button>
       <button class="linkbtn" id="mgback" style="margin-top:8px">Choose a different file</button>
