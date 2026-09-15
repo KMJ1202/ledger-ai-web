@@ -30,7 +30,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 171;
+const APP_BUILD = 172;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -1181,7 +1181,7 @@ function shopProfileSheet(onDone, opts = {}) {
       <button type="button" class="linkbtn" data-sx title="Remove" aria-label="Remove this line" style="font-size:20px;line-height:1;padding:0">&times;</button></div>`;
   const first = !!opts.firstRun;
   sheet(`<h2>${first ? `Welcome — tell Ledger about ${esc(opts.bizName || "your business")}` : "Your business"}</h2>
-    <p class="sh-sub">Two minutes. Ledger fits the app to how you work, talks like it already knows the business, and your Front Desk can quote and book from day one. Only the first question is required — everything else can wait.</p>
+    <p class="sh-sub">Tell Ledger what you do, then review your services, prices, taxes and hours before using them with customers. Phone features need a paid plan and activation; the trial includes a sample walkthrough.</p>
     ${chips("business_type", { q: "What kind of business?", opts: BUSINESS_TYPES.map(([v, l]) => [v, l]) })}
     <div class="cmpsect">
       <label class="fld">In one line, what do you do?</label>
@@ -1193,7 +1193,7 @@ function shopProfileSheet(onDone, opts = {}) {
       <div style="display:grid;grid-template-columns:1.7fr .75fr .6fr 26px;gap:6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:0 4px"><span>Service</span><span>Price $</span><span>Minutes</span><span></span></div>
       <div id="svcbox">${svc.map(svcRow).join("")}</div>
       <button type="button" class="linkbtn" id="svcadd" style="margin-top:8px">+ Add another</button>
-      <p class="note" style="margin-top:6px">Price before tax, and how many minutes each one takes. These become your price list — invoices, quotes and the Front Desk all use them. Long list? Skip this and upload it under Inventory &amp; pricing.</p>
+      <p class="note" style="margin-top:6px">Price before tax, and how many minutes each one takes. These become your price list — invoices, quotes and the Front Desk all use them. Long list? Use Bring your data → Service menu, then review the saved prices and durations.</p>
     </div>
     <div class="cmpsect">
       <label class="fld">When are you open?</label>
@@ -1210,7 +1210,7 @@ function shopProfileSheet(onDone, opts = {}) {
     <div class="cmpsect">
       <label class="fld">Where are you?</label>
       <select id="shopregion" class="cmpinput">${REGIONS.map(([v, l]) => `<option value="${v}"${(cur.region_code || "") === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>
-      <p class="note" style="margin-top:6px">Sets the right sales tax on your invoices. You can change it any time in Books settings.</p>
+      <p class="note" style="margin-top:6px">Suggests a starting tax setup. Review your registration, tax rates and exemptions in Books settings before your first invoice.</p>
     </div>
     <details${SHOP_MORE.some((q) => (q.multi ? picked.intake_channels.length : picked[q.key])) ? " open" : ""}><summary class="eyebrow" style="cursor:pointer;margin:12px 0 4px">More about you (optional)</summary>
       ${SHOP_MORE.map((q) => chips(q.key, q)).join("")}
@@ -1276,7 +1276,7 @@ function shopProfileSheet(onDone, opts = {}) {
         S.shop = r.shop_profile;
         if (S.profile) S.profile.business = { ...(S.profile.business || {}), ...r };
         try { CAL.hours = null; } catch {}
-        const tax = r.tax_set ? ` Sales tax set to ${r.tax_set.name} ${(r.tax_set.rate * 100).toFixed(r.tax_set.rate * 100 % 1 ? 3 : 0)}%.` : (r.us_region ? " Add your state's sales tax in Books settings." : "");
+        const tax = r.tax_set ? ` Suggested sales tax: ${r.tax_set.name} ${(r.tax_set.rate * 100).toFixed(r.tax_set.rate * 100 % 1 ? 3 : 0)}%.` : (r.us_region ? " Add your state's sales tax in Books settings." : "");
         closeSheet(); toast("Got it — Ledger knows your business now." + tax);
         if (onDone) onDone(true); else { S.cal = null; setTab("home"); }
       } catch (e) { btn.disabled = false; note.className = "note err"; note.textContent = e.message; }
@@ -1340,7 +1340,7 @@ async function loadHomeSetup() {
         ${done ? "" : action}</div>`;
     slot.innerHTML = `<div class="setupcard">
       <div class="lanehead" style="margin-top:0"><span class="eyebrow">&#9889; Get set up</span><button class="pill" id="setuphide" title="Hide">Hide</button></div>
-      ${step(shop, 1, "Tell Ledger about your business", shop ? "" : "What you do, your services and prices, your hours. Two minutes — Ledger fits itself to your business and can quote and book from day one.",
+      ${step(shop, 1, "Tell Ledger about your business", shop ? "" : "Add your services, reviewed prices and hours. Check your first invoice and appointment before using Ledger with customers.",
         `<button class="btn primary" id="setupshop">Start</button>`)}
       ${step(books, 2, "Choose your books", books ? "" : `Already on QuickBooks? Connect it. Otherwise Ledger's built-in books handle invoices, estimates and payment links.
           <span style="display:flex;gap:8px;margin-top:9px"><button class="btn primary" data-connect="/quickbooks-oauth/start">QuickBooks</button><button class="btn ghost" id="setupnative">Built-in books</button></span>`, "")}
@@ -9904,8 +9904,8 @@ async function businessSheet() {
       ${native ? row("bzcard", "&#128179;", "Card payments", "Stripe setup — get paid online") : ""}
       ${row("bzphone", "&#128222;", "Phone & Front Desk", "Number, reminders, auto-replies")}
       ${row("bzshop", "&#127968;", "Your business", shopSummary(S.shop))}
-      ${row("bzimport", "&#128229;", "Bring your data", isAuto() ? "Customers and vehicles from your old system — any export or spreadsheet" : "Customers from your old system — any export or spreadsheet")}
-      ${row("bzexport", "&#128228;", "Export your data", "Everything to a spreadsheet — your data is yours")}
+      ${row("bzimport", "&#128229;", "Bring your data", isAuto() ? "Preview supported customer and vehicle tables before importing" : "Preview supported customer tables before importing")}
+      ${row("bzexport", "&#128228;", "Export your data", "Download your records, original imports and available history")}
     </div>
     <div class="eyebrow" style="margin-top:20px">PROFILE</div>
     <label class="fld">BUSINESS NAME</label><input id="bn" value="${esc(b.name || "")}">
@@ -11574,7 +11574,7 @@ function phoneGuidedDemo(){
 }
 
 function firstWorkingDaySheet(){
- sheet(`<h2>Your first working day</h2><p class="note">Start with a small representative import. Review saved details, prices, taxes and availability before confirming real work.</p><div id="first-steps">Checking saved setup…</div><p><a href="/business-fit.html" target="_blank" rel="noopener">Business-fit guide</a></p>`,async sh=>{
+ sheet(`<h2>Your first working day</h2><p class="note">Start with a small representative import. Check saved contacts, prices, taxes and availability, then create one invoice and appointment. Try the phone sample and review the business-fit guide before subscribing.</p><div id="first-steps">Checking saved setup…</div><p><a href="/business-fit.html" target="_blank" rel="noopener">Business-fit guide</a></p>`,async sh=>{
  const slot=sh.querySelector("#first-steps");try{const r=await api("/workspace-profile",{action:"readiness"});slot.innerHTML=r.steps.map(s=>`<button class="btn wide" data-first="${s.id}" style="margin:7px 0;text-align:left">${s.done ? "✓" : "○"} ${esc(s.title)}</button>`).join("")+`<p class="note">${esc(r.note)}</p><button class="btn wide" id="first-staff">Staff, resource capacity &amp; time off</button><button class="btn wide" id="first-demo">Try the phone walkthrough</button>`;
  const actions={profile:()=>shopProfileSheet(),customers:bringDataSheet,services:()=>catalogImportSheet("services"),tax:()=>booksSettingsSheet(),invoice:()=>composerSheet("invoice"),booking:()=>bookingSheet()};
  slot.querySelectorAll("[data-first]").forEach(btn=>btn.onclick=()=>actions[btn.dataset.first]());slot.querySelector("#first-staff").onclick=schedulingResourcesSheet;slot.querySelector("#first-demo").onclick=phoneGuidedDemo;
