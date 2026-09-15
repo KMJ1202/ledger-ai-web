@@ -30,7 +30,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 173;
+const APP_BUILD = 174;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -11576,7 +11576,7 @@ function phoneGuidedDemo(){
 function firstWorkingDaySheet(){
  sheet(`<h2>Your first working day</h2><p class="note">Start with a small representative import. Check saved contacts, prices, taxes and availability, then create one invoice and appointment. Try the phone sample and review the business-fit guide before subscribing.</p><div id="first-steps">Checking saved setup…</div><p><a href="/business-fit.html" target="_blank" rel="noopener">Business-fit guide</a></p>`,async sh=>{
  const slot=sh.querySelector("#first-steps");try{const r=await api("/workspace-profile",{action:"readiness"});slot.innerHTML=r.steps.map(s=>`<button class="btn wide" data-first="${s.id}" style="margin:7px 0;text-align:left">${s.done ? "✓" : "○"} ${esc(s.title)}</button>`).join("")+`<p class="note">${esc(r.note)}</p><button class="btn wide" id="first-staff">Staff, resource capacity &amp; time off</button><button class="btn wide" id="first-demo">Try the phone walkthrough</button>`;
- const actions={profile:()=>shopProfileSheet(),customers:bringDataSheet,services:()=>catalogImportSheet("services"),tax:()=>booksSettingsSheet(),invoice:()=>composerSheet("invoice"),booking:()=>bookingSheet()};
+ const actions={profile:()=>shopProfileSheet(),customers:bringDataSheet,services:()=>catalogImportSheet("services"),tax:()=>booksSettingsSheet(),invoice:()=>r.provider === "native" ? nativeComposerSheet() : composerSheet("invoice"),booking:()=>bookingSheet()};
  slot.querySelectorAll("[data-first]").forEach(btn=>btn.onclick=()=>actions[btn.dataset.first]());slot.querySelector("#first-staff").onclick=schedulingResourcesSheet;slot.querySelector("#first-demo").onclick=phoneGuidedDemo;
  }catch(e){slot.textContent=e.message;const retry=document.createElement("button");retry.className="btn";retry.textContent="Retry";retry.onclick=firstWorkingDaySheet;slot.append(retry);}});
 }
