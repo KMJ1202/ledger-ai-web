@@ -8,3 +8,9 @@ for(const provider of ['native','quickbooks']){
  nativeComposerSheet:()=>result='native',composerSheet:()=>result='quickbooks',shopProfileSheet(){},bringDataSheet(){},catalogImportSheet(){},booksSettingsSheet(){},bookingSheet(){},schedulingResourcesSheet(){},phoneGuidedDemo(){}};
  vm.createContext(ctx);vm.runInContext(actual+';firstWorkingDaySheet()',ctx);await ready;button.onclick();assert.equal(result,provider,'The checklist must use the owner-selected books, without asking for an unrelated connection');console.log('PASS first-day invoice uses',provider);
 }
+
+const bookingStart=source.indexOf('function bookingSheet(');const bookingEnd=source.indexOf('async function loadReceipts()',bookingStart);assert(bookingStart>0&&bookingEnd>bookingStart);
+for(const args of [[],['2026-10-01'],[null,{start:'2026-10-02T10:00:00',end:'2026-10-02T11:00:00',title:'Existing appointment'}]]){
+ let html;const ctx={sheet:text=>html=text,isAuto:()=>false,esc:x=>x,BOOK_SOURCES:['Phone'],args};vm.createContext(ctx);vm.runInContext(source.slice(bookingStart,bookingEnd)+';bookingSheet(...args)',ctx);
+ assert.match(html,/id="bkStart"[^>]*value="\d{4}-\d{2}-\d{2}T\d{2}:\d{2}"/,'Every entry point must open a usable date form, including setup without a calendar selection');console.log('PASS booking date entry',args.length?JSON.stringify(args):'first-day default');
+}

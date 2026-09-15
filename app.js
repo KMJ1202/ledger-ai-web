@@ -30,7 +30,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 174;
+const APP_BUILD = 175;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -5058,10 +5058,11 @@ const BOOK_SOURCES = ["Phone", "Quo / OpenPhone", "Facebook", "Website", "Walk-i
 
 // New/edit appointment — the web twin of iOS AddBookingView / EditBookingSheet.
 function bookingSheet(dayISO, editing, prefill) {
-  const base = editing ? new Date(editing.start) : new Date(dayISO + "T09:00:00");
   const now = new Date();
-  const startAt = !editing && base < now ? new Date(now.getTime() + 3600000) : base;
   const localVal = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  // Setup and phone entry points do not have a selected calendar day yet.
+  const base = editing ? new Date(editing.start) : new Date((dayISO || localVal(now).slice(0, 10)) + "T09:00:00");
+  const startAt = !editing && base < now ? new Date(now.getTime() + 3600000) : base;
   const mins = editing && editing.end ? Math.max(15, Math.round((new Date(editing.end) - new Date(editing.start)) / 60000)) : 60;
 
   sheet(`<h2>${editing ? "Edit Appointment" : "New Appointment"}</h2>
