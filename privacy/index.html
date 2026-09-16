@@ -132,7 +132,7 @@ footer a{color:var(--dim)}
         <li><b>Encrypted in transit.</b> All traffic between your browser or app, Ledger AI, and every connected service runs over TLS (HTTPS). We do not accept unencrypted connections.</li>
         <li><b>Encrypted at rest.</b> Your database records, receipt images, and stored files are encrypted at rest by our hosting provider, Supabase.</li>
         <li><b>Google tokens are held in an encrypted vault, never in the app.</b> Your Google access and refresh tokens are written to Supabase Vault, which stores them encrypted. Our database keeps only a reference to the vault entry — never the token itself. The functions that read a token are server-side and privileged: they are explicitly revoked from every browser and app session, so a signed-in client cannot retrieve your Google credentials even if it asks for them.</li>
-        <li><b>Your workspace is isolated.</b> Row-level security is enabled on every tenant table and every policy is scoped to your workspace, so one customer's Gmail, Calendar, or business data can never be returned to another customer's account.</li>
+        <li><b>Your workspace is isolated.</b> Row-level security is enabled on every tenant table and every policy is scoped to your workspace, with controls designed to prevent one customer from accessing another customer's Gmail, Calendar, or business data.</li>
         <li><b>Least privilege.</b> We request the narrowest Google scopes each feature needs, and only after your explicit OAuth consent. Gmail access is read and send: reading is used by Receipt Radar and by the assistant when you ask about a message; sending happens only on your instruction, from your own address. Calendar access is limited to reading and creating events you ask for.</li>
         <li><b>You can revoke us at any time.</b> Removing Ledger AI at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a> immediately ends our access to your Google data.</li>
         <li><b>Limited human access.</b> No Ledger AI staff member reads your Gmail, Calendar, or business data as a matter of course. It happens only where needed to resolve a support request you have raised, with your knowledge.</li>
@@ -148,7 +148,7 @@ footer a{color:var(--dim)}
         <li><b>Anthropic</b> (Claude models) — receives your conversation content and the business data needed to answer it, as the processor behind the AI assistant's text responses.</li>
         <li><b>OpenAI</b> (Realtime API) — receives audio/conversation content when you use voice mode, as the processor behind spoken conversations.</li>
         <li><b>Supabase</b> — hosts our database, authentication, and file storage.</li>
-        <li><b>Stripe</b> — processes your subscription payments and, if you turn on card payments, your customers' payments through your own Stripe account. Card numbers never touch Ledger AI's servers.</li>
+        <li><b>Stripe</b> — processes your subscription payments and, if you turn on card payments, your customers' payments through your own Stripe account. The supported card-entry flows run on Stripe. Do not put card numbers, security codes, or card photographs into Ledger notes, messages, or uploads.</li>
         <li><b>Telnyx</b> — the carrier behind Ledger-provided business numbers: routes calls and texts, stores voicemail recordings and produces the written transcripts.</li>
         <li><b>Resend</b> — delivers the emails we send on your behalf (invoices, estimates, account confirmation and password-reset emails, receipts).</li>
         <li><b>Apple</b> (Push Notification service) and your browser's push service — deliver notifications to your devices. They see the device token and the notification text, nothing else.</li>
@@ -168,7 +168,7 @@ footer a{color:var(--dim)}
 
     <div class="card">
       <h2>Retention</h2>
-      <p>We keep your workspace data — receipts, conversations, and connected-account data — for as long as your account is active. If you delete your account, that data is permanently removed rather than archived. Usage metering records are kept for billing and support purposes for the life of the account. If your subscription ends, access to your workspace is suspended, but your data is kept for at least 90 days so you can export it or come back; after that we may delete it permanently. Business phone numbers are held for 30 days after cancellation and then released.</p>
+      <p>We keep your workspace data — receipts, conversations, and connected-account data — for as long as your account is active. Account deletion removes active workspace records and files. Encrypted recovery backups may retain earlier copies until they expire under the backup retention schedule; they are restricted to recovery and security purposes, and deleted accounts must not be reactivated from them. Usage metering records are kept for billing and support purposes for the life of the account. If your subscription ends, access to your workspace is suspended, but your data is kept for at least 90 days so you can export it or come back; after that we may delete it permanently. Business phone numbers are held for 30 days after cancellation and then released.</p>
     </div>
 
     <div class="card">
@@ -178,7 +178,7 @@ footer a{color:var(--dim)}
         <li><b>In-app</b> — Settings → Delete account.</li>
         <li><b>By email</b> — write to <a href="mailto:supportteam@heyledger.ai">supportteam@heyledger.ai</a> and ask us to delete your account.</li>
       </ul>
-      <p>Either path permanently removes your workspace, receipts, conversations, and connected-account tokens. This cannot be undone.</p>
+      <p>Either verified path removes your active workspace, receipts, conversations, and connected-account tokens. Removal cannot be undone through the app. Recovery-backup retention is described above.</p>
       <p>Full instructions, including what is deleted and what is kept: <a href="/delete-account/">Delete your account</a>.</p>
     </div>
 
