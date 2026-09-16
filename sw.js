@@ -1,6 +1,6 @@
 // Ledger AI service worker — app-shell cache, network-first for documents and assets.
-const CACHE = "ledger-ai-v209";
-const SHELL = ["./app.html", "./public-recovery.js?v=1", "./app.js?v=175", "./index.html", "./manifest.webmanifest", "./icon.svg",
+const CACHE = "ledger-ai-v210";
+const SHELL = ["./app.html", "./public-recovery.js?v=1", "./security.js?v=1", "./assets/vendor/xlsx-0.20.3.mjs", "./app.js?v=176", "./index.html", "./manifest.webmanifest", "./icon.svg",
                "./icon-192.png", "./icon-512.png", "./icon-maskable-192.png", "./icon-maskable-512.png",
                "./assets/styles.css?v=51", "./assets/herodemo.js?v=2", "./assets/support-widget.css?v=2", "./assets/support-widget.js?v=1", "./assets/logo-mark-96.png", "./assets/logo-full-640.png", "./assets/icons/quickbooks.svg", "./assets/icons/gmail.svg", "./assets/icons/googlecalendar.svg", "./assets/icons/googlebusiness.svg",
                "./integrations/quickbooks.html", "./integrations/gmail.html",
@@ -25,6 +25,12 @@ self.addEventListener("fetch", (event) => {
   // Never cache Supabase — auth, books and AI are always live.
   if (url.origin !== self.location.origin) return;
 
+  // Capability links and OAuth/payment returns must never enter an offline cache.
+  const privateNavigation = ["t", "token", "token_hash", "code", "session_id"].some(k => url.searchParams.has(k)) || /\/(crew|client|invoice|estimate|track)\.html$/.test(url.pathname) || url.pathname.startsWith("/oauth/");
+  if (request.mode === "navigate" && privateNavigation) {
+    event.respondWith(fetch(new Request(request, {cache:"no-store"})).catch(() => new Response("This private link needs an internet connection.", {status:503,headers:{"content-type":"text/plain","cache-control":"no-store"}})));
+    return;
+  }
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)

@@ -1,8 +1,9 @@
+import { openSecurity, needsMfa } from "./security.js?v=1";
 // Ledger AI — web/PWA client.
 // audit-20260914 web: calendar guard, outage bubble, CSV screens, copy sweep (build 170)
 // One file, no build step: GitHub Pages serves it straight. Every screen talks to the
 // same Supabase edge functions the iOS app uses, so there is no second backend to keep in sync.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.116.0";
 
 const SUPA_URL = "https://lbzkyyehmgudlxmfpzzh.supabase.co";
 const SUPA_KEY = "sb_publishable_I0BQ5Rkc2GCxKOlobtzCNg_GxAtNuPu";
@@ -136,6 +137,7 @@ async function api(path, body, method = "POST", opts = {}) {
     const err = new Error(d.message || d.error || ("Request failed (" + r.status + ")"));
     err.status = r.status; err.data = d;
     if (d.matches) err.matches = d.matches;
+    if (["mfa_required", "mfa_enrollment_required"].includes(d.error)) void openSecurity(supa);
     // Real paywall (2026-09-05): the server refused a write because the
     // subscription is paused. One handler updates the banner so the customer
     // sees why, whatever screen they were on.
@@ -9903,6 +9905,7 @@ async function businessSheet() {
       ${native ? row("bzbooks", "&#9881;", "Books settings", "Tax, invoice numbering, branding, payment info")
         : row("bzbooks", "&#9881;", "Books", "This workspace runs on QuickBooks Online")}
       ${native ? row("bzcard", "&#128179;", "Card payments", "Stripe setup — get paid online") : ""}
+      ${row("bzsecurity", "&#128737;", "Account security", "Two-step verification and backup authenticators")}
       ${row("bzphone", "&#128222;", "Phone & Front Desk", "Number, reminders, auto-replies")}
       ${row("bzshop", "&#127968;", "Your business", shopSummary(S.shop))}
       ${row("bzimport", "&#128229;", "Bring your data", isAuto() ? "Preview supported customer and vehicle tables before importing" : "Preview supported customer tables before importing")}
@@ -9978,6 +9981,7 @@ async function businessSheet() {
       <a href="${FN}/legal/privacy" target="_blank" rel="noopener">Privacy Policy</a> ·
       <a href="${FN}/legal/terms" target="_blank" rel="noopener">Terms of Service</a></p>`, async (sh) => {
     wireConnect(sh);
+    sh.querySelector("#bzsecurity").onclick = () => { closeSheet(); openSecurity(supa); };
     pushSettingsCard(sh.querySelector("#pushslot"));
     sh.querySelector("#bzbooks").onclick = () => {
       closeSheet();
@@ -10632,6 +10636,7 @@ async function boot() {
     if (qs.get("signup")) { loginView("signup"); return; }
     loginView("signin"); return;
   }
+  if (await needsMfa(supa)) { root.innerHTML = '<div class="panel"><h2>Verify your sign-in</h2><p>Open your authenticator to continue.</p><button class="btn primary" id="mfa-signin">Enter code</button></div>'; const verify=()=>openSecurity(supa,{required:true,onVerified:()=>void boot()}); $("mfa-signin").onclick=verify; await verify(); return; }
   if (qs.get("signup")) history.replaceState({}, "", location.pathname);
   if (qs.get("reset")) { newPasswordView(); return; }
   S.email = (session.user?.email || "").toLowerCase();
@@ -11258,7 +11263,7 @@ function liveSheet() {
 boot();
 supa.auth.onAuthStateChange((event, s) => {
   if (event === "PASSWORD_RECOVERY") { newPasswordView(); return; }
-  if (event === "SIGNED_IN" && s && !$("view") && !$("bizname") && !$("joincode") && !$("pw2")) boot();
+  if (event === "SIGNED_IN" && s && !$("view") && !$("bizname") && !$("joincode") && !$("pw2")) setTimeout(() => void boot(), 0);
 });
 
 
@@ -11280,7 +11285,7 @@ const MIGRATE_FIELD_LABELS = {
 async function readSpreadsheetAsCsv(file) {
   if (!/\.(xlsx|xlsm|xls)$/i.test(file.name || "")) return file.text();
   if (file.size > 6000000) throw new Error("That file is over 6 MB. Split it before importing; nothing was saved.");
-  const XLSX = await import("https://esm.sh/xlsx@0.18.5");
+  const XLSX = await import("./assets/vendor/xlsx-0.20.3.mjs");
   const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
   if (!wb.SheetNames.length) throw new Error("That Excel file has no sheets in it.");
   let selected = wb.SheetNames[0];
