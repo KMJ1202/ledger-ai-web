@@ -1,4 +1,4 @@
-import { openSecurity, needsMfa } from "./security.js?v=2";
+import { openSecurity, needsMfa } from "./security.js?v=3";
 // Ledger AI — web/PWA client.
 // audit-20260914 web: calendar guard, outage bubble, CSV screens, copy sweep (build 170)
 // One file, no build step: GitHub Pages serves it straight. Every screen talks to the
@@ -31,7 +31,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 178;
+const APP_BUILD = 179;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
