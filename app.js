@@ -7,7 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.116.0";
 
 const SUPA_URL = "https://lbzkyyehmgudlxmfpzzh.supabase.co";
 const SUPA_KEY = "sb_publishable_I0BQ5Rkc2GCxKOlobtzCNg_GxAtNuPu";
-const supa = createClient(SUPA_URL, SUPA_KEY);
+const supa = createClient(SUPA_URL, SUPA_KEY, {auth:{flowType:"pkce",detectSessionInUrl:false}});
 const FN = SUPA_URL + "/functions/v1";
 const root = document.getElementById("root");
 
@@ -31,7 +31,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 175;
+const APP_BUILD = 178;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -10427,6 +10427,33 @@ function authCard(title, lead, fields, button, links) {
   root.querySelectorAll("input").forEach((i) => i.addEventListener("keydown", (e) => { if (e.key === "Enter" && go) go.click(); }));
   return go;
 }
+// A Google callback is accepted only after this tab started a short-lived,
+// PKCE-bound flow. Supabase validates the saved verifier during code exchange.
+function googleSignInButton() {
+  const button=document.createElement("button");button.className="btn";button.type="button";button.id="google-signin";button.textContent="Sign in with Google";
+  button.style.cssText="background:#fff;color:#1f1f1f;border:1px solid #747775;margin-bottom:12px";
+  const divider=document.createElement("p");divider.textContent="or use email";divider.className="note";
+  const first=root.querySelector("input");first.before(button,divider);
+  button.onclick=async()=>{
+    button.disabled=true;
+    try {
+      sessionStorage.setItem("ledger.oauth.pending",JSON.stringify({provider:"google",started:Date.now()}));
+      const {data,error}=await supa.auth.signInWithOAuth({provider:"google",options:{redirectTo:APP_URL,scopes:"openid email profile",queryParams:{prompt:"select_account"},skipBrowserRedirect:true}});
+      if(error)throw error;const dest=new URL(data.url);
+      if(dest.origin!==SUPA_URL||dest.pathname!=="/auth/v1/authorize"||dest.searchParams.get("code_challenge_method")!=="s256")throw Error("Secure Google sign-in could not start. Please retry.");
+      location.assign(dest.href);
+    } catch(error){sessionStorage.removeItem("ledger.oauth.pending");button.disabled=false;toast(authErr(error),"err");}
+  };
+}
+async function finishGoogleReturn() {
+  const q=new URLSearchParams(location.search);
+  if(!q.has("code")&&!q.has("error"))return;
+  const raw=sessionStorage.getItem("ledger.oauth.pending");sessionStorage.removeItem("ledger.oauth.pending");
+  const code=q.get("code");history.replaceState({},"",location.pathname);
+  const pending=JSON.parse(raw||"null");
+  if(!pending||pending.provider!=="google"||Date.now()-pending.started>600000||Date.now()<pending.started||q.getAll("code").length!==1||!code)throw Error("This sign-in link expired or was not started here. Please sign in again.");
+  const {error}=await supa.auth.exchangeCodeForSession(code);if(error)throw Error("Google sign-in could not be verified. Please start again.");
+}
 const authErr = (error) => {
   const m = String(error?.message || "");
   if (/invalid login credentials/i.test(m)) return "Wrong email or password. Try again, or tap Forgot password.";
@@ -10444,6 +10471,7 @@ function loginView(mode = "signin", email = "") {
     const go = authCard("Create your account", "14-day free trial · no card needed · cancel any time.",
       `<input id="email" type="email" placeholder="you@business.com" autocomplete="email" value="${esc(email)}">${pwField("pw", "Choose a password (8+ characters)", "new-password")}`,
       "Create account", `Already have an account? <a href="#" id="tosignin" style="color:var(--cyan)">Sign in</a>`);
+    googleSignInButton();
     $("tosignin").onclick = (e) => { e.preventDefault(); loginView("signin", emailOf()); };
     go.onclick = async () => {
       const em = emailOf(), pw = $("pw").value;
@@ -10493,6 +10521,7 @@ function loginView(mode = "signin", email = "") {
   const go = authCard("Ledger AI", "Your business copilot. Same account on the web and the iPhone app.",
     `<input id="email" type="email" placeholder="you@business.com" autocomplete="email" value="${esc(email)}">${pwField("pw", "Password", "current-password")}`,
     "Sign in", `<a href="#" id="forgot" style="color:var(--cyan)">Forgot password?</a><br>New here? <a href="#" id="tosignup" style="color:var(--cyan)">Start your free trial</a>`);
+  googleSignInButton();
   $("forgot").onclick = (e) => { e.preventDefault(); loginView("forgot", emailOf()); };
   $("tosignup").onclick = (e) => { e.preventDefault(); loginView("signup", emailOf()); };
   go.onclick = async () => {
@@ -11269,6 +11298,7 @@ function liveSheet() {
   })();
 }
 
+try { await finishGoogleReturn(); } catch(error) { loginView("signin");toast(error.message,"err"); }
 boot();
 supa.auth.onAuthStateChange((event, s) => {
   if (event === "PASSWORD_RECOVERY") { newPasswordView(); return; }
