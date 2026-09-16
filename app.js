@@ -1,4 +1,4 @@
-import { openSecurity, needsMfa } from "./security.js?v=1";
+import { openSecurity, needsMfa } from "./security.js?v=2";
 // Ledger AI — web/PWA client.
 // audit-20260914 web: calendar guard, outage bubble, CSV screens, copy sweep (build 170)
 // One file, no build step: GitHub Pages serves it straight. Every screen talks to the
@@ -10636,7 +10636,16 @@ async function boot() {
     if (qs.get("signup")) { loginView("signup"); return; }
     loginView("signin"); return;
   }
-  if (await needsMfa(supa)) { root.innerHTML = '<div class="panel"><h2>Verify your sign-in</h2><p>Open your authenticator to continue.</p><button class="btn primary" id="mfa-signin">Enter code</button></div>'; const verify=()=>openSecurity(supa,{required:true,onVerified:()=>void boot()}); $("mfa-signin").onclick=verify; await verify(); return; }
+  try {
+    if (await needsMfa(supa)) {
+      root.innerHTML = '<div class="panel"><h2>Secure your account</h2><p>Two-step verification is required before you can use Ledger. Add an authenticator or enter its code to continue.</p><button class="btn primary" id="mfa-signin">Continue securely</button><button class="btn ghost" id="mfa-signout">Sign out</button></div>';
+      const verify=()=>openSecurity(supa,{required:true,onVerified:()=>void boot()});
+      $("mfa-signin").onclick=verify;$("mfa-signout").onclick=()=>supa.auth.signOut().then(()=>location.reload());await verify();return;
+    }
+  } catch {
+    root.innerHTML='<div class="panel"><h2>Security check unavailable</h2><p>Your business stays locked until we can verify your sign-in.</p><button class="btn primary" id="mfa-retry">Retry</button><button class="btn ghost" id="mfa-signout">Sign out</button></div>';
+    $("mfa-retry").onclick=()=>void boot();$("mfa-signout").onclick=()=>supa.auth.signOut().then(()=>location.reload());return;
+  }
   if (qs.get("signup")) history.replaceState({}, "", location.pathname);
   if (qs.get("reset")) { newPasswordView(); return; }
   S.email = (session.user?.email || "").toLowerCase();
