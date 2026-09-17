@@ -57,7 +57,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 180;
+const APP_BUILD = 181;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -7797,17 +7797,22 @@ async function loadPostsLane() {
    behind Learn more, the phone behind Call now, the booking page behind Book),
    drafts waiting for a Post tap, and what already went out. Nothing reaches
    Google until the owner taps Post or turns autopilot on. */
-const GP = { board: null, busy: false, expanded: new Set(), showHistory: false };
+const GP = { board: null, busy: false, expanded: new Set(), showHistory: false, loadGeneration: 0, scheduleNeedsRefresh: false };
 const GP_CTA_LABEL = { LEARN_MORE: "Learn more", CALL: "Call now", BOOK: "Book", ORDER: "Order", SHOP: "Shop", SIGN_UP: "Sign up" };
 const GP_TOPIC_LABEL = { STANDARD: "Update", OFFER: "Offer", EVENT: "Event" };
 
 async function gpLoad(quiet) {
+  const generation = ++GP.loadGeneration;
   const slot = $("gposts"); if (!slot) return;
   if (!quiet) slot.innerHTML = `<div class="skel"></div>`;
   try {
-    GP.board = (await get("/google-business-profile/posts-board")).board;
+    const fresh = (await get("/google-business-profile/posts-board")).board;
+    if (generation !== GP.loadGeneration) return;
+    GP.board = fresh;
+    GP.scheduleNeedsRefresh = false;
     gpRender();
   } catch (e) {
+    if (generation !== GP.loadGeneration) return;
     slot.innerHTML = `<div class="gpbox"><div class="cihead" style="color:var(--cyan)">&#128227; GOOGLE POSTS</div>
       <p class="note">${esc(e.message || "Google Posts is unavailable right now.")}</p>
       <button class="pillbtn" id="gpretry" style="margin-top:8px"><b>Try again</b></button></div>`;
@@ -7947,12 +7952,13 @@ function gpNextLine(b) {
   const s = b.settings || {};
   if (!b.connected) return ["Connect Google Business Profile under Business profile & settings and posting lights up.", "var(--orange)"];
   if (s.last_skip_reason && s.enabled) return [s.last_skip_reason, "var(--orange)"];
-  if (b.next_post_at) {
+  if (GP.scheduleNeedsRefresh && s.enabled) return ["Schedule saved — checking the next post time…", "var(--cyan)"];
+  if (s.enabled && b.next_post_at) {
     const at = new Date(b.next_post_at);
     const now = new Date(); const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const day = at.toDateString() === now.toDateString() ? "today" : at.toDateString() === tomorrow.toDateString() ? "tomorrow" : at.toLocaleDateString(undefined, { weekday: "long" });
     const time = at.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-    return [s.mode === "auto" ? `Next post goes out ${day} at ${time}.` : `Next draft lands ${day} at ${time} — you tap Post.`, s.mode === "auto" ? "var(--emerald)" : "var(--cyan)"];
+    return [s.mode === "auto" ? `Next automatic attempt: ${day} at ${time}.` : `Next draft lands ${day} at ${time} — you tap Post.`, s.mode === "auto" ? "var(--emerald)" : "var(--cyan)"];
   }
   return ["Nothing scheduled — draft one now, or turn on the schedule in Settings.", "var(--dim)"];
 }
@@ -8110,7 +8116,10 @@ function gpSettingsSheet() {
           website_url: sh.querySelector("#gpweb").value.trim(), phone_number: sh.querySelector("#gpphone").value.trim(),
           require_fresh_photo: sh.querySelector("#gpfresh").classList.contains("on"),
         });
-        GP.board.settings = r.settings; closeSheet(); toast(r.settings.enabled ? (r.settings.mode === "auto" ? "Autopilot is on" : "Ledger will ask you before each post") : "Saved"); gpRender();
+        GP.loadGeneration++; // Invalidate reads started before the settings save.
+        GP.board = { ...GP.board, settings: r.settings, next_post_at: null };
+        GP.scheduleNeedsRefresh = true;
+        closeSheet(); toast(r.settings.enabled ? (r.settings.mode === "auto" ? "Autopilot is on" : "Ledger will ask you before each post") : "Saved"); gpRender(); await gpLoad(true);
       } catch (e) { btn.disabled = false; btn.textContent = "Save"; sh.querySelector("#gperr").textContent = e.message; }
     };
   });
