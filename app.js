@@ -1,3 +1,4 @@
+import { pendingOffer, saveOffer, clearOffer, bindOffer } from "./login-offers.js?v=1";
 import { createAccountBoundary } from "./account-boundary.js?v=1";
 import { openSecurity, needsMfa } from "./security.js?v=3";
 // Ledger AI — web/PWA client.
@@ -12,6 +13,7 @@ const supa = createClient(SUPA_URL, SUPA_KEY, {auth:{flowType:"pkce",detectSessi
 const FN = SUPA_URL + "/functions/v1";
 const root = document.getElementById("root");
 const accountBoundary = createAccountBoundary({ storage: window.localStorage, onInvalidate: () => {
+  clearOffer();
   // Synchronously remove all old-account pixels, including sheets outside root.
   document.documentElement.style.visibility = "hidden";
   root.replaceChildren();
@@ -57,7 +59,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 181;
+const APP_BUILD = 182;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -329,7 +331,7 @@ async function moveToPlan(plan) {
 // Checkout is for a shop with no subscription. A shop that already has one
 // (trial with a card, active, past due) is refused with already_subscribed —
 // card changes go through the billing portal, never a second Checkout.
-async function startCheckout(plan) {
+async function startCheckout(plan, promoCode = null) {
   // Safety net behind the hidden buttons: nothing inside the Android app may
   // reach a Stripe checkout, however it got called.
   if (inAndroidApp()) throw new Error(SUBSCRIPTION_REQUIRED);
@@ -348,7 +350,7 @@ async function startCheckout(plan) {
       if (!chosen) return Promise.reject(Object.assign(new Error("cancelled"), { cancelled: true }));
     } else chosen = "pro";
   }
-  try { return await api("/stripe-billing/checkout", { plan: chosen }); }
+  try { return await api("/stripe-billing/checkout", { plan: chosen, ...(promoCode ? {promo_code:promoCode} : {}) }); }
   catch (e) {
     if (e.status === 409 && e.data?.error === "already_subscribed" && e.data?.portal_available) {
       toast("Your card is already on file — opening billing.");
@@ -9479,6 +9481,7 @@ function renderAccessBanner(s) {
     b.onclick = async () => { try { const c = path === "/stripe-billing/checkout" ? await startCheckout() : await api(path, {}); location.href = c.url; } catch (e) { if (!e.cancelled) toast(e.message, "err"); } };
     a.appendChild(b);
   };
+  if(s.complimentary_access)return;
   const access = s.access || "full";
   const reason = s.access_reason || "";
   if (access === "grace") {
@@ -10158,16 +10161,17 @@ async function businessSheet() {
         const key = st.plan || "pro";
         const spec = (st.plans || []).find((p) => p.key === key);
         const b = PLAN_BLURB[key] || { tag: "", line: "", extra: "" };
-        const price = spec?.price;
+        const price = st.complimentary_access ? 0 : spec?.price;
         const apple = st.billing_source === "apple";
         let action = "";
-        if (inAndroidApp()) action = "";
+        if (inAndroidApp() || st.complimentary_access) action = "";
         else if (key === "solo") action = `<button class="btn em wide" style="margin-top:11px" id="planup">Move up to Ledger Pro${st.plans?.find((p) => p.key === "pro")?.price ? ` — $${st.plans.find((p) => p.key === "pro").price}/mo` : ""}</button>`;
         else if (st.can_change_plan) action = `<button class="btn ghost wide" style="margin-top:11px" id="plandown">Switch to Ledger Solo</button>`;
         slot.innerHTML = `<div class="kv"><span><b>${esc(st.plan_name || (key === "solo" ? "Ledger Solo" : "Ledger Pro"))}</b><br>
           <small style="color:var(--dim)">${esc(b.tag)}</small></span>
-          <span>${price ? `$${price}<small style="color:var(--dim)">/mo</small>` : ""}</span></div>
+          <span>${st.complimentary_access ? "$0 · test access" : price ? `$${price}<small style="color:var(--dim)">/mo</small>` : ""}</span></div>
           <p class="note" style="margin:8px 0 0">${esc(b.line)}</p>
+          ${st.complimentary_access ? '<p class="note">Complimentary test access. No card required or automatic subscription charge. Processing fees are separate.</p>' : ""}
           ${apple ? `<p class="note" style="margin:8px 0 0">Billed through the App Store — change your plan on your iPhone in Settings → your name → Subscriptions.</p>` : ""}
           ${action}`;
         const up = slot.querySelector("#planup");
@@ -10464,20 +10468,69 @@ function lockView(seed) {
 const AUTH_LEGAL = `<p style="margin-top:18px;font-size:12.5px"><a href="privacy.html" style="color:var(--dim)">Privacy</a> &middot; <a href="terms.html" style="color:var(--dim)">Terms</a> &middot; <a href="support.html" style="color:var(--dim)">Support</a></p>`;
 const APP_URL = location.origin + location.pathname;
 function authCard(title, lead, fields, button, links) {
-  root.innerHTML = `<div class="login"><div class="mark"><img src="assets/logo-mark-96.png" alt=""></div><h2>${title}</h2>
-    <p>${lead}</p>${fields}${button ? `<button class="btn" id="go">${button}</button>` : ""}
-    <p class="note" style="margin-top:12px;line-height:2">${links}</p>${AUTH_LEGAL}</div>`;
+  const signup=button==="Create account", signin=button==="Sign in" && fields.includes('id="pw"');
+  const regular=signup||signin;
+  const selection=pendingOffer();
+  if(signin){title="Welcome back.";lead="Your business, all in one place.";}
+  if(signup){title="Start with Ledger.";lead=selection?"Your offer. Your own business.":"Meet the AI copilot for your business.";}
+  root.innerHTML = `<main class="welcome-layout"><aside class="welcome-story"><div class="welcome-brand"><img src="assets/logo-mark-96.png" alt="">Ledger AI</div><div><div class="welcome-rail">Intelligence. Accuracy. Control.</div><h1>Your business.<br><span>One command<br>centre.</span></h1><p>Your books, customers and day-to-day — together with one AI assistant.</p><div class="welcome-feature">Books. Customers. Your day.<small>The details, all in one place.</small></div><div class="welcome-feature green">Your business, on speaking terms.<small>Meet your AI business copilot.</small></div></div><small>INTELLIGENCE. ACCURACY. CONTROL.</small></aside>
+    <section class="welcome-form"><div class="welcome-brand mobile"><img src="assets/logo-mark-96.png" alt="">Ledger AI</div><div class="welcome-rail">Ledger OS // Welcome</div><h2>${title}</h2><p class="welcome-lead">${lead}</p>
+    ${regular?`<div class="welcome-tabs" aria-label="Account options"><button id="welcome-signin" aria-pressed="${signin}">Sign in</button><button id="welcome-signup" aria-pressed="${signup}">Create account</button></div>`:""}
+    ${selection && regular?'<div class="welcome-selected">Offer saved · verified after sign-in <button id="welcome-remove" type="button">Remove</button></div>':''}
+    <div class="welcome-glass">${fields}${button ? `<button class="btn welcome-primary" id="go">${button}</button>` : ""}
+    <div class="welcome-links">${links}</div>${signup?`<p class="welcome-small">${selection?'Your code will be checked securely before any benefit is applied.':'14 days free. No card needed.'}</p>`:''}</div>
+    ${regular?'<button class="welcome-offer" id="welcome-offer"><span>✧</span><span><b>Have an offer or invitation code?</b><small>Apply a promo or test-client invitation.</small></span><span>→</span></button>':''}
+    <div class="welcome-legal">${AUTH_LEGAL}</div></section></main>`;
+  root.querySelectorAll('input').forEach(i=>{
+    if(!['email','pw','pw2'].includes(i.id))return;
+    const label=document.createElement('label');label.htmlFor=i.id;label.className='welcome-label';label.textContent=i.id==='email'?'Email address':i.id==='pw2'?'Confirm password':'Password';i.before(label);
+    if(i.type==='password') { const wrap=document.createElement('div');wrap.className='welcome-password';i.before(wrap);wrap.append(i);const show=document.createElement('button');show.type='button';show.textContent='Show';show.setAttribute('aria-label','Show password');show.onclick=()=>{const yes=i.type==='password';i.type=yes?'text':'password';show.textContent=yes?'Hide':'Show';show.setAttribute('aria-label',yes?'Hide password':'Show password');};wrap.append(show); }
+  });
+  if(regular){$('welcome-signin').onclick=()=>loginView('signin',emailOf());$('welcome-signup').onclick=()=>loginView('signup',emailOf());$('welcome-offer').onclick=()=>offerEntryView(signup?'signup':'signin',emailOf());}
+  if($('welcome-remove'))$('welcome-remove').onclick=()=>{clearOffer();if(S.email){boot();}else{loginView(signup?'signup':'signin',emailOf());}};
   const go = $("go");
-  root.querySelectorAll("input").forEach((i) => i.addEventListener("keydown", (e) => { if (e.key === "Enter" && go) go.click(); }));
+  root.querySelectorAll("input").forEach(i=>i.addEventListener("keydown",e=>{if(e.key==="Enter"&&go){e.preventDefault();go.click();}}));
   return go;
+}
+function offerEntryView(mode='signin',email='') {
+  authCard('Your invitation.','A special offer for your next chapter.',`<label class="welcome-label" for="offer-kind">Code type</label><select id="offer-kind"><option value="invitation">Ledger test-client invitation</option><option value="promotion">Web subscription promo</option></select><label class="welcome-label" for="offer-code">Offer or invitation code</label><input id="offer-code" maxlength="80" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Enter your code"><p class="welcome-small" id="offer-help">Sign in with your invited email to check the private terms. No access is granted just by entering a code.</p>`,'Continue with code','<a href="#" id="offer-back">Back to sign in</a>');
+  // Code fields have their own meaningful label, not an authentication label.
+  root.querySelector('label.welcome-label[for="offer-code"] + label')?.remove();
+  $('offer-kind').onchange=()=>{$('offer-help').textContent=$('offer-kind').value==='promotion'?'Stripe checks subscription promotions at secure checkout. Review the amount, offer duration and renewal terms before paying.':'Sign in with your invited email to check the private terms. No access is granted just by entering a code.';};
+  $('offer-back').onclick=e=>{e.preventDefault();loginView(mode,email);};
+  $('go').onclick=()=>{try{if(inAndroidApp()&&$('offer-kind').value==='promotion')throw Error(SUBSCRIPTION_REQUIRED);saveOffer($('offer-kind').value,$('offer-code').value);if(S.email){boot();}else{loginView(mode,email);}}catch(e){toast(e.message,'err');}};
+}
+async function offerReviewView(selection,bootstrap) {
+  const promotion=selection.kind==='promotion';
+  authCard(promotion?'Your subscription offer.':'Your invitation.',promotion?'Choose your plan, then review the confirmed offer in secure checkout.':'Checking your private invitation…','','','');
+  let offer;
+  try {
+    offer=promotion?{needs_setup:bootstrap.needs_setup}:await api('/login-offers',{action:'check',code:selection.code});
+    if(pendingOffer()?.code!==selection.code)return;
+    if(offer.redeemed){clearOffer();await boot();return;}
+  }catch(e){authCard('Invitation not applied.',esc(e.message),'','','<button class="btn ghost" id="offer-retry">Retry</button><button class="btn ghost" id="offer-edit">Change code</button><button class="btn ghost" id="offer-skip">Continue without offer</button>');$('offer-retry').onclick=()=>offerReviewView(selection,bootstrap);$('offer-edit').onclick=()=>{clearOffer();offerEntryView();};$('offer-skip').onclick=()=>{clearOffer();boot();};return;}
+  if(promotion && bootstrap.needs_setup){setupView();return;}
+  const fields=promotion?'<p class="welcome-small">No payment has been made. Stripe will validate this code for your plan, currency and account and show the final total and renewal terms. Existing subscriptions will not be replaced.</p>':`<div class="welcome-ticket"><div class="welcome-rail">Complimentary test access</div><h3>Ledger Solo</h3><strong>$0</strong><p>while you’re our test client</p><ul><li>One owner. Your own business.</li><li>Solo features · $60 USD AI / $10 USD texting monthly</li><li>No card required or automatic subscription charge</li></ul><small>Payment-processing fees are separate.</small></div>${offer.needs_setup?'<label class="welcome-label" for="offer-name">Business name</label><input id="offer-name" maxlength="160" autocomplete="organization"><label class="welcome-label" for="offer-currency">Currency</label><select id="offer-currency"><option>CAD</option><option>USD</option></select>':''}`;
+  authCard(promotion?'Review your offer.':'Your next chapter.',promotion?'The payment provider confirms your price.':'Your invitation has been verified for this account.',fields,promotion?'Choose plan and review checkout':'Activate free Solo access','<button type="button" class="welcome-text" id="offer-skip">Continue without offer</button>');
+  $('offer-skip').onclick=()=>{clearOffer();boot();};
+  $('go').onclick=async()=>{
+    const go=$('go');go.disabled=true;
+    try {
+      if(promotion){const checkout=await startCheckout(null,selection.code);clearOffer();location.assign(checkout.url);return;}
+      const name=$('offer-name')?.value.trim()||'';if(offer.needs_setup&&name.length<2)throw Error('Enter your business name.');
+      const result=await api('/login-offers',{action:'redeem',code:selection.code,name,currency:$('offer-currency')?.value||'CAD',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC'});
+      if(!result.redeemed)throw Error('Access was not confirmed. Retry to check the same invitation.');
+      clearOffer();toast('Complimentary Solo access is active. No subscription payment is required.');await boot();
+    }catch(e){go.disabled=false;if(!e.cancelled)toast(e.message,'err');}
+  };
 }
 // A Google callback is accepted only after this tab started a short-lived,
 // PKCE-bound flow. Supabase validates the saved verifier during code exchange.
 function googleSignInButton() {
-  const button=document.createElement("button");button.className="btn";button.type="button";button.id="google-signin";button.textContent="Sign in with Google";
+  const button=document.createElement("button");button.className="btn";button.type="button";button.id="google-signin";button.textContent="Continue with Google";
   button.style.cssText="background:#fff;color:#1f1f1f;border:1px solid #747775;margin-bottom:12px";
   const divider=document.createElement("p");divider.textContent="or use email";divider.className="note";
-  const first=root.querySelector("input");first.before(button,divider);
+  const first=root.querySelector(".welcome-glass .welcome-label")||root.querySelector("input");first.before(button,divider);
   button.onclick=async()=>{
     button.disabled=true;
     try {
@@ -10621,6 +10674,7 @@ function setupView() {
       const created = await api("/workspace-profile", { action: "bootstrap", name, currency: $("bizcur").value, timezone: tz });
       S.currency = $("bizcur").value;
       await loadProfile(created);
+      if(pendingOffer()){await boot();return;}
       onboardInterview(name);
     } catch (e) { toast(e.message, "err"); }
   };
@@ -10734,6 +10788,8 @@ async function boot() {
   S.email = (session.user?.email || "").toLowerCase();
   try {
     const b = await api("/workspace-profile", { action: "bootstrap" });
+    const offer=bindOffer(session.user.id);
+    if(offer && !b.invite_pending){await offerReviewView(offer,b);return;}
     if (b.invite_pending) { joinView(b.invited_business || "A business"); return; }
     if (b.needs_setup) { setupView(); return; }
     // Hard lock (2026-09-05): a lapsed subscription never sees the app shell.
