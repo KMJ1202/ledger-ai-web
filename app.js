@@ -1,3 +1,4 @@
+import { createAccountBoundary } from "./account-boundary.js?v=1";
 import { openSecurity, needsMfa } from "./security.js?v=3";
 // Ledger AI — web/PWA client.
 // audit-20260914 web: calendar guard, outage bubble, CSV screens, copy sweep (build 170)
@@ -10,11 +11,36 @@ const SUPA_KEY = "sb_publishable_I0BQ5Rkc2GCxKOlobtzCNg_GxAtNuPu";
 const supa = createClient(SUPA_URL, SUPA_KEY, {auth:{flowType:"pkce",detectSessionInUrl:false}});
 const FN = SUPA_URL + "/functions/v1";
 const root = document.getElementById("root");
+const accountBoundary = createAccountBoundary({ storage: window.localStorage, onInvalidate: () => {
+  // Synchronously remove all old-account pixels, including sheets outside root.
+  document.documentElement.style.visibility = "hidden";
+  root.replaceChildren();
+  document.querySelectorAll("dialog, #sheetwrap, #ledger-security").forEach(node => node.remove());
+  WAKE.ready = false; wakeStop();
+  try { LIVE?.mic?.getTracks().forEach(track => track.stop()); LIVE?.dc?.close(); LIVE?.pc?.close(); LIVE?.audio?.pause(); } catch {}
+  for (const key of Object.keys(S)) delete S[key];
+  // A new document also destroys suspended timers, closures, media and requests.
+  location.reload();
+}});
+const accountStorage = accountBoundary.accountStorage;
+const authStorageKey = "sb-lbzkyyehmgudlxmfpzzh-auth-token";
+window.addEventListener("storage", event => {
+  if (event.key !== authStorageKey && event.key !== null) return;
+  let session = null;
+  try { session = JSON.parse(window.localStorage.getItem(authStorageKey) || "null"); } catch {}
+  if (accountBoundary.identity && accountBoundary.sessionIdentity(session) !== accountBoundary.identity) accountBoundary.invalidate();
+});
+window.addEventListener("pagehide", () => { document.documentElement.style.visibility = "hidden"; });
+window.addEventListener("pageshow", event => {
+  if (event.persisted) { accountBoundary.invalidate(); return; }
+  if (!accountBoundary.stopped) document.documentElement.style.visibility = "";
+});
+
 
 const S = {
   tab: "home",
-  advisor: localStorage.getItem("ledger.advisor") === "1",
-  conversationId: localStorage.getItem("ledger.conv") || null,
+  advisor: accountStorage.getItem("ledger.advisor") === "1",
+  conversationId: accountStorage.getItem("ledger.conv") || null,
   usage: null,
   profile: null,
   currency: "CAD",
@@ -31,7 +57,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 179;
+const APP_BUILD = 180;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -96,7 +122,13 @@ const timeLabel = (iso) => iso && iso.length > 10
   : "All day";
 const dateShort = (iso) => iso ? new Date(iso.length === 10 ? iso + "T12:00:00" : iso).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
 
-async function token() { const { data } = await supa.auth.getSession(); return data.session?.access_token ?? null; }
+async function token() {
+  const expected = accountBoundary.identity;
+  const { data } = await supa.auth.getSession();
+  if (!accountBoundary.accept(data.session)) throw new DOMException("Account changed", "AbortError");
+  accountBoundary.assertCurrent(expected);
+  return data.session?.access_token ?? null;
+}
 
 // Which connector each data path needs. A shop that never connected
 // QuickBooks, Google or reviews used to fire every one of these on every
@@ -122,15 +154,18 @@ function knownDisconnected(path) {
 // customer's face; the screen shows an inline "part of Pro" panel instead.
 // The door is for something the customer actually asked for.
 async function api(path, body, method = "POST", opts = {}) {
-  const t = await token(); if (!t) throw new Error("Signed out");
+  const expected = accountBoundary.identity;
+  const t = await token(); accountBoundary.assertCurrent(expected); if (!t) throw new Error("Signed out");
   const offline = knownDisconnected(path);
   if (offline) { const err = new Error(offline); err.status = 409; err.data = { error: offline }; throw err; }
   const r = await fetch(FN + path, {
+    signal: accountBoundary.signal,
     method,
     headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
   const d = await r.json().catch(() => ({}));
+  accountBoundary.assertCurrent(expected);
   if (!r.ok) {
     // Callers that need more than the message — a 409's match list, a 402's
     // billing state, an "already posted" doc_number — read it off the error.
@@ -162,7 +197,7 @@ const ANDROID_APP_KEY = "ledger.androidApp";
 try {
   if (document.referrer.startsWith("android-app://ai.heyledger.app")) {
     sessionStorage.setItem(ANDROID_APP_KEY, "1");
-    localStorage.setItem(ANDROID_APP_KEY, "1");
+    accountStorage.setItem(ANDROID_APP_KEY, "1");
   }
 } catch {}
 function inAndroidApp() {
@@ -174,7 +209,7 @@ function inAndroidApp() {
     // A normal Chrome tab is never standalone, so browsing heyledger.ai on the
     // same phone still works exactly as it always did.
     return window.matchMedia("(display-mode: standalone)").matches
-      && localStorage.getItem(ANDROID_APP_KEY) === "1";
+      && accountStorage.getItem(ANDROID_APP_KEY) === "1";
   } catch { return false; }
 }
 const SUBSCRIPTION_REQUIRED = "An active Ledger AI subscription is required.";
@@ -937,7 +972,7 @@ async function loadHomeReviewsPulse() {
     const board = (await get("/google-business-profile/reviews?limit=10")).reviews;
     const unanswered = Number(board.unanswered_count) || 0;
     S.revUnanswered = unanswered;
-    localStorage.removeItem("kmj.gbpOff");
+    accountStorage.removeItem("kmj.gbpOff");
     const avg = Number(board.average_rating) || 0;
     const total = Number(board.total_review_count ?? board.total_count) || 0;
     const latest = (board.items || []).find((r) => r.comment);
@@ -954,7 +989,7 @@ async function loadHomeReviewsPulse() {
   } catch (e) {
     slot.innerHTML = "";
     S.revUnanswered = 0;
-    if (e && (e.status === 409 || e.status === 403)) localStorage.setItem("kmj.gbpOff", "1");
+    if (e && (e.status === 409 || e.status === 403)) accountStorage.setItem("kmj.gbpOff", "1");
   }
 }
 
@@ -1292,13 +1327,13 @@ function shopProfileSheet(onDone, opts = {}) {
 const SETUP_HIDE_KEY = "ledger.setupHidden";
 async function loadHomeSetup() {
   const slot = $("homesetup"); if (!slot) return;
-  if (localStorage.getItem(SETUP_HIDE_KEY) === "1") return;
+  if (accountStorage.getItem(SETUP_HIDE_KEY) === "1") return;
   // Instant open (Kyle 2026-09-08): the checklist used to appear only after
   // three round trips and then shove the page down when it landed. The last
   // known shape paints straight from storage; the network only corrects it.
   const SETUP_CACHE_KEY = "ledger.setup.v1";
   let cachedSetup = null;
-  try { cachedSetup = JSON.parse(localStorage.getItem(SETUP_CACHE_KEY) || "null"); } catch {}
+  try { cachedSetup = JSON.parse(accountStorage.getItem(SETUP_CACHE_KEY) || "null"); } catch {}
   if (cachedSetup) paint(cachedSetup.shop, cachedSetup.books, cachedSetup.cal, cachedSetup.paid,
                          cachedSetup.trialLine, cachedSetup.stalled, cachedSetup.billingReady);
   let map = {}, bill = null, bs = null;
@@ -1323,14 +1358,14 @@ async function loadHomeSetup() {
   const shop = !!S.shop?.completed;
   const billingReady = !!bill?.billing_ready;
   // Google Calendar is optional since the built-in calendar (2026-09-13): it never blocks "set up".
-  if (shop && books && paid) { slot.innerHTML = ""; try { localStorage.removeItem(SETUP_CACHE_KEY); } catch {} return; }
+  if (shop && books && paid) { slot.innerHTML = ""; try { accountStorage.removeItem(SETUP_CACHE_KEY); } catch {} return; }
   // Stalled = still not set up a day after signing up. Only then offer the
   // founder's calendar — most shops never need the call (Kyle, 2026-09-05).
   const since = S.profile?.business?.member_since ? Date.parse(S.profile.business.member_since) : Date.now();
   const stalled = Date.now() - since > 24 * 3600 * 1000;
   const trialLine = bill?.subscription_status === "trialing" && bill.trial_ends_at
     ? `Free until ${dateShort(bill.trial_ends_at)} — add a card so nothing stops on day 15.` : "Keep Ledger running after your trial.";
-  try { localStorage.setItem(SETUP_CACHE_KEY, JSON.stringify({ shop, books, cal, paid, trialLine, stalled, billingReady })); } catch {}
+  try { accountStorage.setItem(SETUP_CACHE_KEY, JSON.stringify({ shop, books, cal, paid, trialLine, stalled, billingReady })); } catch {}
   paint(shop, books, cal, paid, trialLine, stalled, billingReady);
 
   // Everything below only draws. It is a named function so the cached shape
@@ -1366,7 +1401,7 @@ async function loadHomeSetup() {
       } catch (e) { native.disabled = false; toast(e.message, "err"); }
     };
     const hide = slot.querySelector("#setuphide");
-    if (hide) hide.onclick = () => { localStorage.setItem(SETUP_HIDE_KEY, "1"); slot.innerHTML = ""; };
+    if (hide) hide.onclick = () => { accountStorage.setItem(SETUP_HIDE_KEY, "1"); slot.innerHTML = ""; };
     const card = slot.querySelector("#setupcard");
     if (card) card.onclick = async () => {
       card.disabled = true;
@@ -1965,11 +2000,11 @@ function downloadBooksExport(ex) {
 }
 async function sendNativeDocumentEmail(kind,id,to,force) {
   const key="ledger.pending-document-email."+kind+"."+id;
-  let pending=JSON.parse(localStorage.getItem(key)||"null");
+  let pending=JSON.parse(accountStorage.getItem(key)||"null");
   if(pending&&pending.to.toLowerCase()!==to.toLowerCase())throw new Error("Recover the interrupted email to "+pending.to+" before changing its recipient.");
-  if(!pending){pending={action:kind+"-send",id,to,force,client_ref:crypto.randomUUID()};localStorage.setItem(key,JSON.stringify(pending));}
-  try{const result=await booksApi(pending);localStorage.removeItem(key);return result;}
-  catch(e){if(/already emailed|No valid email/i.test(e.message))localStorage.removeItem(key);throw e;}
+  if(!pending){pending={action:kind+"-send",id,to,force,client_ref:crypto.randomUUID()};accountStorage.setItem(key,JSON.stringify(pending));}
+  try{const result=await booksApi(pending);accountStorage.removeItem(key);return result;}
+  catch(e){if(/already emailed|No valid email/i.test(e.message))accountStorage.removeItem(key);throw e;}
 }
 function booksEmailHistoryMarkup(doc) {
   const labels={pending:"Sending — retry to recover",unknown:"Delivery needs verification",accepted:"Accepted for delivery",delivered:"Delivered",failed:"Delivery failed"};
@@ -1991,7 +2026,7 @@ async function nativeInvoiceSheet(id) {
   const wrap = sheet(`<h2>Invoice</h2><div id="binvbody"><div class="skel"></div><div class="skel"></div></div>`);
   const body = () => wrap.querySelector("#binvbody");
   const paymentKey="ledger.pending-payment."+id;
-  let pendingPayment=JSON.parse(localStorage.getItem(paymentKey)||"null");
+  let pendingPayment=JSON.parse(accountStorage.getItem(paymentKey)||"null");
   let inv;
   try { inv = (await booksApi({ action: "invoice-get", id })).invoice; }
   catch (e) { body().innerHTML = `<p class="note err">${esc(e.message)}</p>`; return; }
@@ -2068,16 +2103,16 @@ async function nativeInvoiceSheet(id) {
         if (!pendingPayment && amount > Number(inv.balance) + 0.005) throw new Error(`That is more than the ${money(inv.balance)} still owing. Record up to ${money(inv.balance)}.`);
         if(!pendingPayment) {
           pendingPayment={action:"payment-record",invoice_id:inv.id,amount,method:wrap.querySelector("#bmethod").value,client_ref:crypto.randomUUID()};
-          localStorage.setItem(paymentKey,JSON.stringify(pendingPayment));
+          accountStorage.setItem(paymentKey,JSON.stringify(pendingPayment));
         }
         const r = await booksApi(pendingPayment);
         if(!r.invoice?.id) throw new Error("Payment reply was incomplete. Recover the same payment.");
-        localStorage.removeItem(paymentKey); pendingPayment=null;
+        accountStorage.removeItem(paymentKey); pendingPayment=null;
         inv = { ...inv, ...r.invoice, link };
         toast(r.invoice.status === "paid" ? "Invoice paid in full" : "Payment recorded");
         paint(); loadNativeInvoices();
       } catch (e) {
-        if ([400,404,409].includes(e.status) && !/different details/i.test(e.message)) { localStorage.removeItem(paymentKey);pendingPayment=null; }
+        if ([400,404,409].includes(e.status) && !/different details/i.test(e.message)) { accountStorage.removeItem(paymentKey);pendingPayment=null; }
         paint(); wrap.querySelector("#berr").textContent=e.message;
       }
     };
@@ -2975,12 +3010,12 @@ async function composerSheet(kind) {
         <tr><td class="total">Subtotal</td><td class="total">${money(d.subtotal)}</td></tr></table>
       ${isEst ? "" : termsRow(d.terms)}
       ${d.customer_email ? `<label class="emailrow"><input type="checkbox" id="cmpem" checked> Email to ${esc(d.customer_email)}${(d.customer_email_cc || []).length ? ` · cc ${esc(d.customer_email_cc.join(", "))}` : ""}${d.recipients_locked ? ` <span class="note">(your standing rule for this customer)</span>` : ""}</label>` : ""}
-      <label class="emailrow"><input type="checkbox" id="cmppr" ${localStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
+      <label class="emailrow"><input type="checkbox" id="cmppr" ${accountStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
       <div class="row"><button class="btn cancel" id="cmpcancel">Cancel</button><button class="btn confirm" id="cmpconfirm">Confirm</button></div>
       <div class="note" id="cmpnote" style="margin-top:9px"></div></div>`;
     const note = body().querySelector("#cmpnote");
     const draftBtns = () => [body().querySelector("#cmpconfirm"), body().querySelector("#cmpcancel")].filter(Boolean);
-    body().querySelector("#cmppr").onchange = (e) => localStorage.setItem("ledger.printAfterPosting", e.target.checked ? "1" : "0");
+    body().querySelector("#cmppr").onchange = (e) => accountStorage.setItem("ledger.printAfterPosting", e.target.checked ? "1" : "0");
     body().querySelector("#cmpconfirm").onclick = async () => {
       draftBtns().forEach((b) => b.disabled = true);
       const sendEmail = body().querySelector("#cmpem")?.checked ?? false;
@@ -4415,8 +4450,8 @@ function crewRestartSweep(root) {
   if (CREW_REDUCE_MOTION()) bar.style.width = "100%";
 }
 const crewShopCentreKey = "crew.shopCentre.v1";
-function crewShopCentreCached() { try { const c = JSON.parse(localStorage.getItem(crewShopCentreKey) || "null"); return c && typeof c.lat === "number" ? c : null; } catch { return null; } }
-function crewShopCentreRemember(lat, lng, address) { try { localStorage.setItem(crewShopCentreKey, JSON.stringify({ lat, lng, address: address || crewShopCentreCached()?.address || "" })); } catch {} }
+function crewShopCentreCached() { try { const c = JSON.parse(accountStorage.getItem(crewShopCentreKey) || "null"); return c && typeof c.lat === "number" ? c : null; } catch { return null; } }
+function crewShopCentreRemember(lat, lng, address) { try { accountStorage.setItem(crewShopCentreKey, JSON.stringify({ lat, lng, address: address || crewShopCentreCached()?.address || "" })); } catch {} }
 
 async function crewLiveMapSheet() {
   const wrap = sheet(`<div class="chead">${crewKicker("LIVE MAP", "cyan", true)}<h2>Where your crew is</h2></div>
@@ -5668,7 +5703,7 @@ async function renderPhone(cachedBoard = null) {
       // First time a number goes live, open the setup guide once — same
       // one-shot pattern as the iOS onboarding interview's @AppStorage flag.
       const seenKey = "ledger.phoneSetupSeen." + d.number.id;
-      if (!localStorage.getItem(seenKey)) { localStorage.setItem(seenKey, "1"); phoneSetupSheet(d); }
+      if (!accountStorage.getItem(seenKey)) { accountStorage.setItem(seenKey, "1"); phoneSetupSheet(d); }
       if (phoneLane() === "activity") loadVoicemails(d);
     }
   } catch (e) {
@@ -7639,10 +7674,10 @@ async function renderCustomers() {
     // opening the lane, so fetch the count once per session.
     if (S.revUnanswered === undefined) {
       S.revUnanswered = 0;
-      if (localStorage.getItem("kmj.gbpOff") !== "1") {
+      if (accountStorage.getItem("kmj.gbpOff") !== "1") {
         get("/google-business-profile/reviews?limit=10")
           .then((d) => { S.revUnanswered = d.reviews?.unanswered_count || 0; if (S.tab === "customers" && S.revUnanswered) renderCustomers(); })
-          .catch((e) => { if (e && (e.status === 409 || e.status === 403)) localStorage.setItem("kmj.gbpOff", "1"); });
+          .catch((e) => { if (e && (e.status === 409 || e.status === 403)) accountStorage.setItem("kmj.gbpOff", "1"); });
       }
     }
   } else if (S.lane === "reviews") loadReviewsLane();
@@ -7935,7 +7970,7 @@ const GP_COACH = [
   ["limit", "&#128207;", "1,500 characters, hard limit", "Google will not accept a longer post, and short and specific reads better anyway.", "Ledger keeps every draft under the limit and shows the count while you edit."],
   ["kinds", "&#128218;", "Three kinds of post", "Update: what's new. Offer: a deal with dates and an optional code. Event: something with a date and a title. Google shows offer and event details itself.", "Say it in chat — \"post an offer: 10% off brake service until Friday\" — or tap Draft a post now."],
 ];
-const gpCoachDismissed = () => new Set(JSON.parse(localStorage.getItem("ledger.gbpCoachDismissed") || "[]"));
+const gpCoachDismissed = () => new Set(JSON.parse(accountStorage.getItem("ledger.gbpCoachDismissed") || "[]"));
 function gpCoachHTML() {
   const gone = gpCoachDismissed();
   const tips = GP_COACH.filter(([id]) => !gone.has(id));
@@ -7953,10 +7988,10 @@ function gpCoachHTML() {
 function gpCoachWire(slot) {
   on("[data-gpgotit]", "click", (e) => {
     const gone = gpCoachDismissed(); gone.add(e.currentTarget.dataset.gpgotit);
-    localStorage.setItem("ledger.gbpCoachDismissed", JSON.stringify([...gone]));
+    accountStorage.setItem("ledger.gbpCoachDismissed", JSON.stringify([...gone]));
     const card = e.currentTarget.closest(".gpcoach"); if (card) card.outerHTML = gpCoachHTML(); gpCoachWire($("gposts"));
   }, slot);
-  if ($("gpcoachagain")) $("gpcoachagain").onclick = () => { localStorage.removeItem("ledger.gbpCoachDismissed"); const card = $("gposts").querySelector(".gpcoach"); if (card) card.outerHTML = gpCoachHTML(); gpCoachWire($("gposts")); };
+  if ($("gpcoachagain")) $("gpcoachagain").onclick = () => { accountStorage.removeItem("ledger.gbpCoachDismissed"); const card = $("gposts").querySelector(".gpcoach"); if (card) card.outerHTML = gpCoachHTML(); gpCoachWire($("gposts")); };
   const strip = $("gptips");
   if (strip) strip.onscroll = () => { const n = $("gpcoachn"); if (!n) return; const w = strip.firstElementChild ? strip.firstElementChild.getBoundingClientRect().width + 10 : 1; n.textContent = `${Math.min(strip.children.length, Math.round(strip.scrollLeft / w) + 1)} / ${strip.children.length}`; };
 }
@@ -8157,8 +8192,8 @@ function gpDelete(id) {
   });
 }
 
-const reviewAsked = () => new Set((localStorage.getItem("kmj.reviewRequestedCustomerIDs") || "").split(",").filter(Boolean));
-const markReviewAsked = (id) => { const s = reviewAsked(); s.add(id); localStorage.setItem("kmj.reviewRequestedCustomerIDs", [...s].sort().join(",")); };
+const reviewAsked = () => new Set((accountStorage.getItem("kmj.reviewRequestedCustomerIDs") || "").split(",").filter(Boolean));
+const markReviewAsked = (id) => { const s = reviewAsked(); s.add(id); accountStorage.setItem("kmj.reviewRequestedCustomerIDs", [...s].sort().join(",")); };
 
 /* ---- Customers tab shared pieces (iPhone parity, 2026-09-07) ---- */
 
@@ -9300,7 +9335,7 @@ function openChat() {
 }
 function closeChat() { $("chatwrap").classList.remove("open"); $("box").value = ""; }
 function newConversation() {
-  S.conversationId = null; localStorage.removeItem("ledger.conv");
+  S.conversationId = null; accountStorage.removeItem("ledger.conv");
   S.historyChecked = true; // an explicit fresh start is not a reload to recover from
   chatEl().innerHTML = ""; sys("Fresh conversation started.");
 }
@@ -9318,7 +9353,7 @@ async function restoreChatHistory() {
       chatEl().innerHTML = "";
       d.messages.forEach((m) => bubble(m.role === "user" ? "msg me" : "msg ai", m.role === "user" ? esc(m.content) : md(m.content)));
     }
-    if (d.conversation_id) { S.conversationId = d.conversation_id; localStorage.setItem("ledger.conv", d.conversation_id); }
+    if (d.conversation_id) { S.conversationId = d.conversation_id; accountStorage.setItem("ledger.conv", d.conversation_id); }
   } catch { /* No history route yet, or signed out — keep the local welcome message. */ }
 }
 const chatEl = () => $("chat");
@@ -9331,12 +9366,12 @@ function banner() {
   const p = $("advisor"); if (p) p.className = "pill" + (S.advisor ? " on" : "");
 }
 function toggleAdvisor() {
-  if (!S.advisor && localStorage.getItem("ledger.advisorNotice") !== "1") {
+  if (!S.advisor && accountStorage.getItem("ledger.advisorNotice") !== "1") {
     const meter = S.usage ? ` (${money(S.usage.spent_usd)} of ${money(S.usage.budget_usd)} used this month)` : "";
     if (!window.confirm("Advisor Mode opens up business guidance beyond your books — marketing, pricing, hiring, growth — grounded in your real numbers. It uses your monthly AI allowance" + meter + ".")) return;
-    localStorage.setItem("ledger.advisorNotice", "1");
+    accountStorage.setItem("ledger.advisorNotice", "1");
   }
-  S.advisor = !S.advisor; localStorage.setItem("ledger.advisor", S.advisor ? "1" : "0"); banner();
+  S.advisor = !S.advisor; accountStorage.setItem("ledger.advisor", S.advisor ? "1" : "0"); banner();
 }
 
 function setUsage(u) {
@@ -9478,7 +9513,7 @@ async function send() {
       message: text, mode: S.advisor ? "advisor" : "books",
       ...(S.conversationId ? { conversation_id: S.conversationId } : {}),
     });
-    S.conversationId = d.conversation_id; localStorage.setItem("ledger.conv", S.conversationId);
+    S.conversationId = d.conversation_id; accountStorage.setItem("ledger.conv", S.conversationId);
     t.remove(); bubble("msg ai", md(d.reply));
     if (d.usage_status) setUsage(d.usage_status);
     (d.invoice_drafts || []).forEach((x) => draftCard(x, "INVOICE DRAFT", "/quickbooks-invoice/confirm", "/quickbooks-invoice/cancel"));
@@ -9535,10 +9570,10 @@ function draftCard(d, label, confirmPath, cancelPath) {
     <tr><td class="total">Total</td><td class="total">${money(d.total)}</td></tr>` : `<tr><td colspan="2" class="note">Tax is added when you confirm.</td></tr>`}</table>
     ${isInvoice ? termsRow(d.terms) : ""}
     ${d.customer_email ? `<label class="emailrow"><input type="checkbox" class="em" checked> Email to ${esc(d.customer_email)}${(d.customer_email_cc || []).length ? ` · cc ${esc(d.customer_email_cc.join(", "))}` : ""}${d.recipients_locked ? ` <span class="note">(your standing rule for this customer)</span>` : ""}</label>` : ""}
-    <label class="emailrow"><input type="checkbox" class="pr" ${localStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
+    <label class="emailrow"><input type="checkbox" class="pr" ${accountStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
     <div class="row"><button class="btn cancel">Cancel</button><button class="btn confirm">Confirm</button></div>`);
   const cardBtns = () => [card.querySelector(".confirm"), card.querySelector(".cancel")].filter(Boolean);
-  card.querySelector(".pr").onchange = (e) => localStorage.setItem("ledger.printAfterPosting", e.target.checked ? "1" : "0");
+  card.querySelector(".pr").onchange = (e) => accountStorage.setItem("ledger.printAfterPosting", e.target.checked ? "1" : "0");
   card.querySelector(".confirm").onclick = async () => {
     cardBtns().forEach((b) => b.disabled = true);
     try {
@@ -10590,12 +10625,12 @@ function setupView() {
 // it. Pinned in localStorage until finished or skipped, so closing the tab on
 // this screen brings the owner straight back to it (sim bug 16).
 const OB_KEY = "ledger.onboard.pending";
-function onboardPending() { try { return JSON.parse(localStorage.getItem(OB_KEY) || "null"); } catch { return null; } }
+function onboardPending() { try { return JSON.parse(accountStorage.getItem(OB_KEY) || "null"); } catch { return null; } }
 function onboardInterview(bizName) {
-  try { localStorage.setItem(OB_KEY, JSON.stringify({ bizName, email: S.email || "" })); } catch {}
+  try { accountStorage.setItem(OB_KEY, JSON.stringify({ bizName, email: S.email || "" })); } catch {}
   appView();
   shopProfileSheet((saved) => {
-    try { localStorage.removeItem(OB_KEY); } catch {}
+    try { accountStorage.removeItem(OB_KEY); } catch {}
     S.cal = null; setTab("home");
     openChat();
     sys("🎉 " + bizName + " is set up — your 14-day free trial is live." +
@@ -10626,6 +10661,10 @@ function joinView(businessName) {
 // bootstrap answers "does this user have a workspace"; `get` carries the business detail.
 // currency_code isn't on either payload, so it comes from the workspaces row (RLS: members read).
 async function loadProfile(boot) {
+  const expected = accountBoundary.identity;
+  const { data: { session } } = await supa.auth.getSession();
+  accountBoundary.assertCurrent(expected);
+  if (!accountBoundary.bindWorkspace(session, boot.workspace_id)) throw new Error("Business verification is unavailable. Please retry.");
   const profile = { ...boot, business: { name: boot.name || "", address: "", logo_url: null } };
   // Business profile rides on bootstrap. A payload without it (older function)
   // is treated as a completed generic business — never a nag, never automotive.
@@ -10639,12 +10678,15 @@ async function loadProfile(boot) {
     const { data } = await supa.from("workspaces").select("currency_code").eq("id", boot.workspace_id).maybeSingle();
     if (data?.currency_code) S.currency = data.currency_code;
   } catch {}
+  accountBoundary.assertCurrent(expected);
   S.profile = profile;
   return profile;
 }
 
 async function boot() {
   const { data: { session } } = await supa.auth.getSession();
+  if (!accountBoundary.accept(session)) return;
+  const expected = accountBoundary.identity;
   const qs = new URLSearchParams(location.search);
   // Reset emails carry a one-time token_hash that is only spent when the
   // customer taps Save — so inbox link-scanners that pre-open links (Gmail
@@ -10666,12 +10708,15 @@ async function boot() {
     loginView("signin"); return;
   }
   try {
-    if (await needsMfa(supa)) {
+    const mfaNeeded = await needsMfa(supa);
+    accountBoundary.assertCurrent(expected);
+    if (mfaNeeded) {
       root.innerHTML = '<div class="panel"><h2>Secure your account</h2><p>Two-step verification is required before you can use Ledger. Add an authenticator or enter its code to continue.</p><button class="btn primary" id="mfa-signin">Continue securely</button><button class="btn ghost" id="mfa-signout">Sign out</button></div>';
       const verify=()=>openSecurity(supa,{required:true,onVerified:()=>void boot()});
       $("mfa-signin").onclick=verify;$("mfa-signout").onclick=()=>supa.auth.signOut().then(()=>location.reload());await verify();return;
     }
   } catch {
+    if (accountBoundary.stopped) return;
     root.innerHTML='<div class="panel"><h2>Security check unavailable</h2><p>Your business stays locked until we can verify your sign-in.</p><button class="btn primary" id="mfa-retry">Retry</button><button class="btn ghost" id="mfa-signout">Sign out</button></div>';
     $("mfa-retry").onclick=()=>void boot();$("mfa-signout").onclick=()=>supa.auth.signOut().then(()=>location.reload());return;
   }
@@ -10684,14 +10729,22 @@ async function boot() {
     if (b.needs_setup) { setupView(); return; }
     // Hard lock (2026-09-05): a lapsed subscription never sees the app shell.
     if (accessLocked(b)) { lockView({ name: b.name, subscription_status: b.subscription_status, trial_ends_at: b.trial_ends_at }); return; }
+    if (!accountBoundary.bindWorkspace(session, b.workspace_id)) throw new Error("Business verification is unavailable. Please retry.");
+    S.conversationId = accountStorage.getItem("ledger.conv");
     // Know what is connected before the first screen paints, so a built-in
     // books shop never fires QuickBooks/Google requests it can't answer.
     await Promise.all([loadProfile(b), connectionStates()]);
+    accountBoundary.assertCurrent(expected);
     // An interview that was open when the app closed comes straight back.
     const ob = onboardPending();
     if (ob && (!ob.email || ob.email === S.email)) { onboardInterview(ob.bizName || b.name || "", ob); return; }
     appView();
-  } catch { appView(); }
+  } catch {
+    if (accountBoundary.stopped) return;
+    root.innerHTML = '<div class="panel"><h2>Unable to load your business</h2><p>Check your connection and try again.</p><button class="btn primary" id="business-retry">Retry</button></div>';
+    $("business-retry").onclick = () => void boot();
+    return;
+  }
   // app.html#vin opens the scanner straight away (Home Screen shortcut / QR on the shop wall).
   if (location.hash === "#vin") { history.replaceState(null, "", location.pathname); vinScannerSheet(); }
 }
@@ -11127,7 +11180,7 @@ function pushSettingsCard(slot) {
    Hearing "hey ledger" opens Ledger Live. Chrome/Edge stop after silence and
    are restarted; Safari on iPhone drops the mic when the screen locks, which is
    why the switch points phone users at the iPhone app. */
-const WAKE = { on: localStorage.getItem("ledger.wakeWord") === "1", rec: null, ready: false, denied: false, last: 0 };
+const WAKE = { on: accountStorage.getItem("ledger.wakeWord") === "1", rec: null, ready: false, denied: false, last: 0 };
 const WAKE_PHRASES = ["hey ledger", "hey ledgers", "hey ledge", "hey leger", "hey lodger", "hey lecher", "hey letcher"];
 function wakeSupported() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
 function wakeSync() {
@@ -11164,7 +11217,7 @@ function wakeStart() {
 function wakeStop() { const r = WAKE.rec; WAKE.rec = null; try { r?.stop(); } catch {} }
 function wakeToggle(btn) {
   WAKE.on = !WAKE.on; WAKE.denied = false;
-  localStorage.setItem("ledger.wakeWord", WAKE.on ? "1" : "0");
+  accountStorage.setItem("ledger.wakeWord", WAKE.on ? "1" : "0");
   if (btn) { btn.classList.toggle("on", WAKE.on); btn.setAttribute("aria-checked", String(WAKE.on)); }
   wakeSync();
   toast(WAKE.on ? "Listening for “Hey Ledger” while this tab is open" : "“Hey Ledger” is off");
@@ -11301,6 +11354,8 @@ function liveSheet() {
 try { await finishGoogleReturn(); } catch(error) { loginView("signin");toast(error.message,"err"); }
 boot();
 supa.auth.onAuthStateChange((event, s) => {
+  if (!accountBoundary.accept(s)) return;
+  if (event === "SIGNED_OUT") { accountBoundary.invalidate(); return; }
   if (event === "PASSWORD_RECOVERY") { newPasswordView(); return; }
   if (event === "SIGNED_IN" && s && !$("view") && !$("bizname") && !$("joincode") && !$("pw2")) setTimeout(() => void boot(), 0);
 });
