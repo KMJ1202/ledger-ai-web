@@ -59,7 +59,7 @@ const S = {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 182;
+const APP_BUILD = 183;
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -1337,7 +1337,7 @@ async function loadHomeSetup() {
   let cachedSetup = null;
   try { cachedSetup = JSON.parse(accountStorage.getItem(SETUP_CACHE_KEY) || "null"); } catch {}
   if (cachedSetup) paint(cachedSetup.shop, cachedSetup.books, cachedSetup.cal, cachedSetup.paid,
-                         cachedSetup.trialLine, cachedSetup.stalled, cachedSetup.billingReady);
+                         cachedSetup.trialLine, cachedSetup.stalled, cachedSetup.billingReady, cachedSetup.complimentary);
   let map = {}, bill = null, bs = null;
   try {
     [map, bill, bs] = await Promise.all([
@@ -1359,20 +1359,21 @@ async function loadHomeSetup() {
   const paid = !!bill && (["active", "past_due"].includes(bill.subscription_status) || !!bill.card_on_file);
   const shop = !!S.shop?.completed;
   const billingReady = !!bill?.billing_ready;
+  const complimentary = bill?.complimentary_access === true;
   // Google Calendar is optional since the built-in calendar (2026-09-13): it never blocks "set up".
   if (shop && books && paid) { slot.innerHTML = ""; try { accountStorage.removeItem(SETUP_CACHE_KEY); } catch {} return; }
   // Stalled = still not set up a day after signing up. Only then offer the
   // founder's calendar — most shops never need the call (Kyle, 2026-09-05).
   const since = S.profile?.business?.member_since ? Date.parse(S.profile.business.member_since) : Date.now();
   const stalled = Date.now() - since > 24 * 3600 * 1000;
-  const trialLine = bill?.subscription_status === "trialing" && bill.trial_ends_at
+  const trialLine = complimentary ? "Complimentary test access — no card or automatic subscription charge." : bill?.subscription_status === "trialing" && bill.trial_ends_at
     ? `Free until ${dateShort(bill.trial_ends_at)} — add a card so nothing stops on day 15.` : "Keep Ledger running after your trial.";
-  try { accountStorage.setItem(SETUP_CACHE_KEY, JSON.stringify({ shop, books, cal, paid, trialLine, stalled, billingReady })); } catch {}
-  paint(shop, books, cal, paid, trialLine, stalled, billingReady);
+  try { accountStorage.setItem(SETUP_CACHE_KEY, JSON.stringify({ shop, books, cal, paid, trialLine, stalled, billingReady, complimentary })); } catch {}
+  paint(shop, books, cal, paid, trialLine, stalled, billingReady, complimentary);
 
   // Everything below only draws. It is a named function so the cached shape
   // above can paint the card before a single request has come back.
-  function paint(shop, books, cal, paid, trialLine, stalled, billingReady) {
+  function paint(shop, books, cal, paid, trialLine, stalled, billingReady, complimentary = false) {
     const step = (done, num, title, detail, action) => `<div class="setupstep${done ? " done" : ""}">
         <span class="num">${done ? "&#10003;" : num}</span>
         <span class="m"><b>${title}</b><small>${detail}</small></span>
@@ -1385,7 +1386,7 @@ async function loadHomeSetup() {
           <span style="display:flex;gap:8px;margin-top:9px"><button class="btn primary" data-connect="/quickbooks-oauth/start">QuickBooks</button><button class="btn ghost" id="setupnative">Built-in books</button></span>`, "")}
       ${step(cal, 3, "Google Calendar (optional)", "Ledger has its own calendar, so booking already works. Connect Google if you also want your appointments there.",
         `<button class="btn ghost" data-connect="/google-calendar/start">Connect</button>`)}
-      ${step(paid, 4, "Add a card", trialLine,
+      ${step(paid, 4, complimentary ? "Complimentary Solo access" : "Add a card", trialLine,
         billingReady && !inAndroidApp() ? `<button class="btn ghost" id="setupcard">Add card</button>` : "")}
       ${stalled ? `<p class="note" style="margin-top:10px">Stuck? <a href="https://heyledger.ai/talk" target="_blank" rel="noopener">Book 15 minutes with the founder</a> and he'll walk you through it.</p>` : ""}
     </div>`;
