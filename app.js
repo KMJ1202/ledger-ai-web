@@ -5103,7 +5103,7 @@ function bookingSheet(dayISO, editing, prefill) {
   // Setup and phone entry points do not have a selected calendar day yet.
   const base = editing ? new Date(editing.start) : new Date((dayISO || localVal(now).slice(0, 10)) + "T09:00:00");
   const startAt = !editing && base < now ? new Date(now.getTime() + 3600000) : base;
-  const mins = editing && editing.end ? Math.max(15, Math.round((new Date(editing.end) - new Date(editing.start)) / 60000)) : 60;
+  const mins = editing && editing.end ? (new Date(editing.end) - new Date(editing.start)) / 60000 : 60;
 
   sheet(`<h2>${editing ? "Edit Appointment" : "New Appointment"}</h2>
     ${editing ? `<label class="fld">TITLE</label><input id="bkTitle" class="cmpinput" value="${esc(editing.title)}">`
@@ -5125,7 +5125,7 @@ function bookingSheet(dayISO, editing, prefill) {
     <label class="fld">STARTS</label>
     <input id="bkStart" class="cmpinput" type="datetime-local" value="${localVal(startAt)}">
     <label class="fld">DURATION</label>
-    <select id="bkDur" class="cmpinput">${[30, 45, 60, 90, 120].map((n) =>
+    <select id="bkDur" class="cmpinput">${[...new Set([30, 45, 60, 90, 120, mins])].filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>a-b).map((n) =>
       `<option value="${n}" ${n === mins ? "selected" : ""}>${n < 60 ? n + " minutes" : n === 60 ? "1 hour" : (n / 60) + " hours"}</option>`).join("")}</select>
     ${editing ? `<label class="fld">LOCATION</label><input id="bkLoc" class="cmpinput" value="${esc(editing.location || "")}">
       <label class="fld">DETAILS</label><textarea id="bkNotes" class="cmpinput" rows="4">${esc(editing.description || "")}</textarea>`
@@ -5231,7 +5231,8 @@ function bookingSheet(dayISO, editing, prefill) {
         if (editing) {
           ev.currentTarget.disabled = true;
           await api("/google-calendar/event-update", {
-            event_id: editing.id, title: val("bkTitle"), start: start.toISOString(), end: end.toISOString(),
+            event_id: editing.id, title: val("bkTitle"),
+            ...(startVal !== localVal(startAt) || Number(val("bkDur")) !== mins ? {start:start.toISOString(),end:end.toISOString()} : {}),
             location: val("bkLoc"), description: val("bkNotes"),
           });
           S.cal = null; closeSheet(); toast("Appointment updated"); renderCalendar();
@@ -10648,15 +10649,27 @@ function newPasswordView(tokenHash = null) {
     if (pw.length < 8) { toast("Use at least 8 characters", "err"); return; }
     if (pw !== $("pw2").value) { toast("Passwords don't match", "err"); return; }
     go.disabled = true;
-    if (tokenHash) {
-      const { error: verr } = await supa.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" });
-      if (verr) { history.replaceState({}, "", location.pathname); loginView("forgot"); toast("That reset link has expired — send a fresh one.", "err"); return; }
-    }
-    const { error } = await supa.auth.updateUser({ password: pw });
-    if (error) { go.disabled = false; toast(authErr(error), "err"); return; }
-    history.replaceState({}, "", location.pathname);
-    toast("Password saved — you're signed in");
-    boot();
+    const savePassword = async () => {
+      try {
+        const { error } = await supa.auth.updateUser({ password: pw });
+        if (error) throw error;
+        history.replaceState({}, "", location.pathname);
+        toast("Password saved — you're signed in");
+        boot();
+      } catch (error) { go.disabled = false; toast(authErr(error), "err"); }
+    };
+    try {
+      if (tokenHash) {
+        const { error: verr } = await supa.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" });
+        if (verr) { history.replaceState({}, "", location.pathname); loginView("forgot"); toast("That reset link has expired — send a fresh one.", "err"); return; }
+        // The link is single-use. Retries use its established session, never consume it twice.
+        tokenHash = null;
+        history.replaceState({}, "", location.pathname + "?reset=1");
+      }
+      if (await needsMfa(supa)) {
+        await openSecurity(supa, {required:true,onVerified:()=>void savePassword()});
+      } else await savePassword();
+    } catch (error) { go.disabled = false; toast(authErr(error), "err"); }
   };
 }
 
@@ -11422,7 +11435,7 @@ boot();
 supa.auth.onAuthStateChange((event, s) => {
   if (!accountBoundary.accept(s)) return;
   if (event === "SIGNED_OUT") { accountBoundary.invalidate(); return; }
-  if (event === "PASSWORD_RECOVERY") { newPasswordView(); return; }
+  if (event === "PASSWORD_RECOVERY") { if (!$("pw2")) newPasswordView(); return; }
   if (event === "SIGNED_IN" && s && !$("view") && !$("bizname") && !$("joincode") && !$("pw2")) setTimeout(() => void boot(), 0);
 });
 
