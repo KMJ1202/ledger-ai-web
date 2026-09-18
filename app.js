@@ -86,7 +86,7 @@ async function loadVoiceState() {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 183;
+const APP_BUILD = 186;
 // A deploy during business hours used to reload every open tab the moment the
 // new worker took over — mid-invoice, mid-booking (audit 11.4). The reload now
 // waits while a sheet, a picker, a dialog or a typed question is on screen and
@@ -1153,7 +1153,7 @@ async function renderHome() {
           <div class="status inline"><i></i>Ready</div></div>
       </div>
 
-      <div id="homesetup"></div>
+      <div id="hometrial"></div><div id="homesetup"></div>
 
       <button class="bizrow" id="bizsettings">
         <span class="ic">${segIc("gear")}</span>
@@ -1238,7 +1238,7 @@ async function renderHome() {
     else setTab(k);
   });
   on("[data-ask]", "click", (e) => { openChat(); $("box").value = e.currentTarget.dataset.ask; send(); });
-  loadHomeSetup();
+  loadHomeTrial(), loadHomeSetup();
   loadHomeKpis();
   loadHomeReviewsPulse();
   loadHomeAttention();
@@ -10056,8 +10056,8 @@ function banner() {
 }
 function toggleAdvisor() {
   if (!S.advisor && accountStorage.getItem("ledger.advisorNotice") !== "1") {
-    const meter = S.usage ? ` (${money(S.usage.spent_usd)} of ${money(S.usage.budget_usd)} used this month)` : "";
-    if (!window.confirm("Advisor Mode opens up business guidance beyond your books — marketing, pricing, hiring, growth — grounded in your real numbers. It uses your monthly AI allowance" + meter + ".")) return;
+    const meter = S.usage ? ` (${money(S.usage.spent_usd)} of ${money(S.usage.budget_usd)} used ${S.usage.trial_credit?"during your trial":"this month"})` : "";
+    if (!window.confirm("Advisor Mode opens up business guidance beyond your books — marketing, pricing, hiring, growth — grounded in your real numbers. It uses your available AI allowance" + meter + ".")) return;
     accountStorage.setItem("ledger.advisorNotice", "1");
   }
   S.advisor = !S.advisor; accountStorage.setItem("ledger.advisor", S.advisor ? "1" : "0"); banner();
@@ -10065,16 +10065,52 @@ function toggleAdvisor() {
 
 function setUsage(u) {
   S.usage = u; const el = $("usage");
-  if (el && u && u.budget_usd > 0 && Number.isFinite(Number(u.spent_usd))) {
-    const pct = Math.round(Number(u.spent_usd) / u.budget_usd * 100);
-    el.textContent = pct + "% AI";
-    el.style.color = pct >= 80 ? "var(--orange)" : "";
-    el.style.cursor = "pointer"; el.onclick = powerUpSheet;
+  if (el && u && Number.isFinite(Number(u.spent_usd))) {
+    const pct=u.budget_usd>0?Math.round(Number(u.spent_usd)/u.budget_usd*100):0;
+    el.textContent=u.trial_credit?(u.trial_state==='pending'?'Activate US$20':u.trial_state==='active'?`US$${Number(u.remaining_usd||0).toFixed(2)} left`:'Trial credit'):pct+'% AI';
+    el.style.color=pct>=80?'var(--orange)':'';el.style.cursor='pointer';el.onclick=u.trial_credit?trialCreditSheet:powerUpSheet;
   }
+}
+function trialCreditDescription(t) {
+  if(t.trial_state==='pending')return 'Verify your phone to activate one shared US$20 AI credit. No card. No monthly reset. Your owner must complete this step.';
+  if(t.trial_state==='active')return `US$${Number(t.remaining_usd||0).toFixed(2)} available until ${dateShort(t.expires_at)}. Shared by your business for the entire trial, including work already running. No automatic top-up.`;
+  if(t.trial_state==='expired')return 'Your original trial credit has expired. Your setup is saved. Choose a subscription to continue with paid AI.';
+  return 'This introductory credit needs an eligibility review. Contact Ledger support; starting a new account does not create a new credit.';
+}
+async function trialCreditSheet() {
+  let t;try{t=await api('/trial-credit',{action:'status'});}catch(e){toast(e.message,'err');return;}
+  if(!t.trial_credit){await refreshUsage();toast('Your account uses its normal plan allowance.');return;}
+  sheet(`<h2>US$20 to make Ledger yours</h2><p class="sh-sub">${esc(trialCreditDescription(t))}</p>
+    <p class="note">Set up your agent, save your rules and try real work. Credit expires ${esc(dateShort(t.expires_at))}; it is shared across everyone and every device in your business.</p>
+    ${t.trial_state==='pending'?`<label class="fld" for="trialphone">YOUR PHONE NUMBER</label><input id="trialphone" type="tel" autocomplete="tel" placeholder="+1 403 555 0123" maxlength="32"><p class="note">Use a Canadian or US number you control. We'll send one verification text. This does not sign you up for marketing.</p><button class="btn primary wide" id="trialsend">Send verification code</button><div id="trialcodearea" hidden><label class="fld" for="trialcode">SIX-DIGIT CODE</label><input id="trialcode" inputmode="numeric" autocomplete="one-time-code" maxlength="6"><button class="btn primary wide" id="trialcheck">Activate my US$20 credit</button><button class="btn ghost wide" id="trialreset">Use a different number or request a new code</button></div><p class="note" id="trialnote" role="status" aria-live="polite"></p>`:''}
+    <p class="note"><a href="/terms/#trial-credit" target="_blank" rel="noopener">Offer details</a> · <a href="/support/" target="_blank" rel="noopener">Need help or share a phone number?</a></p>`,sh=>{
+    const send=sh.querySelector('#trialsend');if(!send)return;let id=null;
+    const note=sh.querySelector('#trialnote'),phone=sh.querySelector('#trialphone'),check=sh.querySelector('#trialcheck');
+    sh.querySelector("#trialreset").onclick=()=>{id=null;phone.disabled=false;send.disabled=false;sh.querySelector("#trialcodearea").hidden=true;sh.querySelector("#trialcode").value="";note.textContent="Wait at least 60 seconds between codes. Only your most recent entered code should be used.";phone.focus();};
+    send.onclick=async()=>{send.disabled=true;note.textContent='Sending your verification code…';
+      try{const r=await api('/trial-credit',{action:'send',phone:phone.value});if(!sh.isConnected)return;id=r.verification_id;phone.disabled=true;sh.querySelector('#trialcodearea').hidden=false;note.textContent=r.message;sh.querySelector('#trialcode').focus();}
+      catch(e){if(sh.isConnected){note.textContent=e.message;send.disabled=false;}}
+    };
+    check.onclick=async()=>{check.disabled=true;note.textContent='Checking your code…';
+      try{const r=await api('/trial-credit',{action:'check',verification_id:id,code:sh.querySelector('#trialcode').value.trim()});if(!sh.isConnected)return;
+       if(r.trial_state!=='active')throw new Error('The credit is not active yet. Please contact support.');await refreshUsage();closeSheet();toast('Your shared US$20 AI credit is ready.');if(S.tab==='home')loadHomeTrial();}
+      catch(e){if(sh.isConnected){note.textContent=e.message;check.disabled=false;}}
+    };
+  });
+}
+async function loadHomeTrial(){
+ const slot=$('hometrial');if(!slot)return;
+ try{const u=await api('/ledger-ai',{action:'usage'});if($('hometrial')!==slot)return;setUsage(u);
+  if(!u.trial_credit){slot.innerHTML='';return;}
+  slot.innerHTML=`<div class="panel" style="border-color:rgba(91,218,187,.35);background:linear-gradient(125deg,rgba(42,100,88,.22),rgba(13,27,36,.85))"><div class="eyebrow">YOUR AI ONBOARDING CREDIT</div><h3 style="margin:8px 0">${u.trial_state==='active'?`US$${Number(u.remaining_usd||0).toFixed(2)} available`:'Your first US$20, on us'}</h3><p class="note">${esc(trialCreditDescription(u))}</p><button class="btn primary" id="hometrialopen">${u.trial_state==='pending'?'Activate my credit':'View trial credit'}</button></div>`;
+  slot.querySelector('#hometrialopen').onclick=trialCreditSheet;
+ }catch{if($('hometrial')===slot)slot.innerHTML='';}
 }
 async function refreshUsage() { try { setUsage(await api("/ledger-ai", { action: "usage" })); } catch {} }
 
 async function powerUpSheet() {
+  try { setUsage(await api("/ledger-ai", {action:"usage"})); } catch(e) { toast("Cannot verify your allowance right now. Please try again.","err"); return; }
+  if(S.usage?.trial_credit)return trialCreditSheet();
   let pkgs = [{ key: "boost", emoji: "⚡", label: "Boost", price: 25, credit: 25 },
               { key: "power", emoji: "🔥", label: "Power Pack", price: 50, credit: 55 },
               { key: "heavy", emoji: "🚀", label: "Heavy Hitter", price: 100, credit: 120 }];
@@ -10108,6 +10144,8 @@ function smsMeterHtml(s) {
     ${s?.topup_usd > 0 ? `<p class="note" style="margin-top:6px">Includes ${money(s.topup_usd)} added this month. Resets on the 1st.</p>` : `<p class="note" style="margin-top:6px">${s ? money(s.credit_usd) + " included" : "Your plan's texting credit is included"} every month with your business number. Resets on the 1st.</p>`}`;
 }
 async function textingSheet() {
+  try { setUsage(await api("/ledger-ai", {action:"usage"})); } catch(e) { toast("Cannot verify your allowance right now. Please try again.","err"); return; }
+  if(S.usage?.trial_credit) { sheet(`<h2>Business phone &amp; texting</h2><p class="note">Your trial includes one US$20 AI credit. Live calling and texting require a paid subscription and provider activation; they are not charged to your trial AI credit.</p>`); return; }
   let s = S.usage?.sms || null;
   try { const r = await api("/phone", { action: "sms-usage" }); if (r?.sms) { s = r.sms; if (S.usage) S.usage.sms = s; } } catch {}
   let pkg = { key: "sms25", emoji: "💬", label: "Texting credit", price: 25, credit: 25 };
@@ -10227,7 +10265,7 @@ async function send() {
       try { accountStorage.setItem(CHAT_DRAFT_KEY, text); } catch {}
     } else {
       bubble("msg ai err", "⚠️ " + esc(e.message));
-      if (e.status === 402) { if (/subscription|trial|renew/i.test(e.message)) billingCheck(); else powerUpSheet(); }
+      if (e.status === 402) { if(S.usage?.trial_credit)trialCreditSheet();else if (/subscription|trial|renew/i.test(e.message)) billingCheck(); else powerUpSheet(); }
       else if (/allowance|power-up/i.test(e.message)) powerUpSheet();
     }
   }
@@ -10712,10 +10750,10 @@ async function businessSheet() {
 
     <div class="eyebrow" style="margin-top:20px">AI ALLOWANCE</div>
     <div class="panel" style="margin-top:8px">
-      <div class="kv"><span>Used this month</span><span>${u ? money(u.spent_usd) + " of " + money(u.budget_usd) : "—"}</span></div>
+      <div class="kv"><span>${u?.trial_credit?"Used during trial (USD)":"Used this month"}</span><span>${u ? money(u.spent_usd) + " of " + money(u.budget_usd) : "—"}</span></div>
       <div style="height:7px;background:rgba(255,255,255,.07);border-radius:99px;margin-top:9px;overflow:hidden">
         <div style="height:100%;width:${Math.min(pct, 100)}%;background:${pct >= 80 ? "var(--orange)" : "linear-gradient(90deg,var(--cyan),var(--purple))"}"></div></div>
-      <button class="btn ghost wide" style="margin-top:11px" id="bpu">⚡ Power-Ups</button>
+      <button class="btn ghost wide" style="margin-top:11px" id="bpu">${u?.trial_credit?"View trial credit":"⚡ Power-Ups"}</button>
     </div>
 
     <div class="eyebrow" style="margin-top:20px">“HEY LEDGER”</div>
@@ -10752,7 +10790,7 @@ async function businessSheet() {
     <div id="bookslot" class="note" style="margin-top:8px">Loading…</div>
 
     <div class="eyebrow" style="margin-top:20px">TEAM</div>
-    <div id="teamslot" class="note" style="margin-top:8px">Loading…</div>
+    ${u?.trial_credit?'<p class="note">Trial teammates share the same single US$20 credit. Separate paid-seat allowances start only after paid activation.</p>':""}<div id="teamslot" class="note" style="margin-top:8px">Loading…</div>
 
     <div class="eyebrow" style="margin-top:20px">NOTIFICATIONS</div>
     <div id="pushslot" class="note" style="margin-top:8px">Checking…</div>
