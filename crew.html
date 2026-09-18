@@ -165,7 +165,7 @@ h1{font-size:23px;margin:16px 0 0;letter-spacing:-.02em}
   </div>
 </div>
 <p class="foot">Powered by <a href="https://heyledger.ai">Ledger AI</a></p>
-<script src="public-recovery.js?v=1"></script>
+<script src="public-recovery.js?v=2"></script>
 <script>
 const FN = "https://lbzkyyehmgudlxmfpzzh.supabase.co/functions/v1/crew";
 const token = new URLSearchParams(location.search).get("t") || "";
@@ -402,11 +402,12 @@ function renderClock(clock) {
 }
 
 // ---- Location (Kyle 2026-09-12) ----
-// Where the worker is, recorded on every tap and — while they are on the
-// clock and this page is open — every 30 seconds. The phone is asked once,
-// at the first tap. A tap never waits more than 4 seconds for a fix and never
-// fails because of one. Off the clock, nothing is sent (and the server would
-// refuse it anyway).
+// Where the worker is, recorded on every on-the-clock tap and — while they
+// are on the clock and this page is open — every 30 seconds. The phone is
+// asked once, at the first tap. A tap never waits more than 4 seconds for a
+// fix and never fails because of one. Off the clock, nothing is sent: status
+// taps go without coordinates (crewMutation) and the server refuses any that
+// arrive anyway. Clock punches are the only off-clock taps that carry one.
 const FIX_TAP_TIMEOUT_MS = 4000;
 const PING_EVERY_MS = 30000;
 let pingTimer = null;
@@ -607,7 +608,12 @@ async function crewMutation(payload,btn){
  try{
   // Clock punches and status taps carry where the worker was. Best effort,
   // capped at 4 s, never a reason for the tap itself to fail.
-  if(payload.action==="crew-link/clock"||payload.action==="crew-link/status"){
+  // Off the clock, a status tap carries NO location (audit 09-01): the notice
+  // above says nothing is sent off the clock, so nothing is. Punches still do —
+  // clock-in starts sharing, clock-out is the "stopped here" point shown on
+  // this page. The server drops and refuses an off-shift fix independently.
+  const wantsFix=payload.action==="crew-link/clock"||(payload.action==="crew-link/status"&&!!(lastData&&lastData.location&&lastData.location.sharing===true));
+  if(wantsFix){
    // A punch ends (or starts) sharing; the dot stops the moment the tap
    // lands and render() restarts it only if the server says still on shift.
    if(payload.action==="crew-link/clock")stopPings();

@@ -9,12 +9,20 @@ window.LinkRecovery = {
     } catch { throw Object.assign(new Error("Could not connect. Check your connection and try again."), {status:0}); }
     let data;
     try {data=await response.json();} catch {throw Object.assign(new Error("The response could not be read. Try again."),{status:503});}
-    if(!response.ok) throw Object.assign(new Error(data.error || "Temporarily unavailable. Try again."),{status:response.status,data});
+    if(!response.ok) throw Object.assign(new Error(data.error || "Temporarily unavailable. Try again."),{status:response.status,data,retryAfter:this.retryAfter(response)});
     return data;
   },
+  // Seconds the server asked us to wait (Retry-After), when the browser is allowed to read it.
+  retryAfter(response) {
+    let raw=null; try {raw=response.headers.get("retry-after");} catch {raw=null;}
+    const seconds=Number(raw); return Number.isFinite(seconds) && seconds>0 ? seconds : null;
+  },
   terminal(error) {return error.status===404 || error.status===410;},
+  // A rate limit is neither terminal nor a connectivity problem: wait, then try once more.
+  rateLimited(error) {return error.status===429;},
   message(error,kind) {
     if(this.terminal(error))return `This ${kind} link is no longer active. Ask the business for a new one.`;
+    if(this.rateLimited(error))return (error.data && error.data.message) || "Please wait a moment and try again.";
     if(error.status===402)return error.message || "This service is paused. Contact the business.";
     if(error.status===401 || error.status===403)return "Access is unavailable. Contact the business or try again.";
     return error.message || "Temporarily unavailable. Try again.";

@@ -1,21 +1,48 @@
 // Ledger AI service worker — app-shell cache, network-first for documents and assets.
-const CACHE = "ledger-ai-v218";
-const SHELL = ["./login-offers.js?v=1", "./account-boundary.js?v=1", "./app.html", "./public-recovery.js?v=1", "./security.js?v=3", "./assets/vendor/xlsx-0.20.3.mjs", "./app.js?v=183", "./index.html", "./manifest.webmanifest", "./icon.svg",
+const CACHE = "ledger-ai-v219";
+const SHELL = ["./login-offers.js?v=1", "./account-boundary.js?v=3", "./app.html", "./public-recovery.js?v=2", "./security.js?v=4", "./assets/vendor/xlsx-0.20.3.mjs", "./app.js?v=185", "./index.html", "./manifest.webmanifest", "./icon.svg",
                "./icon-192.png", "./icon-512.png", "./icon-maskable-192.png", "./icon-maskable-512.png",
                "./assets/styles.css?v=51", "./assets/herodemo.js?v=2", "./assets/support-widget.css?v=2", "./assets/support-widget.js?v=1", "./assets/logo-mark-96.png", "./assets/logo-full-640.png", "./assets/icons/quickbooks.svg", "./assets/icons/gmail.svg", "./assets/icons/googlecalendar.svg", "./assets/icons/googlebusiness.svg",
                "./integrations/quickbooks.html", "./integrations/gmail.html",
                "./integrations/google-calendar.html", "./integrations/google-business.html"];
+// The offline launch is only honest when the app document and the modules it
+// imports are all in the new cache. A worker whose precache lost any of these
+// (a flaky connection during the update) used to activate anyway and then
+// delete the good old cache, leaving the browser's own "no internet" page
+// behind (audit 11.4). Now: each shell URL is fetched on its own, a missing
+// marketing asset is tolerated, a missing critical file fails the install and
+// the previous worker and cache stay in service until the next attempt.
+// Derived from SHELL so a deploy that bumps a ?v= stamp cannot leave this list behind.
+const CRITICAL = SHELL.filter((url) => /^\.\/(app\.html|app\.js|login-offers\.js|account-boundary\.js|security\.js)(\?|$)/.test(url));
+
+async function precache() {
+  const cache = await caches.open(CACHE);
+  const results = await Promise.allSettled(SHELL.map((url) => cache.add(url)));
+  const missing = SHELL.filter((_, i) => results[i].status === "rejected");
+  if (missing.some((url) => CRITICAL.includes(url))) {
+    throw new Error("shell precache incomplete: " + missing.filter((url) => CRITICAL.includes(url)).join(", "));
+  }
+}
+async function shellReady() {
+  const cache = await caches.open(CACHE);
+  const hits = await Promise.all(CRITICAL.map((url) => cache.match(url)));
+  return hits.every(Boolean);
+}
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}).then(() => self.skipWaiting()));
+  event.waitUntil(precache().then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    // Belt and braces: never delete the older caches unless this one can
+    // serve the shell on its own.
+    if (await shellReady()) {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+    }
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener("fetch", (event) => {

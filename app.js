@@ -1,6 +1,6 @@
 import { pendingOffer, saveOffer, clearOffer, bindOffer } from "./login-offers.js?v=1";
-import { createAccountBoundary } from "./account-boundary.js?v=1";
-import { openSecurity, needsMfa } from "./security.js?v=3";
+import { createAccountBoundary } from "./account-boundary.js?v=3";
+import { openSecurity, needsMfa } from "./security.js?v=4";
 // Ledger AI — web/PWA client.
 // audit-20260914 web: calendar guard, outage bubble, CSV screens, copy sweep (build 170)
 // One file, no build step: GitHub Pages serves it straight. Every screen talks to the
@@ -17,7 +17,7 @@ const accountBoundary = createAccountBoundary({ storage: window.localStorage, on
   // Synchronously remove all old-account pixels, including sheets outside root.
   document.documentElement.style.visibility = "hidden";
   root.replaceChildren();
-  document.querySelectorAll("dialog, #sheetwrap, #ledger-security").forEach(node => node.remove());
+  document.querySelectorAll("dialog, #sheetwrap, #stackwrap, #pickwrap, #ledger-security").forEach(node => node.remove());
   WAKE.ready = false; wakeStop();
   try { LIVE?.mic?.getTracks().forEach(track => track.stop()); LIVE?.dc?.close(); LIVE?.pc?.close(); LIVE?.audio?.pause(); } catch {}
   for (const key of Object.keys(S)) delete S[key];
@@ -34,7 +34,16 @@ window.addEventListener("storage", event => {
 });
 window.addEventListener("pagehide", () => { document.documentElement.style.visibility = "hidden"; });
 window.addEventListener("pageshow", event => {
-  if (event.persisted) { accountBoundary.invalidate(); return; }
+  if (event.persisted) {
+    // Back from Stripe / Google restores this same document from the bfcache.
+    // The account only has to be wiped when the stored session no longer
+    // belongs to the person this page was built for; the same owner keeps
+    // their review-asked marks, onboarding pin and conversation (audit 11.5).
+    let session = null;
+    try { session = JSON.parse(window.localStorage.getItem(authStorageKey) || "null"); } catch {}
+    if (typeof accountBoundary.resume !== "function") { accountBoundary.invalidate(); return; }
+    if (!accountBoundary.resume(session)) return;
+  }
   if (!accountBoundary.stopped) document.documentElement.style.visibility = "";
 });
 
@@ -52,7 +61,25 @@ const S = {
   invoiceFilter: "all",
   profitRange: "daily",
   installPrompt: null,
+  // Ledger Live (launch audit 16-04, 2026-09-17): voice is OFF until the server
+  // says otherwise. Nothing draws a Live button, arms "Hey Ledger" or asks for
+  // the mic on the strength of a default — the answer comes from /realtime/state.
+  voice: { available: false, code: "voice_safety_pause", message: "Ledger Live is temporarily paused. Typed chat is still available." },
+  // Which plan the website card pointed at (?plan=solo|pro). A hint, never a purchase.
+  planHint: null,
 };
+
+// One probe per sign-in. Any failure — network, permission, an older server
+// without the endpoint — leaves voice off; it is never switched on by accident.
+async function loadVoiceState() {
+  try {
+    const v = await api("/realtime/state", {});
+    S.voice = v && v.available === true
+      ? { available: true, code: null, message: null }
+      : { available: false, code: v?.code || "voice_safety_pause", message: v?.message || S.voice?.message || "Ledger Live is temporarily paused. Typed chat is still available." };
+  } catch { S.voice = { ...S.voice, available: false }; }
+  return S.voice;
+}
 
 // Keep the offline copy honest (Kyle 2026-09-07). A stale cached bundle is
 // invisible: the app just quietly runs an older build, which is exactly what
@@ -60,6 +87,26 @@ const S = {
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
 const APP_BUILD = 183;
+// A deploy during business hours used to reload every open tab the moment the
+// new worker took over — mid-invoice, mid-booking (audit 11.4). The reload now
+// waits while a sheet, a picker, a dialog or a typed question is on screen and
+// happens the moment that layer closes; a sticky toast offers it sooner.
+const UPDATE = { pending: false };
+function uiBusy() {
+  return !!$("sheetwrap") || !!$("pickwrap") || !!$("stackwrap") || !!document.querySelector("dialog[open]")
+    || (!!$("chatwrap")?.classList.contains("open") && !!$("box")?.value.trim());
+}
+function freshReload() {
+  if (!uiBusy()) { location.reload(); return; }
+  if (UPDATE.pending) return;
+  UPDATE.pending = true;
+  toast("Ledger has an update ready — it loads after you finish here.", undefined, { sticky: true, action: { label: "Reload now", run: () => location.reload() } });
+}
+function reloadIfUpdatePending() {
+  if (!UPDATE.pending || uiBusy()) return;
+  // A closing sheet is often followed by the next one opening on the same tick.
+  setTimeout(() => { if (UPDATE.pending && !uiBusy()) location.reload(); }, 400);
+}
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let refreshing = false;
@@ -67,7 +114,7 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!hadController || refreshing) return;   // first install is not an update
     refreshing = true;
-    location.reload();
+    freshReload();
   });
   (async () => {
     try {
@@ -79,7 +126,7 @@ if ("serviceWorker" in navigator) {
       // sessionStorage guard: one refresh per build per tab, never a loop.
       if (latest > APP_BUILD && sessionStorage.getItem("ledger.freshen") !== String(latest)) {
         sessionStorage.setItem("ledger.freshen", String(latest));
-        location.reload();
+        freshReload();
       }
     } catch { /* offline or blocked: keep running what we have */ }
   })();
@@ -144,7 +191,7 @@ const CONNECTOR_PATHS = [
   ["/gmail/", "gmail", "Gmail is not connected"],
   ["/google-business-profile/", "google_business_profile", "Business Profile is not connected"],
 ];
-const CONNECTOR_PASSTHROUGH = /\/(start|callback|disconnect|status|oauth)/;
+const CONNECTOR_PASSTHROUGH = /\/(start|callback|confirm|disconnect|status|oauth)/;
 function knownDisconnected(path) {
   if (!S.connMap || CONNECTOR_PASSTHROUGH.test(path) || /^\/gmail\/(photo-receipt|receipt-photo|receipts|categorize|set-amount|dismiss)(?:\?|$)/.test(path)) return null;
   const hit = CONNECTOR_PATHS.find(([prefix]) => path.startsWith(prefix));
@@ -160,12 +207,24 @@ async function api(path, body, method = "POST", opts = {}) {
   const t = await token(); accountBoundary.assertCurrent(expected); if (!t) throw new Error("Signed out");
   const offline = knownDisconnected(path);
   if (offline) { const err = new Error(offline); err.status = 409; err.data = { error: offline }; throw err; }
-  const r = await fetch(FN + path, {
-    signal: accountBoundary.signal,
-    method,
-    headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let r;
+  try {
+    r = await fetch(FN + path, {
+      signal: accountBoundary.signal,
+      method,
+      headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    if (e?.name === "AbortError") throw e;
+    accountBoundary.assertCurrent(expected);
+    // A dropped connection surfaces as a bare TypeError ("Failed to fetch",
+    // "Load failed") that used to be printed as-is in chat and toasts. Say
+    // what it means (audit 11.6); status 0 so no branch mistakes it for a reply.
+    const err = new Error(offlineMessage());
+    err.status = 0; err.data = {}; err.offline = true; err.cause = e;
+    throw err;
+  }
   const d = await r.json().catch(() => ({}));
   accountBoundary.assertCurrent(expected);
   if (!r.ok) {
@@ -186,6 +245,9 @@ async function api(path, body, method = "POST", opts = {}) {
   return d;
 }
 const get = (path) => api(path, null, "GET");
+const offlineMessage = () => navigator.onLine === false
+  ? "You're offline — check your connection."
+  : "Can't reach Ledger right now — check your connection and try again.";
 
 /* Google Play's Payments policy forbids an app it distributes from leading
    anyone to another way to pay — not by a button, a link, a webview or a
@@ -234,22 +296,30 @@ const PLAN_BLURB = {
 
 // Asks which plan to buy. Resolves to "solo" | "pro", or null if dismissed.
 // Never a native confirm() — that wedges the in-app browser.
-function choosePlanSheet(plans) {
+// `unavailable` (audit 16-06, 2026-09-17): plans the server cannot sell right
+// now stay on the sheet, greyed and labelled, so a customer who came for Solo
+// reads why they are looking at Pro instead of being handed a $699 checkout.
+// `hint` is the plan the website card pointed at; it is highlighted, not chosen.
+function choosePlanSheet(plans, unavailable = new Set(), hint = null) {
   return new Promise((resolve) => {
     let picked = null;
     const card = (p) => {
       const b = PLAN_BLURB[p.key] || { tag: "", line: "", extra: "" };
-      return `<button type="button" class="planpick" data-plan="${p.key}">
+      const off = unavailable.has(p.key);
+      return `<button type="button" class="planpick${off ? " off" : ""}${hint === p.key && !off ? " hint" : ""}" data-plan="${p.key}"${off ? ' disabled aria-disabled="true"' : ""}>
         <div class="planpick-top"><span class="planpick-name">${p.name}</span>
         <span class="planpick-price"><s>$${p.list_price}</s>$${p.price}<small>/mo</small></span></div>
-        <div class="planpick-tag">${b.tag}</div>
+        <div class="planpick-tag">${off ? `${esc(p.name)} isn't available for checkout yet` : b.tag}</div>
         <div class="planpick-line">${b.line}</div>
         <div class="planpick-extra">${b.extra}</div></button>`;
     };
+    const wanted = hint && unavailable.has(hint) ? (plans.find((p) => p.key === hint)?.name || hint) : null;
     sheet(`<h3>Choose your plan</h3>
       <p class="muted" style="margin:0 0 14px">The difference is people. Solo is you and the truck. Pro is you and a crew — you can move up any time and nothing is rebuilt.</p>
+      ${wanted ? `<p class="note" style="margin:0 0 12px;color:var(--gold)">${esc(wanted)} isn't available for checkout yet. Nothing is charged unless you pick a plan below.</p>` : ""}
       <div class="planpicks">${plans.map(card).join("")}</div>`, (pane) => {
       pane.querySelectorAll(".planpick").forEach((b) => {
+        if (b.disabled) return;
         b.onclick = () => { picked = b.dataset.plan; closeSheet(); };
       });
     });
@@ -277,7 +347,7 @@ function upgradeHit(d) {
   const price = d.required_plan_price || 699;
   const title = d.feature_title || "Ledger Pro";
   const body = d.message || d.error || "That's part of Ledger Pro.";
-  sheet(`<h3>${esc(title)}</h3>
+  const html = `<h3>${esc(title)}</h3>
     <p class="muted" style="margin:0 0 14px">${esc(body)}</p>
     <div class="planpick" style="cursor:default;margin-bottom:14px">
       <div class="planpick-top"><span class="planpick-name">Ledger Pro</span>
@@ -287,17 +357,20 @@ function upgradeHit(d) {
       <div class="planpick-extra">${PLAN_BLURB.pro.extra}</div>
     </div>
     <button class="btn em wide" id="upgo">Move up to Ledger Pro</button>
-    <p class="note" style="margin-top:10px;text-align:center">Nothing is rebuilt and nothing is lost — everything you already have stays exactly where it is. You only pay the difference for the rest of this month.</p>`,
-    (pane) => {
-      const go = pane.querySelector("#upgo");
-      go.onclick = async () => {
-        go.disabled = true; go.textContent = "Switching…";
-        const ok = await moveToPlan("pro");
-        if (!ok) { go.disabled = false; go.textContent = "Move up to Ledger Pro"; }
-      };
-    });
+    <p class="note" style="margin-top:10px;text-align:center">Nothing is rebuilt and nothing is lost — everything you already have stays exactly where it is. You only pay the difference for the rest of this month.</p>`;
+  const wire = (pane) => {
+    const go = pane.querySelector("#upgo");
+    go.onclick = async () => {
+      go.disabled = true; go.textContent = "Switching…";
+      const ok = await moveToPlan("pro");
+      if (!ok) { go.disabled = false; go.textContent = "Move up to Ledger Pro"; }
+    };
+  };
+  // A Solo owner who hits the door from inside a form keeps the form: the door
+  // stacks over an open sheet instead of replacing it (audit 11.2d).
+  const wrap = $("sheetwrap") ? stackSheet(html, wire) : sheet(html, wire);
   const poll = setInterval(() => {
-    if (!document.getElementById("sheetwrap")) { clearInterval(poll); upgradeSheetOpen = false; }
+    if (!wrap.isConnected) { clearInterval(poll); upgradeSheetOpen = false; }
   }, 250);
 }
 
@@ -309,9 +382,12 @@ async function moveToPlan(plan) {
   if (inAndroidApp()) { toast("Plan changes aren't available in the Android app yet.", "err"); return false; }
   try {
     const d = await api("/stripe-billing/change-plan", { plan });
-    if (d.unchanged) { toast(d.message); return true; }
-    toast(d.message || `You're on ${d.plan_name}.`);
-    closeSheet();
+    // `unchanged` after a retry means the earlier change landed while the
+    // screen still showed the old plan — reload so it tells the truth (02-07).
+    // `pending` means Stripe's own webhook is applying it within seconds.
+    if (d.unchanged) { toast(d.message); closeStack(); closeSheet(); setTimeout(() => location.reload(), 900); return true; }
+    toast(d.pending ? `${d.message || `You're on ${d.plan_name}.`} Updating…` : (d.message || `You're on ${d.plan_name}.`));
+    closeStack(); closeSheet();
     // Every gated screen has to redraw against the new plan, and the copilot's
     // tool list is built per request — a clean reload is the honest way to
     // show a customer that what they just paid for is on.
@@ -340,57 +416,216 @@ async function startCheckout(plan, promoCode = null) {
   // from 2026-09-06 until today. It has always meant the checkout endpoint.
   let chosen = plan;
   if (!chosen) {
-    // Only ask when there is something to ask about: if Solo is not sellable
-    // yet, this is the same one-price checkout it has always been.
+    // Audit 16-06 (2026-09-17): the plan is always the customer's own tap. When
+    // Solo is on the website but not sellable here, the sheet still opens with
+    // Solo greyed and labelled — a $699 Pro checkout is never the silent default.
     let status = null;
-    try { status = await api("/stripe-billing/status", {}); } catch { /* fall through to Pro */ }
-    const options = (status?.plans || []).filter((p) => p.key !== "solo" || status?.solo_available);
-    if (status?.solo_available && options.length > 1) {
-      chosen = await choosePlanSheet(options);
+    try { status = await api("/stripe-billing/status", {}); }
+    catch { throw new Error("Couldn't load the plans just now — check your connection and try again. Nothing was charged."); }
+    const options = status?.plans || [];
+    const unavailable = new Set(options.filter((p) => p.key === "solo" && !status?.solo_available).map((p) => p.key));
+    if (!options.length) throw new Error("No plans are available right now. Please try again later. Nothing was charged.");
+    {
+      chosen = await choosePlanSheet(options, unavailable, S.planHint);
       if (!chosen) return Promise.reject(Object.assign(new Error("cancelled"), { cancelled: true }));
-    } else chosen = "pro";
+    }
   }
-  try { return await api("/stripe-billing/checkout", { plan: chosen, ...(promoCode ? {promo_code:promoCode} : {}) }); }
+  const body = { plan: chosen, ...(promoCode ? {promo_code:promoCode} : {}) };
+  try { return await api("/stripe-billing/checkout", body); }
   catch (e) {
     if (e.status === 409 && e.data?.error === "already_subscribed" && e.data?.portal_available) {
       toast("Your card is already on file — opening billing.");
       return api("/stripe-billing/portal", {});
     }
+    // An App Store subscription ended within Apple's 60-day retry window: the
+    // server asks once whether the Apple side is really cancelled (02-05).
+    if (e.status === 409 && e.data?.code === "apple_subscription_recent") {
+      if (!confirm(`${e.data.message}\n\nContinue to web checkout?`)) return Promise.reject(Object.assign(new Error("cancelled"), { cancelled: true }));
+      return api("/stripe-billing/checkout", { ...body, acknowledge_apple: true });
+    }
     throw e;
   }
 }
 
-function toast(text, kind) {
+function toast(text, kind, opts = {}) {
   const old = $("toast"); if (old) old.remove();
+  // Screen readers only announce a live region that existed before its text
+  // changed, so the two hosts are created once and stay in the page: errors
+  // are alerts, everything else is polite status (audit 11.6).
+  const hostId = kind === "err" ? "toasthost-err" : "toasthost";
+  let host = $(hostId);
+  if (!host) {
+    host = document.createElement("div"); host.id = hostId;
+    host.setAttribute("role", kind === "err" ? "alert" : "status");
+    host.setAttribute("aria-live", kind === "err" ? "assertive" : "polite");
+    document.body.appendChild(host);
+  }
   const t = document.createElement("div"); t.id = "toast";
   t.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 88px);background:" +
     (kind === "err" ? "#7f1d1d" : "#134e4a") + ";color:#fff;padding:11px 16px;border-radius:13px;font-size:14px;z-index:60;max-width:88%;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.5)";
-  t.textContent = text; document.body.appendChild(t);
-  setTimeout(() => t.remove(), 3600);
+  t.textContent = text;
+  if (opts.action) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = opts.action.label;
+    b.style.cssText = "margin-left:12px;border:1px solid rgba(255,255,255,.5);background:none;color:#fff;border-radius:999px;padding:5px 12px;font:inherit;font-weight:800;cursor:pointer";
+    b.onclick = () => { t.remove(); opts.action.run(); };
+    t.appendChild(b);
+  }
+  host.appendChild(t);
+  if (!opts.sticky) setTimeout(() => t.remove(), 3600);
+  return t;
+}
+
+/* ---------------- in-page dialogs (audit 11.3) ---------------- */
+// One implementation for every question the app asks. Native confirm()/prompt()
+// answer "no" without showing anything inside a WKWebView with no UI delegate
+// and inside several in-app browsers, so a booking or a void silently did
+// nothing there. A <dialog> is real DOM: styled, announced, and it never blocks
+// the thread. Escape and the backdrop mean "cancel".
+function askDialog({ title = "", body = "", buttons = [], input = null, cancelValue = null, danger = false }) {
+  return new Promise((resolve) => {
+    document.getElementById("ledger-ask")?.remove();
+    const dlg = document.createElement("dialog"); dlg.id = "ledger-ask"; dlg.className = "ask";
+    dlg.setAttribute("aria-labelledby", "ledger-ask-title");
+    dlg.innerHTML = `<form><h2 id="ledger-ask-title">${esc(title)}</h2>
+      ${body ? `<p class="ask-body" id="ledger-ask-body">${esc(body)}</p>` : ""}
+      ${input ? `<input class="ask-input" name="value" autocomplete="off" aria-labelledby="ledger-ask-title" placeholder="${esc(input.placeholder || "")}" value="${esc(input.value || "")}"${input.inputmode ? ` inputmode="${esc(input.inputmode)}"` : ""}>` : ""}
+      <div class="ask-row">${buttons.map((b, i) => `<button type="${b.primary ? "submit" : "button"}" class="btn ${b.kind === "danger" ? "danger" : b.kind === "primary" ? "primary" : "ghost"}" data-ask="${i}">${esc(b.label)}</button>`).join("")}</div></form>`;
+    if (body) dlg.setAttribute("aria-describedby", "ledger-ask-body");
+    document.body.appendChild(dlg);
+    let done = false;
+    const finish = (value) => {
+      if (done) return; done = true;
+      try { dlg.close(); } catch {}
+      dlg.remove();
+      resolve(value);
+    };
+    const field = dlg.querySelector(".ask-input");
+    const valueOf = (b) => b.value === askDialog.INPUT ? (field ? field.value : "") : b.value;
+    dlg.querySelectorAll("[data-ask]").forEach((el) => {
+      const b = buttons[Number(el.dataset.ask)];
+      el.onclick = (e) => { e.preventDefault(); finish(valueOf(b)); };
+    });
+    dlg.querySelector("form").onsubmit = (e) => { e.preventDefault(); const b = buttons.find((x) => x.primary); finish(b ? valueOf(b) : cancelValue); };
+    dlg.addEventListener("cancel", (e) => { e.preventDefault(); finish(cancelValue); });
+    dlg.addEventListener("click", (e) => { if (e.target === dlg) finish(cancelValue); });
+    dlg.addEventListener("close", () => finish(cancelValue));
+    try { dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
+    // Destructive questions start on the safe button; a text prompt starts in its field.
+    const focusTarget = field || dlg.querySelector(danger ? "[data-ask]:not([type=submit])" : "[type=submit]") || dlg.querySelector("[data-ask]");
+    try { focusTarget?.focus(); if (field) field.select(); } catch {}
+  });
+}
+askDialog.INPUT = Symbol("ask-input");
+function askConfirm(message, { title = "", ok = "OK", cancel = "Cancel", danger = false } = {}) {
+  return askDialog({ title: title || (danger ? "Are you sure?" : "Please confirm"), body: message, danger, cancelValue: false, buttons: [
+    { label: cancel, value: false },
+    { label: ok, value: true, primary: true, kind: danger ? "danger" : "primary" },
+  ] });
+}
+function askPrompt(message, { title = "", value = "", placeholder = "", ok = "OK", cancel = "Cancel", inputmode = "" } = {}) {
+  return askDialog({ title: title || message, body: title ? message : "", cancelValue: null, input: { value, placeholder, inputmode }, buttons: [
+    { label: cancel, value: null },
+    { label: ok, value: askDialog.INPUT, primary: true, kind: "primary" },
+  ] });
 }
 
 /* ---------------- bottom sheet ---------------- */
+// Sheets, the stacked picker and the chat pane are layers over one document.
+// Each open layer owns one history entry, so the phone's Back button (and the
+// Android app's) closes the layer instead of leaving the app; closing a layer
+// from code pops that entry again, so history never piles up (audit 11.1).
+const LAYER = { sheet: false, chat: false, stack: false, selfPops: 0 };
+function layerPush(kind) {
+  if (LAYER[kind]) return;
+  try { history.pushState({ ledgerLayer: kind }, ""); LAYER[kind] = true; } catch {}
+}
+function layerPop(kind) {
+  if (!LAYER[kind]) return;
+  LAYER[kind] = false;
+  if (history.state?.ledgerLayer !== kind) return;
+  LAYER.selfPops++;
+  try { history.back(); } catch { LAYER.selfPops--; return; }
+  // A traversal that never reports back must not swallow the user's next Back.
+  setTimeout(() => { if (LAYER.selfPops > 0) LAYER.selfPops--; }, 1500);
+}
+window.addEventListener("popstate", () => {
+  if (LAYER.selfPops > 0) { LAYER.selfPops--; return; }
+  // The browser has already dropped the entry: clear the flag first so the
+  // close below does not try to pop it a second time.
+  if (LAYER.stack && topStack()) { LAYER.stack = false; closeStack(); return; }
+  if (LAYER.sheet && $("sheetwrap")) {
+    LAYER.sheet = false;
+    // A draft that asks first may keep the sheet: then it needs its entry back.
+    requestCloseSheet().then((closed) => { if (!closed && $("sheetwrap")) layerPush("sheet"); });
+    return;
+  }
+  if (LAYER.chat && $("chatwrap")?.classList.contains("open")) { LAYER.chat = false; closeChat(); }
+});
+// Escape closes the topmost layer, the way a dialog should. Native <dialog>s
+// (security, questions) handle their own Escape.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || e.defaultPrevented || document.querySelector("dialog[open]")) return;
+  if (topStack()) { e.preventDefault(); closeStack(); return; }
+  if ($("sheetwrap")) { e.preventDefault(); void requestCloseSheet(); return; }
+  if ($("chatwrap")?.classList.contains("open")) { e.preventDefault(); closeChat(); }
+});
+
+let sheetSeq = 0;
+// Every sheet is a labelled modal dialog for assistive tech: the first heading
+// names it, focus moves in on open and back to the opener on close.
+function labelPane(pane) {
+  pane.setAttribute("role", "dialog"); pane.setAttribute("aria-modal", "true"); pane.tabIndex = -1;
+  const heading = pane.querySelector("h1,h2,h3");
+  if (heading) { if (!heading.id) heading.id = "sheet-title-" + (++sheetSeq); pane.setAttribute("aria-labelledby", heading.id); }
+}
+function rememberOpener() {
+  const el = document.activeElement;
+  return el && el !== document.body && !isTextInput(el) ? el : null;
+}
+function restoreFocus(opener) {
+  if (!opener || !opener.isConnected || $("sheetwrap") || topStack()) return;
+  try { opener.focus({ preventScroll: true }); } catch {}
+}
 function sheet(html, wire) {
-  closeSheet();
+  const previous = $("sheetwrap");
+  // A sheet replacing a sheet keeps the original opener and the history entry.
+  const opener = previous ? previous._opener : rememberOpener();
+  closeSheet({ keepLayer: true });
   const wrap = document.createElement("div"); wrap.id = "sheetwrap";
   wrap.innerHTML = `<div class="sheet-back"></div><div class="sheet"><div class="grab"></div>
     <div class="kbbar"><button class="kbdone" type="button">Done</button></div>${html}
     <button class="sheet-close">Close</button></div>`;
+  wrap._opener = opener;
   document.body.appendChild(wrap);
-  wrap.querySelector(".sheet-back").onclick = closeSheet;
-  wrap.querySelector(".sheet-close").onclick = closeSheet;
+  wrap.querySelector(".sheet-back").onclick = () => { void requestCloseSheet(); };
+  wrap.querySelector(".sheet-close").onclick = () => { void requestCloseSheet(); };
   // Keyboard escape hatch (Kyle, 2026-08-24 — got trapped on the Phone tab).
   // The sheet's own Close button sits below the keyboard once it opens, so a
   // sticky Done bar rides the top of the sheet the whole time a field is
-  // focused. Scrolling the sheet also dismisses, matching iOS.
+  // focused. A finger-scroll of the sheet also dismisses, matching iOS.
   const pane = wrap.querySelector(".sheet");
+  labelPane(pane);
   wrap.querySelector(".kbdone").onclick = () => blurInput();
   pane.addEventListener("focusin", (e) => { if (isTextInput(e.target)) wrap.classList.add("kbon"); });
   pane.addEventListener("focusout", () => setTimeout(() => {
     if (!isTextInput(document.activeElement)) wrap.classList.remove("kbon");
   }, 60));
-  pane.addEventListener("scroll", () => { if (isTextInput(document.activeElement)) blurInput(); }, { passive: true });
+  // Only a real finger-drag dismisses. The old `scroll` listener also fired
+  // when the browser scrolled a just-focused field into view or the keyboard
+  // resized the viewport, which closed the keyboard the moment it opened on a
+  // long form (audit 11.8).
+  let touchY = null;
+  pane.addEventListener("touchstart", (e) => { touchY = e.touches[0]?.clientY ?? null; }, { passive: true });
+  pane.addEventListener("touchmove", (e) => {
+    if (touchY === null || !isTextInput(document.activeElement)) return;
+    if (e.target.closest && e.target.closest("input,textarea,select")) return;
+    const y = e.touches[0]?.clientY ?? touchY;
+    if (Math.abs(y - touchY) > 14) { touchY = null; blurInput(); }
+  }, { passive: true });
+  pane.addEventListener("touchend", () => { touchY = null; }, { passive: true });
   if (wire) wire(pane);
+  layerPush("sheet");
+  if (!wrap.contains(document.activeElement)) { try { pane.focus({ preventScroll: true }); } catch {} }
   return wrap;
 }
 
@@ -399,19 +634,77 @@ function blurInput() { if (isTextInput(document.activeElement)) document.activeE
 
 // Tap anywhere that is not itself a field and the keyboard closes. One global
 // listener rather than per-form wiring, so a field added later can never ship
-// without an escape hatch.
-document.addEventListener("pointerdown", (e) => {
+// without an escape hatch. It runs on `click`, after the tap has already been
+// delivered to the control under the finger: blurring on `pointerdown` closed
+// the keyboard first, the layout shifted, and the tap could land on a
+// different button than the one pressed (audit 11.8).
+document.addEventListener("click", (e) => {
   if (!isTextInput(document.activeElement)) return;
   if (e.target === document.activeElement) return;
   if (e.target.closest && e.target.closest("input,textarea,select,label")) return;
   blurInput();
 }, true);
-function closeSheet() {
+function closeSheet(opts = {}) {
   const w = $("sheetwrap"); if (!w) return;
   // Removing a sheet that still holds the focused field fires blur mid-removal
   // and Chrome throws NotFoundError; blur first, and never let a stale node throw.
   if (w.contains(document.activeElement)) { try { document.activeElement.blur(); } catch {} }
   try { w.remove(); } catch { if (w.parentNode) try { w.parentNode.removeChild(w); } catch {} }
+  if (opts.keepLayer) return;
+  layerPop("sheet");
+  restoreFocus(w._opener);
+  reloadIfUpdatePending();
+}
+// The customer's way out: backdrop, Close, Escape, Back. A sheet that holds a
+// draft registers `_isDirty` (and `_discard`) on its wrapper, and is asked
+// before anything typed is thrown away (audit 11.2a). Code that closes a sheet
+// after a successful save still calls closeSheet() directly. Resolves true when
+// the sheet is gone.
+async function requestCloseSheet() {
+  const w = $("sheetwrap"); if (!w) return true;
+  // A save in flight owns the sheet: its Close button is disabled.
+  if (w.querySelector(".sheet-close")?.disabled) return false;
+  if (typeof w._isDirty === "function" && w._isDirty()) {
+    const choice = await askDialog({ title: "Keep this draft?", body: "You have unsaved changes.", danger: true, cancelValue: "keep", buttons: [
+      { label: "Keep editing", value: "keep" },
+      { label: "Discard", value: "discard", kind: "danger" },
+      { label: "Save for later", value: "save", primary: true, kind: "primary" },
+    ] });
+    if ($("sheetwrap") !== w) return true;
+    if (choice === "keep") return false;
+    if (choice === "discard" && typeof w._discard === "function") w._discard();
+  }
+  closeSheet();
+  return true;
+}
+
+// A second layer over an open sheet (the billable-item picker, the Ledger Pro
+// door) — never replaces the sheet beneath it.
+const topStack = () => $("stackwrap") || $("pickwrap");
+function stackSheet(html, wire) {
+  closeStack();
+  const wrap = document.createElement("div"); wrap.id = "stackwrap";
+  wrap._opener = rememberOpener();
+  wrap.innerHTML = `<div class="sheet-back"></div><div class="sheet"><div class="grab"></div>${html}
+    <button class="sheet-close">Close</button></div>`;
+  document.body.appendChild(wrap);
+  const pane = wrap.querySelector(".sheet");
+  labelPane(pane);
+  wrap.querySelector(".sheet-back").onclick = () => closeStack();
+  wrap.querySelector(".sheet-close").onclick = () => closeStack();
+  if (wire) wire(pane);
+  layerPush("stack");
+  if (!wrap.contains(document.activeElement)) { try { pane.focus({ preventScroll: true }); } catch {} }
+  return wrap;
+}
+function closeStack() {
+  const s = topStack(); if (!s) return;
+  if (s.contains(document.activeElement)) { try { document.activeElement.blur(); } catch {} }
+  try { s.remove(); } catch {}
+  layerPop("stack");
+  const opener = s._opener;
+  if (opener && opener.isConnected) { try { opener.focus({ preventScroll: true }); } catch {} }
+  reloadIfUpdatePending();
 }
 
 /* ---------------- app shell ---------------- */
@@ -520,7 +813,7 @@ function osHead(code, title) {
 const QUIET_TITLES = new Set(["phone", "finance", "profit", "receipts", "calendar", "customers", "reviews", "to-do"]);
 function pageHead(title) {
   return `<div class="qhead">
-    <button class="qsparkle" data-qledger title="Chat with Ledger">${segIc("spark")}</button>
+    <button class="qsparkle" data-qledger title="Chat with Ledger" aria-label="Chat with Ledger">${segIc("spark")}</button>
     <h2 class="qtitle">${esc(title)}</h2>
   </div>`;
 }
@@ -537,34 +830,41 @@ function appView() {
     <div class="mark"><img src="assets/logo-mark-96.png" alt=""></div>
     <h1 class="brandttl chrome" id="bizname">Ledger AI</h1>
     <span id="usage"></span>
-    <button class="hchat" id="hchat" title="Ask Ledger">&#128172;</button>
-    <button class="avatar" id="more" title="Your business"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.6" fill="currentColor"/><path d="M5.5 19.4c.9-3.2 3.5-5 6.5-5s5.6 1.8 6.5 5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
+    <button class="hchat" id="hchat" title="Ask Ledger" aria-label="Ask Ledger">&#128172;</button>
+    <button class="avatar" id="more" title="Your business" aria-label="Your business"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="3.6" fill="currentColor"/><path d="M5.5 19.4c.9-3.2 3.5-5 6.5-5s5.6 1.8 6.5 5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
   </header>
   <div id="alertbar"></div>
   <main id="view"></main>
-  <nav id="tabs">${TABS.map((t) => `<button data-tab="${t.key}" class="${S.tab === t.key ? "on" : ""}">
+  <nav id="tabs" aria-label="Main">${TABS.map((t) => `<button data-tab="${t.key}" class="${S.tab === t.key ? "on" : ""}"${S.tab === t.key ? ' aria-current="page"' : ""}>
       ${t.icon}${t.label}</button>`).join("")}</nav>
-  <div id="chatwrap">
+  <div id="chatwrap" role="dialog" aria-modal="true" aria-labelledby="chattitle">
     <header>
       <button class="pill" id="chatback">‹ Back</button>
-      <h1>Ask Ledger</h1>
-      <span class="pill${S.advisor ? " on" : ""}" id="advisor">💡 Advisor</span>
-      <button class="pill" id="newconv" title="New conversation">✚</button>
+      <h1 id="chattitle">Ask Ledger</h1>
+      <span class="pill${S.advisor ? " on" : ""}" id="advisor" role="button" tabindex="0" aria-pressed="${S.advisor ? "true" : "false"}">💡 Advisor</span>
+      <button class="pill" id="newconv" title="New conversation" aria-label="New conversation">✚</button>
     </header>
     <div id="banner">💡 Advisor Mode — business guidance beyond your books, on your AI allowance</div>
     <main id="chat" class="chatpane"></main>
-    <footer><textarea id="box" rows="1" placeholder="Ask about your business…"></textarea><button id="send">↑</button></footer>
+    <footer><textarea id="box" rows="1" placeholder="Ask about your business…" aria-label="Ask about your business"></textarea><button id="send" aria-label="Send">↑</button></footer>
   </div>`;
 
   on("#tabs button", "click", (e) => setTab(e.currentTarget.dataset.tab));
   $("more").onclick = businessSheet;
   $("hchat").onclick = () => openChat();
-  $("chatback").onclick = closeChat;
+  $("chatback").onclick = () => closeChat();
   $("newconv").onclick = newConversation;
   $("advisor").onclick = toggleAdvisor;
+  $("advisor").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleAdvisor(); } };
   const box = $("box");
+  // A question typed and not yet sent survives closing the pane and a reload
+  // of this tab (audit 11.2c); it is cleared the moment it is sent.
+  box.value = accountStorage.getItem(CHAT_DRAFT_KEY) || "";
   box.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
-  box.addEventListener("input", () => { box.style.height = "auto"; box.style.height = Math.min(box.scrollHeight, 120) + "px"; });
+  box.addEventListener("input", () => {
+    box.style.height = "auto"; box.style.height = Math.min(box.scrollHeight, 120) + "px";
+    try { if (box.value.trim()) accountStorage.setItem(CHAT_DRAFT_KEY, box.value); else accountStorage.removeItem(CHAT_DRAFT_KEY); } catch {}
+  });
   $("send").onclick = () => send();
   banner();
   if (!$("chat").childElementCount) {
@@ -596,7 +896,11 @@ function setTab(key) {
     if (key === "customers") S.board = null;
   }
   S.tab = key;
-  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === key));
+  document.querySelectorAll("#tabs button").forEach((b) => {
+    const on = b.dataset.tab === key;
+    b.classList.toggle("on", on);
+    if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+  });
   renderTab();
 }
 
@@ -612,15 +916,47 @@ function renderTab() {
   if (S.tab === "customers") return renderCustomers();
 }
 
+// Back from a connect started on the web (audit 10.3 / 10.8): every connector
+// has a name and a "what happens now" line, and a failed return says why
+// instead of a bare "try again". QuickBooks and Business Profile used to be
+// labelled "Google Calendar" here.
+const CONNECT_RETURN = {
+  "gmail": { name: "Gmail", path: "/gmail", done: "Receipt Radar will start reading supplier receipts out of your inbox." },
+  "google-calendar": { name: "Google Calendar", path: "/google-calendar", done: "Your bookings now show on the Calendar tab, and every booking Ledger proposes still needs your tap." },
+  "google-business-profile": { name: "Business Profile", path: "/google-business-profile", done: "Your Google reviews are on the Customers tab, and every reply Ledger drafts still needs your tap." },
+  "quickbooks": { name: "QuickBooks", path: "/quickbooks-oauth", done: "Your invoices, customers and numbers are on the Finance tab, and every post Ledger proposes still needs your tap." },
+};
+const CONNECT_REASONS = {
+  missing_callback: "the sign-in page came back without an authorization.",
+  invalid_state: "that sign-in session is no longer valid. Start again from Connect.",
+  expired_state: "the secure sign-in session expired. Start again from Connect.",
+  obsolete_flow: "an old sign-in page was rejected. Start again from Connect.",
+  token_exchange: "authorization completed, but the secure token exchange failed.",
+  secure_storage: "authorization completed, but the encrypted connection could not be saved.",
+  storage_failed: "authorization completed, but the encrypted connection could not be saved.",
+  missing_scope: "the permission it runs on was left unticked. Connect again and leave every box ticked.",
+  api_access: "Google authorized the account, but Business Profile access was denied.",
+  no_location: "no managed Google Business location was found on that account.",
+  session_mismatch: "it was started from a different account, so it was not saved.",
+};
 function applyLaunchIntent() {
   const q = new URLSearchParams(location.search);
-  // Back from a Google connect (Calendar / Gmail) started on the web: say what happened, then clean the URL.
   const connected = q.get("connected");
   if (connected) {
     history.replaceState({}, "", location.pathname);
-    const name = connected === "gmail" ? "Gmail" : "Google Calendar";
-    if (q.get("status") === "success") { toast(`${name} connected`); openChat(); sys(`✅ ${name} is connected. ${connected === "gmail" ? "Receipt Radar will start reading supplier receipts out of your inbox." : "Your bookings now show on the Calendar tab, and every booking Ledger proposes still needs your tap."}`); }
-    else toast(`${name} didn't connect — please try again.`, "err");
+    const c = CONNECT_RETURN[connected] || { name: "That connection", path: null, done: "" };
+    const status = q.get("status"), reason = q.get("reason") || "";
+    const done = () => { if (connected === "google-business-profile" && reason === "choose_location") { toast("Google Business Profile connected — choose which listing Ledger posts to"); S.connMap = null; S.lane = "posts"; setTab("customers"); return; } toast(`${c.name} connected`); openChat(); sys(`✅ ${c.name} is connected. ${c.done}`); S.connMap = null; };
+    const failed = (why) => toast(`${c.name} didn't connect — ${CONNECT_REASONS[why] || "please try again."}`, "err");
+    // Session-bound completion (audit 10.7): the callback parked the tokens
+    // under a single-use token; the row is only written now, by this signed-in
+    // session, and only if it is the one that started the connect.
+    if (status === "pending" && q.get("confirm") && c.path) {
+      api(c.path + "/confirm", { confirm: q.get("confirm") }).then(done).catch((err) => failed(err.data?.code || ""));
+      return;
+    }
+    if (status === "success") done();
+    else failed(reason);
     return;
   }
   // Back from Stripe: say plainly whether the card went through and when the trial ends.
@@ -643,11 +979,13 @@ function applyLaunchIntent() {
     toast("No charge made — you can add a card any time from the Home tab.");
     return;
   }
+  // Clean the URL before any layer pushes its history entry, so Back from the
+  // chat lands on the plain app, never on a ?go= entry that would re-fire.
+  if (q.get("go") || q.get("ask")) history.replaceState({}, "", location.pathname);
   if (q.get("go") === "chat") openChat();
   if (q.get("go") === "google_posts") { S.lane = "posts"; setTab("customers"); }
   const ask = q.get("ask");
   if (ask) { openChat(); $("box").value = ask; send(); }
-  if (q.get("go") || q.get("ask")) history.replaceState({}, "", location.pathname);
 }
 
 /* ---------------- connection prompt ---------------- */
@@ -664,14 +1002,17 @@ function wireConnect(scope) {
   on("[data-connect]", "click", async (e) => {
     const b = e.currentTarget; b.disabled = true;
     const path = b.dataset.connect;
-    const launch = async (extra) => { const d = await api(path + extra, {}); location.href = d.authorization_url; };
-    try { await launch(path.startsWith("/g") ? "?web=1" : ""); }
+    // web=1: land back on app.html, QuickBooks included (audit 10.3 — it used to
+    // land desktop users on the iOS scheme). confirm=1: the callback parks the
+    // tokens and this signed-in session writes the row via /confirm (audit 10.7).
+    const launch = async (extra) => { const d = await api(path + "?web=1&confirm=1" + extra, {}); location.href = d.authorization_url; };
+    try { await launch(""); }
     catch (err) {
       // One set of books (2026-09-05): built-in invoices go out of sight while
       // QuickBooks is on. Nothing is deleted — say so, then let the owner decide.
       if (err.status === 409 && err.data?.code === "native_documents_exist") {
         if (confirm(err.message + "\n\nConnect QuickBooks anyway?")) {
-          try { await launch("?acknowledge=native_hidden"); return; } catch (e2) { toast(e2.message, "err"); }
+          try { await launch("&acknowledge=native_hidden"); return; } catch (e2) { toast(e2.message, "err"); }
         }
         b.disabled = false; return;
       }
@@ -693,6 +1034,28 @@ function wireDisconnectQuickBooks(scope) {
       await api("/quickbooks-oauth/disconnect", {});
       toast("QuickBooks disconnected — you're on built-in books");
       setTimeout(() => location.reload(), 900);
+    } catch (err) { b.disabled = false; toast(err.message, "err"); }
+  }, scope);
+}
+
+// Disconnect Gmail / Google Calendar / Business Profile (audit 10.2): the
+// server revokes the grant at Google and forgets the tokens here. Nothing the
+// connection produced is deleted — receipts, appointments and reviews stay.
+const DISCONNECT_COPY = {
+  gmail: "Disconnect Gmail?\n\nLedger stops reading your inbox for receipts and can no longer send from this address. Receipts already captured stay. You can reconnect any time.",
+  google_calendar: "Disconnect Google Calendar?\n\nLedger stops reading and booking on this calendar and switches to the built-in calendar. Appointments already saved stay. You can reconnect any time.",
+  google_business_profile: "Disconnect Business Profile?\n\nLedger stops reading and answering your Google reviews and posting updates. Nothing on your listing is changed. You can reconnect any time.",
+};
+function wireDisconnectConnector(scope, rerender) {
+  on("[data-disconnect]", "click", async (e) => {
+    const b = e.currentTarget, key = b.dataset.disconnect, c = CONNECTORS.find((x) => x.key === key);
+    if (!c || !confirm(DISCONNECT_COPY[key] || `Disconnect ${c.name}?`)) return;
+    b.disabled = true;
+    try {
+      await api(c.start.replace(/\/start$/, "/disconnect"), {});
+      toast(`${c.name} disconnected`);
+      const latest = await connectionStates();
+      if (rerender) rerender(latest);
     } catch (err) { b.disabled = false; toast(err.message, "err"); }
   }, scope);
 }
@@ -801,13 +1164,15 @@ async function renderHome() {
       <div class="console">
         <div class="chead">
           <b>Ask Ledger</b>
-          <button class="livepill" id="livebtn"><span class="wv"><i></i><i></i><i></i><i></i></span>Live</button>
+          ${S.voice?.available
+            ? `<button class="livepill" id="livebtn"><span class="wv"><i></i><i></i><i></i><i></i></span>Live</button>`
+            : `<span class="livepill off" id="livebtn" role="status" title="${esc(S.voice?.message || "Ledger Live is paused.")}">Live · paused</span>`}
         </div>
         <div class="askfield">
           <span class="sparkicon">&#10022;</span>
           <input id="askbox" placeholder="Tell Ledger what to do…" autocomplete="off">
           <span class="camic" aria-hidden="true">${segIc("camera")}</span>
-          <button class="gobtn" id="askgo" title="Send">&#8593;</button>
+          <button class="gobtn" id="askgo" title="Send" aria-label="Send">&#8593;</button>
         </div>
         <div class="askgrid">${ASK_CHIPS.map((c, i) =>
           `<button class="askchip c${i}" data-ask="${esc(c.prompt)}"><em>${segIc(c.ic)}</em>${esc(c.label)}</button>`).join("")}</div>
@@ -859,8 +1224,10 @@ async function renderHome() {
     el.placeholder = ASK_PLACEHOLDERS[askRot];
   }, 3500);
   // Ledger Live (realtime voice) — same OpenAI Realtime session the iPhone app
-  // opens, over the browser's own WebRTC (Kyle 2026-09-02, web parity).
-  $("livebtn").onclick = () => liveSheet();
+  // opens, over the browser's own WebRTC (Kyle 2026-09-02, web parity). While
+  // voice is paused the pill is a label, not a door (audit 16-04).
+  if (S.voice?.available) $("livebtn").onclick = () => liveSheet();
+  else $("livebtn").onclick = () => toast(S.voice?.message || "Ledger Live is temporarily paused. Typed chat is still available.");
   $("bizsettings").onclick = () => businessSheet();
   on("[data-goto]", "click", (e) => {
     const k = e.currentTarget.dataset.goto;
@@ -1195,6 +1562,23 @@ function shopSummary(sp) {
     n ? `${n} service${n === 1 ? "" : "s"}` : "", sp.hours_text || ""].filter(Boolean).join(" · ");
 }
 const blankService = () => ({ name: "", price: "", duration_minutes: "" });
+// Audit 04-06: IANA zones for the business-profile picker. The browser's full
+// list when it has one; otherwise the launch-geography zones. The saved zone
+// and the device zone are always present so the current pick never vanishes.
+const SHOP_TZ_FALLBACK = ["America/St_Johns", "America/Halifax", "America/Toronto", "America/Winnipeg", "America/Regina", "America/Edmonton", "America/Vancouver", "America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu", "UTC"];
+function shopTimezoneOptions(current) {
+  let zones = [];
+  try { zones = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : []; } catch { zones = []; }
+  if (!zones.length) zones = SHOP_TZ_FALLBACK;
+  const device = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; } })();
+  const all = [...new Set([current || "", device, ...zones].filter(Boolean))];
+  const label = (z) => {
+    let off = "";
+    try { off = new Intl.DateTimeFormat("en-CA", { timeZone: z, timeZoneName: "shortOffset" }).formatToParts(new Date()).find((p) => p.type === "timeZoneName")?.value || ""; } catch {}
+    return `${z.replace(/_/g, " ")}${off ? ` (${off})` : ""}${z === device ? " · this device" : ""}`;
+  };
+  return all.sort((a, b) => a.localeCompare(b)).map((z) => [z, label(z)]);
+}
 function shopProfileSheet(onDone, opts = {}) {
   const cur = { ...(S.shop || {}) };
   const picked = { intake_channels: [...(cur.intake_channels || [])] };
@@ -1241,6 +1625,11 @@ function shopProfileSheet(onDone, opts = {}) {
         <span class="hourtimes" ${h ? "" : "hidden"}><input type="time" data-hopen="${k}" value="${esc(h?.open || "08:00")}"> <em>to</em> <input type="time" data-hclose="${k}" value="${esc(h?.close || "17:00")}"></span>
       </div>`; }).join("")}
       <p class="note" style="margin-top:6px">Bookings, your booking page and your phone line all follow these hours. Change them any time here or in Calendar.</p>
+    </div>
+    <div class="cmpsect">
+      <label class="fld">Your time zone</label>
+      <select id="shoptz" class="cmpinput">${cur.timezone ? "" : `<option value="" selected>Keep the current setting</option>`}${shopTimezoneOptions(cur.timezone).map(([v, l]) => `<option value="${esc(v)}"${v === (cur.timezone || "") ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>
+      <p class="note" style="margin-top:6px">Your hours, Front Desk appointment times and customer reminders are read in this zone. It was set from the device you signed up on${cur.timezone ? ` (currently ${esc(cur.timezone)})` : ""}.</p>
     </div>
     <div class="cmpsect">
       <label class="fld">Where do you work?</label>
@@ -1303,6 +1692,10 @@ function shopProfileSheet(onDone, opts = {}) {
         business_hours[k] = on ? { open: sh.querySelector(`[data-hopen="${k}"]`).value || "08:00", close: sh.querySelector(`[data-hclose="${k}"]`).value || "17:00" } : null;
       }
       const region = sh.querySelector("#shopregion").value;
+      // Audit 04-06: the zone is sent only when the owner changed it, so an
+      // older server that ignores the field still saves everything else.
+      const tzPick = sh.querySelector("#shoptz").value;
+      const tzChanged = tzPick && tzPick !== (cur.timezone || "");
       btn.disabled = true; note.className = "note"; note.textContent = "Saving…";
       try {
         const r = await api("/workspace-profile", {
@@ -1311,8 +1704,10 @@ function shopProfileSheet(onDone, opts = {}) {
           service_area: sh.querySelector("#shoparea").value.trim(),
           business_hours: Object.values(business_hours).some(Boolean) ? business_hours : null,
           services, remove_service_ids: removed, region_code: region,
+          ...(tzChanged ? { timezone: tzPick } : {}),
         });
         S.shop = r.shop_profile;
+        if (r.shop_profile?.timezone) S.businessTimezone = r.shop_profile.timezone;
         if (S.profile) S.profile.business = { ...(S.profile.business || {}), ...r };
         try { CAL.hours = null; } catch {}
         const tax = r.tax_set ? ` Suggested sales tax: ${r.tax_set.name} ${(r.tax_set.rate * 100).toFixed(r.tax_set.rate * 100 % 1 ? 3 : 0)}%.` : (r.us_region ? " Add your state's sales tax in Books settings." : "");
@@ -1709,7 +2104,7 @@ function invalidateNativeBooks() {
   S.nativeSummary=null; S.nativeInvoiceList=null; S.nativeCustomers=null; homeSrc=null;
 }
 async function booksApi(body) {
-  const mutates = /^(payment-record|invoice-(create|void)|estimate-(create|convert|void|status)|settings-save|customer-save|provider-choose)$/.test(body.action);
+  const mutates = /^(payment-(record|reverse)|invoice-(create|void)|estimate-(create|convert|void|status)|settings-save|customer-save|provider-choose)$/.test(body.action);
   if (mutates) invalidateNativeBooks();
   try {
     const result=await api("/books",body);
@@ -1788,9 +2183,9 @@ function salesIntelNative(invoices) {
   const max = Math.max(1, ...days.map((d) => d.total));
   return `<div class="intel">
     <div class="ihead"><b>&#9651; Sales</b><span class="live"><i></i>Built-in books</span></div>
-    <p class="cap">This month</p>
+    <p class="cap">This month · incl. tax</p>
     <div class="big">${money(mtd)}</div>
-    <div class="sub">Live sales performance</div>
+    <div class="sub">Invoiced this month, sales tax included &mdash; the Profit board shows sales before tax</div>
     <div class="salespark">${days.map((d, i) =>
       `<div class="b ${i === days.length - 1 ? "hot" : ""}" style="height:${Math.max(Math.round(d.total / max * 100), 3)}%" title="${d.key}: ${money0(d.total)}"></div>`).join("")}</div>
     <div class="sparkends"><span>14 days ago</span><span>Today</span></div>
@@ -1914,10 +2309,10 @@ async function loadNativeInvoices() {
     ${salesIntelNative(invoices)}
 <div class="fintiles">
       <div class="fintile tn t-cyan"><span class="tic">${segIc("sun")}</span>
-        <small>Today</small><b>${money(todaySales)}</b>
+        <small>Today · incl. tax</small><b>${money(todaySales)}</b>
         <span class="fincap">Next ${esc(String(nextNum))}</span></div>
       <div class="fintile tn t-em"><span class="tic">${segIc("profit")}</span>
-        <small>Year to date</small><b>${money(ytdSales)}</b>
+        <small>Year to date · incl. tax</small><b>${money(ytdSales)}</b>
         <span class="fincap">Since Jan 1</span></div>
       <div class="fintile tn t-orange"><span class="tic">${segIc("hourglass")}</span>
         <small>Outstanding</small><b>${money(summary.open_balance || 0)}</b>
@@ -1978,7 +2373,7 @@ async function loadNativeInvoices() {
     else if (op === "bsettings") booksSettingsSheet();
     else if (op === "bexport" || op === "barchive") {
       try {
-        const ex = await booksApi({ action: op === "barchive" ? "archive" : "export" });
+        const ex = await booksApi(op === "barchive" ? { action: "archive", include_receipt_links: true } : { action: "export" });
         downloadBooksExport(ex);
         toast("Export downloaded");
       } catch (err) { toast(err.message, "err"); }
@@ -2012,6 +2407,21 @@ async function sendNativeDocumentEmail(kind,id,to,force) {
 function booksEmailHistoryMarkup(doc) {
   const labels={pending:"Sending — retry to recover",unknown:"Delivery needs verification",accepted:"Accepted for delivery",delivered:"Delivered",failed:"Delivery failed"};
   return (doc.email_history||[]).map(m=>`<p class="note">${m.deliberate_resend?"Resend · ":""}${esc(labels[m.state]||"Delivery needs verification")} · ${esc(m.recipient)}</p>`).join("");
+}
+// Audit 14.1: the customer link has a lifetime. Say when it ends; when it has
+// ended (or was revoked) say so and offer a replacement. Emailing the document
+// replaces a dead link on its own; "Replace link" is for owners who share the
+// link another way. Servers without link_active (older deploy) show nothing.
+function booksLinkStatusMarkup(doc,id) {
+  if(typeof doc.link_active!=="boolean")return "";
+  if(doc.link_active)return `<p class="note" id="${id}">Link works until ${esc(doc.link_expires_at?new Date(doc.link_expires_at).toLocaleDateString(undefined,{timeZone:S.businessTimezone||"America/Edmonton"}):"further notice")}</p>`;
+  return `<p class="note err" id="${id}">This link no longer works${doc.link_expires_at&&Date.parse(doc.link_expires_at)<=Date.now()?" (expired)":" (revoked)"} — emailing the document sends a new one.</p><button class="pillbtn" id="${id}replace">Replace link</button>`;
+}
+async function replaceDocumentLink(kind,id) {
+  if(!confirm("Replace this link? The old link stops working immediately; the new one is not sent automatically."))return null;
+  const r=await api("/client-hub",{action:"private-links/renew",kind,id});
+  if(!r||!r.url)throw new Error(r?.error||"The link could not be replaced.");
+  return r;
 }
 
 
@@ -2049,14 +2459,16 @@ async function nativeInvoiceSheet(id) {
         ${Number(inv.balance) > 0 && Number(inv.balance) < Number(inv.total)
           ? `<tr><td>Balance due</td><td style="text-align:right">${money(inv.balance)}</td></tr>` : ""}
       </tbody></table>
-      ${(inv.payments || []).length ? `<p class="note">${inv.payments.map((p) =>
-        `Paid ${money(p.amount)} · ${esc(p.method)} · ${esc(booksPaymentDate(p,inv))}`).join("<br>")}</p>` : ""}
+      ${(inv.payments || []).length ? `<p class="note">${inv.payments.map((p) => Number(p.amount) < 0
+        ? `Reversed ${money(-Number(p.amount))} · ${esc(p.method)} · ${esc(booksPaymentDate(p,inv))}${p.reversal_reason ? " · " + esc(p.reversal_reason) : ""}`
+        : `Paid ${money(p.amount)} · ${esc(p.method)} · ${esc(booksPaymentDate(p,inv))}${p.id && p.method !== "stripe" && !p.reversed_at ? ` <button class="linkbtn" data-reverse="${esc(p.id)}" style="display:inline;padding:0">Reverse</button>` : ""}`).join("<br>")}</p>` : ""}
       ${Number(inv.overpayment)>0 ? `<p class="note err">Overpayment ${money(inv.overpayment)} — review and arrange a refund with your payment provider. This is not extra sales.</p>` : ""}
       ${inv.email_enabled ? `<button class="pillbtn" id="bemail"><b>Email invoice</b></button>` : ""}
       ${booksEmailHistoryMarkup(inv)}<button class="pillbtn" id="invhistory">View complete history</button>
       ${!inv.email_history?.length && inv.email_sent_at ? `<p class="note">Emailed to ${esc(inv.email_sent_to)} · ${esc(String(inv.email_sent_at).slice(0, 10))}</p>` : ""}
       <button class="pillbtn" id="blink">Copy pay link</button>
       <button class="pillbtn" id="bopen">Open invoice page</button>
+      ${booksLinkStatusMarkup(inv,"blinkstatus")}
       ${Number(inv.balance) > 0 || pendingPayment ? `
         <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Record a payment</span></div>
         <div class="f" style="display:flex;gap:8px">
@@ -2065,15 +2477,37 @@ async function nativeInvoiceSheet(id) {
             <option value="cheque">Cheque</option><option value="other">Other</option></select>
         </div>
         <button class="pillbtn" id="bpay" style="margin-top:8px"><b>${pendingPayment ? "Recover payment" : "Record payment"}</b></button>${pendingPayment ? `<p class="note">A previous reply was interrupted. Recover the same payment before recording another.</p>` : ""}` : ""}
-      ${inv.status === "sent" && !(inv.payments || []).length ? `<button class="linkbtn" id="bvoid" style="color:var(--red);margin-top:10px">Void this invoice</button>` : ""}
+      ${inv.status === "sent" && !((inv.payments || []).reduce((s, p) => s + Number(p.amount), 0) > 0) ? `<button class="linkbtn" id="bvoid" style="color:var(--red);margin-top:10px">Void this invoice</button>` : ""}
       <p class="note err" id="berr"></p>`;
     wrap.querySelector("#invhistory").onclick=()=>booksHistorySheet("invoice",inv.id);
+    // Reversal keeps the original row and adds a negative one; the balance
+    // re-opens and the reason is audited. Card payments are refunded in Stripe.
+    on("[data-reverse]", "click", async (e) => {
+      const btn = e.currentTarget, payment = (inv.payments || []).find((p) => p.id === btn.dataset.reverse);
+      if (!payment) return;
+      const reason = (prompt(`Reverse the ${money(payment.amount)} ${payment.method} payment on ${inv.number}? Say why (kept in the audit history):`) || "").trim();
+      if (!reason) return;
+      btn.disabled = true;
+      try {
+        const r = await booksApi({ action: "payment-reverse", payment_id: payment.id, reason, client_ref: crypto.randomUUID() });
+        if (!r.invoice?.id) throw new Error("Reversal reply was incomplete. Reopen the invoice to check it.");
+        inv = { ...inv, ...r.invoice, link };
+        toast(r.reversed ? "Payment reversed" : "Payment was already reversed");
+        paint(); loadNativeInvoices();
+      } catch (e2) { btn.disabled = false; wrap.querySelector("#berr").textContent = e2.message; }
+    }, body());
     const link = inv.link || "";
     wrap.querySelector("#blink").onclick = async () => {
       try { await navigator.clipboard.writeText(link); toast("Payment link copied"); }
       catch { prompt("Payment link:", link); }
     };
     wrap.querySelector("#bopen").onclick = () => window.open(link, "_blank");
+    const replaceLink = wrap.querySelector("#blinkstatusreplace");
+    if (replaceLink) replaceLink.onclick = async () => {
+      replaceLink.disabled = true;
+      try { if (await replaceDocumentLink("invoice", inv.id)) { toast("New payment link ready"); inv = (await booksApi({action:"invoice-get",id:inv.id})).invoice; paint(); } else replaceLink.disabled = false; }
+      catch (e) { wrap.querySelector("#berr").textContent = e.message; replaceLink.disabled = false; }
+    };
     const emailBtn = wrap.querySelector("#bemail");
     if (emailBtn) emailBtn.onclick = async () => {
       const to = (prompt("Email this invoice to:", inv.customer?.email || "") || "").trim();
@@ -2121,7 +2555,7 @@ async function nativeInvoiceSheet(id) {
     };
     const voidBtn = wrap.querySelector("#bvoid");
     if (voidBtn) voidBtn.onclick = async () => {
-      if (!confirm(`Void ${inv.number}? The number is never reused.`)) return;
+      if (!(await askConfirm(`Void ${inv.number}? The number is never reused.`, { title: "Void this invoice?", ok: "Void", danger: true }))) return;
       try { await booksApi({ action: "invoice-void", id: inv.id }); toast(`${inv.number} voided`); closeSheet(); loadNativeInvoices(); }
       catch (e) { wrap.querySelector("#berr").textContent = e.message; }
     };
@@ -2159,7 +2593,7 @@ async function nativeEstimateSheet(id) {
       ${booksEmailHistoryMarkup(est)}<button class="pillbtn" id="esthistory">View complete history</button>
       ${!est.email_history?.length && est.email_sent_at ? `<p class="note">Emailed to ${esc(est.email_sent_to)} · ${esc(String(est.email_sent_at).slice(0, 10))}</p>` : ""}
       ${est.link ? `<button class="pillbtn" id="estlink">Copy share link</button>
-      <button class="pillbtn" id="estopen">Open estimate page</button>` : ""}
+      <button class="pillbtn" id="estopen">Open estimate page</button>${booksLinkStatusMarkup(est,"estlinkstatus")}` : ""}
       ${est.status === "open" ? `
         <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Customer decision</span></div>
         <div class="f" style="display:flex;gap:8px">
@@ -2181,6 +2615,12 @@ async function nativeEstimateSheet(id) {
     };
     const ob = wrap.querySelector("#estopen");
     if (ob) ob.onclick = () => window.open(link, "_blank");
+    const replaceLink = wrap.querySelector("#estlinkstatusreplace");
+    if (replaceLink) replaceLink.onclick = async () => {
+      replaceLink.disabled = true;
+      try { if (await replaceDocumentLink("estimate", est.id)) { toast("New share link ready"); est = (await booksApi({action:"estimate-get",id:est.id})).estimate; paint(); } else replaceLink.disabled = false; }
+      catch (e) { err(e.message); replaceLink.disabled = false; }
+    };
     const emailBtn = wrap.querySelector("#estemail");
     if (emailBtn) emailBtn.onclick = async () => {
       const to = (prompt("Email this estimate to:", est.customer?.email || "") || "").trim();
@@ -2221,15 +2661,18 @@ async function nativeEstimateSheet(id) {
         const v=preview.review;
         if(!v || !Number.isFinite(v.total)) throw new Error("Conversion review is unavailable.");
         const taxes=[`${v.tax_name||"Tax"}: ${money(v.tax_total)}`,v.tax2_name ? `${v.tax2_name}: ${money(v.tax2_total)}` : ""].filter(Boolean).join("\n");
-        if(!confirm(`Review invoice from ${est.number}\nSubtotal: ${money(v.subtotal)}\n${taxes}\nTotal: ${money(v.total)}\nTerms: ${v.terms} · Due ${v.due_date}\n${preview.tax_settings_changed ? "Tax settings changed. This invoice keeps the quoted taxes.\n" : ""}Create this invoice?`)) { conv.disabled=false;return; }
-        const r = await booksApi({ action: "estimate-convert", id: est.id, expected_review:v });
+        // A quote past its "prices honoured until" date converts only once the
+        // owner says the quoted prices still stand (server requires force).
+        const expiredNote = preview.expired ? `THIS ESTIMATE EXPIRED ON ${preview.expiry_date}. Converting bills the customer at the quoted prices anyway.\n` : "";
+        if(!confirm(`Review invoice from ${est.number}\n${expiredNote}Subtotal: ${money(v.subtotal)}\n${taxes}\nTotal: ${money(v.total)}\nTerms: ${v.terms} · Due ${v.due_date}\n${preview.tax_settings_changed ? "Tax settings changed. This invoice keeps the quoted taxes.\n" : ""}Create this invoice?`)) { conv.disabled=false;return; }
+        const r = await booksApi({ action: "estimate-convert", id: est.id, expected_review:v, ...(preview.expired ? { force: true } : {}) });
         toast(`Invoice ${r.invoice.number} created from ${est.number}`);
         closeSheet(); loadNativeInvoices(); nativeInvoiceSheet(r.invoice.id);
       } catch (e) { err(e.message); conv.disabled = false; }
     };
     const vb = wrap.querySelector("#estvoid");
     if (vb) vb.onclick = async () => {
-      if (!confirm(`Void ${est.number}? The number is never reused.`)) return;
+      if (!(await askConfirm(`Void ${est.number}? The number is never reused.`, { title: "Void this estimate?", ok: "Void", danger: true }))) return;
       try { await booksApi({ action: "estimate-void", id: est.id }); toast(`${est.number} voided`); closeSheet(); loadNativeInvoices(); }
       catch (e) { err(e.message); }
     };
@@ -2258,20 +2701,59 @@ async function nativeComposerSheet(kind) {
   // same ref as the same document, so a nervous double-tap can never bill twice.
   const C = { customer: null, customers: [], query: "", lines: [{ name: "", quantity: 1, rate: 0, taxable2: true }], memo: "", termsDays: 0, validDays: 14, newCust: false, busy: false, shortcuts: [],
     discountKind:"none", discountValue:"0", settings: null, setupError: "", termsTouched: false, attempted: false, error: "", tax: null, noWayToPay: false, noTaxNumber: false, clientRef: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`) };
+  // The draft lives in account-scoped storage while it is being typed (audit
+  // 11.2b): a backdrop tap, a deploy reload or a closed tab brings it back the
+  // next time the composer opens. It is cleared on create, or when the owner
+  // chooses Discard. Same clientRef, so a save interrupted by the reload still
+  // recovers the same document rather than billing twice.
+  const DRAFT_KEY = isEst ? "ledger.draft.estimate" : "ledger.draft.invoice";
+  let restored = false;
+  try {
+    const saved = JSON.parse(accountStorage.getItem(DRAFT_KEY) || "null");
+    if (saved && saved.v === 1 && Array.isArray(saved.lines)) {
+      const lines = saved.lines.filter((l) => l && typeof l === "object").slice(0, 30).map((l) => ({
+        name: String(l.name ?? ""), quantity: l.quantity ?? 1, rate: l.rate ?? 0,
+        ...(l.description ? { description: String(l.description) } : {}), ...(l.code ? { code: String(l.code) } : {}),
+        ...(l.taxable === false ? { taxable: false } : {}), taxable2: l.taxable2 !== false }));
+      Object.assign(C, { customer: saved.customer && typeof saved.customer === "object" && saved.customer.id ? saved.customer : null, lines: lines.length ? lines : C.lines, memo: String(saved.memo || ""),
+        termsDays: Number.isFinite(saved.termsDays) ? saved.termsDays : C.termsDays, validDays: Number.isFinite(saved.validDays) ? saved.validDays : C.validDays,
+        discountKind: ["none","fixed","percent"].includes(saved.discountKind) ? saved.discountKind : "none", discountValue: String(saved.discountValue ?? "0"),
+        termsTouched: !!saved.termsTouched, attempted: !!saved.attempted, clientRef: saved.clientRef || C.clientRef });
+      restored = true;
+    }
+  } catch {}
+  const blankLine = (l) => !String(l.name || "").trim() && !(Number(l.rate) > 0) && !l.description;
   const wrap = sheet(`<h2>${isEst ? "New Estimate" : "New Invoice"}</h2><div id="bcmp"><div class="skel"></div></div>`);
   const body = () => wrap.querySelector("#bcmp");
+  const newCustTyped = () => ["#ncf", "#ncl", "#nce", "#ncp", "#ncc"].some((id) => (wrap.querySelector(id)?.value || "").trim());
+  const dirty = () => !!C.customer || C.memo.trim() !== "" || C.discountKind !== "none" || C.lines.length > 1 || C.lines.some((l) => !blankLine(l)) || C.attempted || newCustTyped();
+  const persist = () => {
+    try {
+      if (!dirty()) { accountStorage.removeItem(DRAFT_KEY); return; }
+      const cu = C.customer;
+      accountStorage.setItem(DRAFT_KEY, JSON.stringify({ v: 1, savedAt: Date.now(), clientRef: C.clientRef,
+        customer: cu ? { id: cu.id, first_name: cu.first_name, last_name: cu.last_name, email: cu.email, company: cu.company, default_terms_days: cu.default_terms_days } : null,
+        lines: C.lines, memo: C.memo, termsDays: C.termsDays, validDays: C.validDays, discountKind: C.discountKind, discountValue: C.discountValue,
+        termsTouched: C.termsTouched, attempted: C.attempted }));
+    } catch {}
+  };
+  wrap._isDirty = dirty;
+  wrap._discard = () => { try { accountStorage.removeItem(DRAFT_KEY); } catch {} };
   const loadSetup = async () => {
     C.setupError = "";
     try {
       const [cust, sc, set] = await Promise.all([booksApi({action:"customers"}), booksApi({action:"shortcuts"}), booksApi({action:"settings"})]);
       if (!set?.tax || !set.business_date || !set.timezone || ![Number(set.tax.rate),Number(set.tax.second_rate ?? 0)].every(r=>Number.isFinite(r)&&r>=0&&r<=1)) throw new Error("Business settings are incomplete.");
       C.customers = cust.customers || []; C.shortcuts = sc.shortcuts || []; C.settings = set; C.tax = set.tax;
+      // A restored draft names its customer by id; the fresh record wins.
+      if (C.customer) { const fresh = C.customers.find((c) => c.id === C.customer.id); if (fresh) C.customer = fresh; }
       if (!C.termsTouched) C.termsDays = C.customer?.default_terms_days ?? set.default_terms_days ?? 0;
       C.noWayToPay = !isEst && !set.stripe_connected && !String(set.payment_instructions || "").trim();
       C.noTaxNumber = Number(set.tax.rate)>0 && !String(set.tax.registration_number || "").trim();
     } catch (e) { C.setupError = "Could not load business setup. " + e.message; }
   };
   await loadSetup();
+  if (restored && wrap.isConnected) toast(`Restored your unsaved ${isEst ? "estimate" : "invoice"} draft.`);
   const rounded = n => Math.round(n * 100) / 100;
   const problem = l => {
     if (!l.name.trim() || l.name.trim().length>200) return "Enter a service or product name (up to 200 characters).";
@@ -2322,6 +2804,7 @@ async function nativeComposerSheet(kind) {
     const el=wrap.querySelector("#btotals");if(el)el.innerHTML=totalsHtml();
     C.lines.forEach((l,i)=>{const e=wrap.querySelector(`#blineerror${i}`);if(e){e.textContent=problem(l);e.hidden=!problem(l);}});
     const create=wrap.querySelector("#bcreate");if(create)create.disabled=C.busy||!C.customer||!valid();
+    persist();
   };
   const paint = () => {
     const hits = C.query
@@ -2334,17 +2817,17 @@ async function nativeComposerSheet(kind) {
       <div class="lanehead"><span class="eyebrow">Customer</span></div>
       ${C.customer ? `<div class="cmpsel"><span class="av">${esc((C.customer.first_name || "?").slice(0, 1).toUpperCase())}</span>
           <span class="m"><b>${esc(`${C.customer.first_name} ${C.customer.last_name}`.trim())}</b>${C.customer.email ? `<span>${esc(C.customer.email)}</span>` : ""}</span>
-          <button class="x" id="bclear">&#10005;</button></div>`
+          <button class="x" id="bclear" aria-label="Clear customer">&#10005;</button></div>`
         : C.newCust ? `
           <div class="f" style="display:flex;gap:8px">
-            <input id="ncf" class="cmpinput" placeholder="First name" style="flex:1">
-            <input id="ncl" class="cmpinput" placeholder="Last name" style="flex:1"></div>
-          <input id="nce" class="cmpinput sm" placeholder="Email">
-          <input id="ncp" class="cmpinput sm" placeholder="Phone">
-          <input id="ncc" class="cmpinput sm" placeholder="Company (optional)">
+            <input id="ncf" class="cmpinput" placeholder="First name" aria-label="First name" style="flex:1">
+            <input id="ncl" class="cmpinput" placeholder="Last name" aria-label="Last name" style="flex:1"></div>
+          <input id="nce" class="cmpinput sm" placeholder="Email" aria-label="Email" inputmode="email">
+          <input id="ncp" class="cmpinput sm" placeholder="Phone" aria-label="Phone" inputmode="tel">
+          <input id="ncc" class="cmpinput sm" placeholder="Company (optional)" aria-label="Company (optional)">
           <button class="pillbtn" id="ncsave">Save customer</button>
           <button class="linkbtn" id="ncback">Back to search</button>`
-        : `<input id="bq" class="cmpinput" placeholder="Search customers…" value="${esc(C.query)}" autocomplete="off">
+        : `<input id="bq" class="cmpinput" placeholder="Search customers…" aria-label="Search customers" value="${esc(C.query)}" autocomplete="off">
           ${hits.map((c) => `<button class="cmprow" data-bpick="${esc(c.id)}">
             <span class="av sm">${esc((c.first_name || "?").slice(0, 1).toUpperCase())}</span>
             <span class="m"><b>${esc(`${c.first_name} ${c.last_name}`.trim() || c.company || "")}</b>${c.email ? `<span>${esc(c.email)}</span>` : ""}</span>
@@ -2352,8 +2835,8 @@ async function nativeComposerSheet(kind) {
           <button class="linkbtn" id="bnewc">+ New customer</button>`}
       <div class="lanehead" style="margin-top:12px"><span class="eyebrow">Lines</span></div>
       ${C.lines.map((l, i) => `<div class="cmpline">
-        <div class="t"><input class="cmpinput sm" data-bname="${i}" placeholder="Service or product — or a shortcut like MTFR" value="${esc(l.name)}" style="flex:1" autocomplete="off">
-          <button class="del" data-bdel="${i}">&#128465;</button></div>
+        <div class="t"><input class="cmpinput sm" data-bname="${i}" placeholder="Service or product — or a shortcut like MTFR" aria-label="Line ${i + 1} service or product" value="${esc(l.name)}" style="flex:1" autocomplete="off">
+          <button class="del" data-bdel="${i}" aria-label="Remove line ${i + 1}">&#128465;</button></div>
         <div id="bsug${i}" class="scsug"></div>
         <div class="f"><label>Qty<input type="number" min="0.01" max="9999" step="0.01" data-bqty="${i}" value="${esc(String(l.quantity))}"></label>
           <label>Rate<input type="number" min="0" step="0.01" data-brate="${i}" value="${esc(String(l.rate))}"></label></div>
@@ -2379,7 +2862,7 @@ async function nativeComposerSheet(kind) {
         ${[[0, "COD"], [15, "Net 15"], [30, "Net 30"], [60, "Net 60"]].map(([d, lbl]) =>
           `<button class="${C.termsDays === d ? "on" : ""}" data-bterm="${d}">${lbl}</button>`).join("")}
       </div>`}
-      <input id="bmemo" class="cmpinput sm" placeholder="Note to customer (optional)" value="${esc(C.memo)}">
+      <input id="bmemo" class="cmpinput sm" placeholder="Note to customer (optional)" aria-label="Note to customer (optional)" value="${esc(C.memo)}">
       <p class="note">Issued ${esc(C.settings?.business_date || "—")} · ${isEst ? (C.validDays>0 ? "Expires "+dayPlus(C.validDays) : "No expiry selected") : "Due "+dayPlus(C.termsDays)}</p>
       </fieldset>
       <div id="btotals">${totalsHtml()}</div>
@@ -2390,7 +2873,8 @@ async function nativeComposerSheet(kind) {
           <span>${isEst ? "EST-numbered quote with a share page — posts nothing" : "Numbered + payment link, tax applied"}</span></span></button>
       <p class="note err" id="bcerr">${esc(C.error || (C.memo.length>20000 ? "Customer notes can contain up to 20,000 characters. Your draft has not been shortened." : ""))}</p>`;
     const close=wrap.querySelector(".sheet-close");if(close)close.disabled=C.busy||C.attempted;
-    wrap.querySelector(".sheet-back").onclick=()=>{if(!C.busy&&!C.attempted)closeSheet();};
+    wrap.querySelector(".sheet-back").onclick=()=>{if(!C.busy&&!C.attempted)void requestCloseSheet();};
+    persist();
     const retry=wrap.querySelector("#bretrysetup");if(retry)retry.onclick=async()=>{retry.disabled=true;await loadSetup();paint();};
     const q = wrap.querySelector("#bq");
     if (q) { q.oninput = () => { C.query = q.value; paint(); wrap.querySelector("#bq").focus(); const el = wrap.querySelector("#bq"); el.setSelectionRange(el.value.length, el.value.length); }; }
@@ -2459,7 +2943,7 @@ async function nativeComposerSheet(kind) {
       const kept = C.lines;
       // A $0 document is almost always a rate left blank. Ask once.
       if (!allowZero && kept.length && totals().sub <= 0) {
-        if (!confirm(`This ${isEst ? "estimate" : "invoice"} is for $0.00. Create it anyway?`)) return;
+        if (!(await askConfirm(`This ${isEst ? "estimate" : "invoice"} is for $0.00. Create it anyway?`, { title: "$0.00 total", ok: "Create anyway" }))) return;
         allowZero = true;
       }
       C.busy = true; C.attempted = true; C.error = ""; paint();
@@ -2479,6 +2963,7 @@ async function nativeComposerSheet(kind) {
           docId = r.invoice.id; docNumber = r.invoice.number;
         }
         toast(`${docNumber || (isEst ? "Estimate" : "Invoice")} created`);
+        wrap._isDirty = null; wrap._discard();
         closeSheet(); loadNativeInvoices();
         const openDoc = () => isEst ? nativeEstimateSheet(docId) : nativeInvoiceSheet(docId);
         // First-use shortcut offer: hand-typed lines the owner might want as a
@@ -2492,9 +2977,9 @@ async function nativeComposerSheet(kind) {
         if(err.data?.review_changed) C.setupError="Refresh setup and review the updated date and total.";
         paint();
         if (err.status === 409 && err.data?.duplicate_of) {
-          if (confirm(err.message + "\n\nCreate anyway?")) return create.onclick(null, true, allowZero);
+          if (await askConfirm(err.message, { title: "Possible duplicate", ok: "Create anyway" })) return create.onclick(null, true, allowZero);
         } else if (err.status === 409 && err.data?.zero_total) {
-          if (confirm(`This ${isEst ? "estimate" : "invoice"} is for $0.00. Create it anyway?`)) return create.onclick(null, force, true);
+          if (await askConfirm(`This ${isEst ? "estimate" : "invoice"} is for $0.00. Create it anyway?`, { title: "$0.00 total", ok: "Create anyway" })) return create.onclick(null, force, true);
         } else wrap.querySelector("#bcerr").textContent = err.message;
       }
     };
@@ -2982,7 +3467,7 @@ async function composerSheet(kind) {
     return C.lines.map((l, i) => `<div class="cmpline">
       <div class="t"><b>${esc(l.name)}</b><span class="amt">${money2(l.quantity * l.rate)}</span>
         <button class="del" data-del="${i}">&#128465;</button></div>
-      <div class="f"><label>Qty<input type="number" min="1" step="1" data-qty="${i}" value="${l.quantity}"></label>
+      <div class="f"><label>Qty<input type="number" min="0.01" max="999" step="0.01" data-qty="${i}" value="${l.quantity}"></label>
         <label>Rate<input type="number" min="0" step="0.01" data-rate="${i}" value="${l.rate}"></label></div>
       <input class="cmpinput sm" data-desc="${i}" placeholder="Description shown to customer (optional)" value="${esc(l.detail || "")}">
     </div>`).join("");
@@ -3011,7 +3496,7 @@ async function composerSheet(kind) {
       <h3>${isEst ? "ESTIMATE DRAFT" : "INVOICE DRAFT"}</h3><div class="cust">${esc(d.customer)}</div>
       <table>${(d.lines || []).map((l) => `<tr><td>${esc(l.description || l.item_name)} × ${l.quantity}</td><td>${money(l.amount)}</td></tr>`).join("")}
         <tr><td class="total">Subtotal</td><td class="total">${money(d.subtotal)}</td></tr></table>
-      ${isEst ? "" : termsRow(d.terms)}
+      ${isEst ? "" : termsRow(d.terms, d.terms_days)}
       ${d.customer_email ? `<label class="emailrow"><input type="checkbox" id="cmpem" checked> Email to ${esc(d.customer_email)}${(d.customer_email_cc || []).length ? ` · cc ${esc(d.customer_email_cc.join(", "))}` : ""}${d.recipients_locked ? ` <span class="note">(your standing rule for this customer)</span>` : ""}</label>` : ""}
       <label class="emailrow"><input type="checkbox" id="cmppr" ${accountStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
       <div class="row"><button class="btn cancel" id="cmpcancel">Cancel</button><button class="btn confirm" id="cmpconfirm">Confirm</button></div>
@@ -3024,9 +3509,11 @@ async function composerSheet(kind) {
       const sendEmail = body().querySelector("#cmpem")?.checked ?? false;
       const wantPrint = body().querySelector("#cmppr")?.checked ?? false;
       try {
-        const terms = body().querySelector(".tm")?.value;
+        const tm = body().querySelector(".tm");
+        const terms = tm && !tm.dataset.termsDays ? tm.value : undefined;
+        const termsDays = tm && tm.dataset.termsDays ? Number(tm.value) : undefined;
         const r = await api(isEst ? "/quickbooks-invoice/estimate-confirm" : "/quickbooks-invoice/confirm",
-          { draft_id: d.draft_id, send_email: sendEmail, ...(terms ? { terms } : {}) });
+          { draft_id: d.draft_id, send_email: sendEmail, ...(terms ? { terms } : {}), ...(termsDays != null ? { terms_days: termsDays } : {}) });
         note.className = "note ok";
         note.textContent = "✅ Posted" + (r.doc_number ? " — #" + r.doc_number : "") + (r.emailed ? " · emailed " + (r.emailed_to || "") : "");
         body().querySelector(".row").remove();
@@ -3059,7 +3546,9 @@ async function composerSheet(kind) {
       draw();
     });
     on("[data-del]", "click", (e) => { C.lines.splice(Number(e.currentTarget.dataset.del), 1); draw(); }, body());
-    on("[data-qty]", "change", (e) => { C.lines[Number(e.currentTarget.dataset.qty)].quantity = Math.max(1, Number(e.currentTarget.value) || 1); draw(); }, body());
+    // Fractional quantities (1.5 h labour) are real on QuickBooks too: two
+    // decimals, same as the built-in composer; the server caps QBO lines at 999.
+    on("[data-qty]", "change", (e) => { const q = Math.round((Number(e.currentTarget.value) || 0) * 100) / 100; C.lines[Number(e.currentTarget.dataset.qty)].quantity = Math.min(999, Math.max(0.01, q || 1)); draw(); }, body());
     on("[data-rate]", "change", (e) => { C.lines[Number(e.currentTarget.dataset.rate)].rate = Math.max(0, Number(e.currentTarget.value) || 0); draw(); }, body());
     on("[data-desc]", "input", (e) => { C.lines[Number(e.currentTarget.dataset.desc)].detail = e.currentTarget.value; }, body());
     const memo = body().querySelector("#cmpmemo");
@@ -3089,13 +3578,18 @@ function itemPicker(items, onPick) {
   let q = "";
   const wrap = document.createElement("div");
   wrap.id = "pickwrap";
+  wrap._opener = rememberOpener();
   wrap.innerHTML = `<div class="sheet-back"></div><div class="sheet"><div class="grab"></div>
     <h2>Billable Items</h2>
-    <input id="pickq" class="cmpinput" placeholder="Search items" autocomplete="off">
+    <input id="pickq" class="cmpinput" placeholder="Search items" aria-label="Search items" autocomplete="off">
     <div id="picklist" class="cmpsect"></div>
     <button class="sheet-close" id="pickclose">Close</button></div>`;
+  closeStack();
   document.body.appendChild(wrap);
-  const close = () => wrap.remove();
+  labelPane(wrap.querySelector(".sheet"));
+  // Back and Escape close the picker before the composer beneath it (audit 11.1).
+  layerPush("stack");
+  const close = () => closeStack();
   wrap.querySelector(".sheet-back").onclick = close;
   wrap.querySelector("#pickclose").onclick = close;
   const list = wrap.querySelector("#picklist");
@@ -4962,8 +5456,16 @@ function drawCalendar() {
     </div>`;
   }
 
+  // Audit 04-06: this calendar draws in the device's clock. When that differs
+  // from the business's own zone (which the booking gate, Front Desk and
+  // reminders use), say so where the times are read.
+  const deviceZone = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; } })();
+  const shopZone = S.shop?.timezone || S.businessTimezone || "";
+  const zoneNote = shopZone && deviceZone && shopZone !== deviceZone
+    ? `<div class="note" style="margin:-4px 0 12px">Times below are shown in this device's zone (${esc(deviceZone.replace(/_/g, " "))}). Your business runs on ${esc(shopZone.replace(/_/g, " "))} — change it under Settings → Your business.</div>` : "";
   view().innerHTML = `<div class="sect">
     ${pageHead("Calendar")}
+    ${zoneNote}
     ${S.cal?.calendar?.provider === "ledger" ? `<div class="note" style="margin:-4px 0 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>Ledger calendar — your appointments live right here in the app.</span><button class="btn ghost" data-connect="/google-calendar/start" style="padding:5px 10px">Connect Google Calendar</button></div>` : ""}
     ${next ? `<button class="nexthero" data-ev="${esc(next.id)}">
       <div class="t"><span class="dot"></span><span class="lbl">NEXT UP</span><span class="go">&#10132;</span></div>
@@ -5109,16 +5611,16 @@ function bookingSheet(dayISO, editing, prefill) {
     ${editing ? `<label class="fld">TITLE</label><input id="bkTitle" class="cmpinput" value="${esc(editing.title)}">`
       : `<div class="eyebrow">Customer</div>
     <div class="cmpsect">
-      <input id="bkFirst" class="cmpinput" placeholder="First name">
-      <input id="bkLast" class="cmpinput" placeholder="Last name">
-      <input id="bkPhone" class="cmpinput" inputmode="tel" placeholder="Phone" value="${esc((prefill && prefill.phone) || "")}">
-      <input id="bkEmail" class="cmpinput" inputmode="email" placeholder="Email">
+      <input id="bkFirst" class="cmpinput" placeholder="First name" aria-label="First name">
+      <input id="bkLast" class="cmpinput" placeholder="Last name" aria-label="Last name">
+      <input id="bkPhone" class="cmpinput" inputmode="tel" placeholder="Phone" aria-label="Phone" value="${esc((prefill && prefill.phone) || "")}">
+      <input id="bkEmail" class="cmpinput" inputmode="email" placeholder="Email" aria-label="Email">
     </div>
     <div class="eyebrow">Appointment</div>
     <div class="cmpsect">
-      <input id="bkService" class="cmpinput" placeholder="Service">
-      <input id="bkVehicle" class="cmpinput" placeholder="${isAuto() ? "Vehicle — year, make, model, trim" : "Job details — what needs doing, where"}">
-      ${isAuto() ? `<input id="bkTire" class="cmpinput" placeholder="Tire size, if relevant">` : ""}
+      <input id="bkService" class="cmpinput" placeholder="Service" aria-label="Service">
+      <input id="bkVehicle" class="cmpinput" placeholder="${isAuto() ? "Vehicle — year, make, model, trim" : "Job details — what needs doing, where"}" aria-label="${isAuto() ? "Vehicle" : "Job details"}">
+      ${isAuto() ? `<input id="bkTire" class="cmpinput" placeholder="Tire size, if relevant" aria-label="Tire size, if relevant">` : ""}
     </div>`}
     <label class="fld">STAFF OR RESOURCE</label><select id="bkResource" class="cmpinput"><option value="">Unassigned · one appointment at a time</option></select>
     ${!editing ? `<label class="fld">SERVICE FROM YOUR MENU</label><select id="bkMenu" class="cmpinput"><option value="">Choose or enter the service above</option></select>` : ""}
@@ -5141,13 +5643,14 @@ function bookingSheet(dayISO, editing, prefill) {
     <div class="eyebrow" style="margin-top:13px">Source &amp; job notes</div>
     <div class="cmpsect">
       <select id="bkSource" class="cmpinput">${BOOK_SOURCES.map((x) => `<option>${x}</option>`).join("")}</select>
-      <textarea id="bkNotes" class="cmpinput" rows="3" placeholder="Order status and job notes — pricing goes in the lines above"></textarea>
+      <textarea id="bkNotes" class="cmpinput" rows="3" placeholder="Order status and job notes — pricing goes in the lines above" aria-label="Job notes"></textarea>
     </div>`}
     <button class="btn primary wide" style="margin-top:13px" id="bkGo">${editing ? "Save changes" : "Create Appointment"}</button>
     <p class="note" style="margin-top:9px">The calendar is checked live for conflicts before anything is created.</p>
     <div class="note" id="bkNote" style="margin-top:6px"></div>`, (sh) => {
     const note = sh.querySelector("#bkNote");
-    api("/google-calendar/resources",{}).then(r=>{const picker=sh.querySelector("#bkResource");if(picker)picker.innerHTML='<option value="">Unassigned · one appointment at a time</option>'+(r.resources||[]).filter(x=>x.active).map(x=>`<option value="${esc(x.id)}"${editing?.resource_id===x.id?' selected':''}>${esc(x.name)}</option>`).join('')}).catch(e=>{note.textContent=e.message});
+    api("/google-calendar/resources",{}).then(r=>{const picker=sh.querySelector("#bkResource");if(!picker)return;picker.innerHTML='<option value="">Unassigned · one appointment at a time</option>'+(r.resources||[]).filter(x=>x.active).map(x=>`<option value="${esc(x.id)}"${editing?.resource_id===x.id?' selected':''}>${esc(x.name)}</option>`).join('');
+      picker.dataset.loaded="1"; if(sh._bkResource&&[...picker.options].some(o=>o.value===sh._bkResource))picker.value=sh._bkResource;}).catch(e=>{note.textContent=e.message});
 
     const val = (id) => (sh.querySelector("#" + id)?.value || "").trim();
     // Pricing lines (four-point minimum, Kyle 2026-09-13): every booking is
@@ -5172,11 +5675,11 @@ function bookingSheet(dayISO, editing, prefill) {
       if (!linesBox) return;
       const row = document.createElement("div"); row.className = "bkline";
       row.style.cssText = "display:grid;grid-template-columns:1fr 58px 90px 30px;gap:6px;margin-bottom:6px";
-      row.innerHTML = `<input class="cmpinput" list="bkItems" placeholder="Item from your price list" data-f="name" value="${esc((pre && pre.name) || "")}">
-        <input class="cmpinput" type="number" step="1" min="0.01" data-f="qty" value="${esc(String((pre && pre.qty) || 1))}" title="Quantity">
-        <input class="cmpinput" type="number" step="0.01" min="0" placeholder="$ each" data-f="price" value="${pre && pre.unit_price != null ? esc(String(pre.unit_price)) : ""}">
-        <button type="button" class="btn ghost" data-rm title="Remove line">×</button>`;
-      row.querySelector("[data-rm]").onclick = () => { row.remove(); showTotals(); };
+      row.innerHTML = `<input class="cmpinput" list="bkItems" placeholder="Item from your price list" aria-label="Item from your price list" data-f="name" value="${esc((pre && pre.name) || "")}">
+        <input class="cmpinput" type="number" step="1" min="0.01" data-f="qty" value="${esc(String((pre && pre.qty) || 1))}" title="Quantity" aria-label="Quantity">
+        <input class="cmpinput" type="number" step="0.01" min="0" placeholder="$ each" aria-label="Price each" data-f="price" value="${pre && pre.unit_price != null ? esc(String(pre.unit_price)) : ""}">
+        <button type="button" class="btn ghost" data-rm title="Remove line" aria-label="Remove line">×</button>`;
+      row.querySelector("[data-rm]").onclick = () => { row.remove(); showTotals(); persist(); };
       row.querySelector('[data-f="name"]').addEventListener("change", (e) => {
         const hit = priceItems.get(e.target.value.trim().toLowerCase());
         const priceEl = row.querySelector('[data-f="price"]');
@@ -5214,28 +5717,99 @@ function bookingSheet(dayISO, editing, prefill) {
     if (crewBox) api("/crew", { action: "list" }, "POST", { silentUpgrade: true }).then((r) => {
       if (!sh.contains(crewBox)) return;
       const crew = (r.employees || []).filter((x) => x.active !== false);
+      // A restored draft may already name crew; anyone no longer on the roster drops off.
+      for (const id of [...picked]) if (!crew.some((x) => x.id === id)) picked.delete(id);
       crewBox.innerHTML = crew.length
-        ? crew.map((x) => `<button type="button" class="chip" data-bkcrew="${esc(x.id)}">${esc(x.name)}</button>`).join("")
+        ? crew.map((x) => `<button type="button" class="chip${picked.has(x.id) ? " on" : ""}" data-bkcrew="${esc(x.id)}" aria-pressed="${picked.has(x.id) ? "true" : "false"}">${esc(x.name)}</button>`).join("")
         : `<span class="note">No crew on the roster yet — add crew members from the Crew card on the Calendar tab.</span>`;
       crewBox.querySelectorAll("[data-bkcrew]").forEach((b) => b.onclick = () => {
         const id = b.dataset.bkcrew;
         if (picked.has(id)) { picked.delete(id); b.classList.remove("on"); } else { picked.add(id); b.classList.add("on"); }
+        b.setAttribute("aria-pressed", picked.has(id) ? "true" : "false");
+        persist();
       });
     }).catch(() => { if (crewBox) crewBox.innerHTML = ""; });
+    // Audit 04-05: each 409 the server sends (`outside_hours`, `slot_conflict`)
+    // names an explicit override; both are offered here, when creating AND when
+    // editing, instead of a dead-end "resend with force" sentence. A second
+    // refusal after forcing is shown as is — force is the last word.
+    const overrideLabel = (e) => e.data?.error === "outside_hours" ? "Book outside hours anyway" : e.data?.error === "slot_conflict" ? "Double-book this time anyway" : null;
+    const offerOverride = (e, resend) => {
+      const label = overrideLabel(e); if (!label) return false;
+      const suggested = e.data?.suggested_start ? `<br>Next opening after that: ${esc(dayLabel(e.data.suggested_start))} · ${esc(timeLabel(e.data.suggested_start))}` : "";
+      note.className = "note err";
+      note.innerHTML = `${esc(e.message)}${suggested}<br><button class="btn ghost wide" style="margin-top:9px" id="bkForce">&#10003;&nbsp; ${label}</button>`;
+      note.querySelector("#bkForce").onclick = async (ev2) => {
+        ev2.currentTarget.disabled = true;
+        try { await resend(); } catch (err) { ev2.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
+      };
+      return true;
+    };
+    // Draft retention (audit 11.2b). A new appointment being typed is kept in
+    // account-scoped storage as it changes and restored the next time this
+    // sheet opens; the entry is cleared once the booking exists or the owner
+    // chooses Discard. Editing an existing appointment has the calendar as its
+    // source of truth and is never stored.
+    const BK_KEY = "ledger.draft.booking";
+    const BK_FIELDS = ["bkFirst", "bkLast", "bkPhone", "bkEmail", "bkService", "bkVehicle", "bkTire", "bkStart", "bkDur", "bkSource", "bkNotes", "bkResource"];
+    const snapshot = () => ({ v: 1, savedAt: Date.now(), fields: Object.fromEntries(BK_FIELDS.map((id) => [id, val(id)])), lines: readLines(), crew: [...picked] });
+    const typed = (s) => ({ fields: Object.fromEntries(Object.entries(s.fields).filter(([id]) => !["bkStart", "bkDur", "bkSource", "bkResource"].includes(id))), lines: s.lines, crew: s.crew });
+    const baseline = JSON.stringify(typed(snapshot()));
+    const dirty = () => !editing && JSON.stringify(typed(snapshot())) !== baseline;
+    const persist = () => {
+      if (editing) return;
+      try { if (dirty()) accountStorage.setItem(BK_KEY, JSON.stringify(snapshot())); else accountStorage.removeItem(BK_KEY); } catch {}
+    };
+    const wrapEl = sh.closest("#sheetwrap");
+    if (wrapEl && !editing) {
+      wrapEl._isDirty = dirty;
+      wrapEl._discard = () => { try { accountStorage.removeItem(BK_KEY); } catch {} };
+      sh.addEventListener("input", persist);
+      sh.addEventListener("change", persist);
+      let saved = null;
+      try { saved = JSON.parse(accountStorage.getItem(BK_KEY) || "null"); } catch {}
+      if (saved && saved.v === 1 && saved.fields) {
+        for (const [id, v] of Object.entries(saved.fields)) {
+          const el = sh.querySelector("#" + id);
+          if (!el || typeof v !== "string" || v === "" || id === "bkResource") continue;
+          if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === v)) continue;
+          if (id === "bkStart" && !(new Date(v).getTime() > Date.now())) continue;   // a start that has passed keeps the fresh default
+          el.value = v;
+        }
+        if (Array.isArray(saved.lines) && saved.lines.length && linesBox) { linesBox.innerHTML = ""; saved.lines.forEach(addLine); showTotals(); }
+        (Array.isArray(saved.crew) ? saved.crew : []).forEach((id) => { if (typeof id === "string") picked.add(id); });
+        if (saved.fields.bkResource) sh._bkResource = saved.fields.bkResource;
+        toast("Restored your unsaved appointment draft.");
+      }
+    }
     sh.querySelector("#bkGo").onclick = async (ev) => {
+      // currentTarget is gone once the handler awaits; hold the button itself.
+      const goBtn = ev.currentTarget;
       const startVal = val("bkStart");
       if (!startVal) { note.className = "note err"; note.textContent = "Pick a start time."; return; }
       const start = new Date(startVal);
       const end = new Date(start.getTime() + Number(val("bkDur") || 60) * 60000);
       try {
         if (editing) {
-          ev.currentTarget.disabled = true;
-          await api("/google-calendar/event-update", {
+          goBtn.disabled = true;
+          // Audit 04-01 / 04-02: only what changed is sent. Time travels only when
+          // the start or duration moved; the resource only when the roster loaded
+          // and the pick differs from the appointment's current one.
+          const picker = sh.querySelector("#bkResource");
+          const resourceNow = picker?.dataset.loaded === "1" ? (picker.value || null) : undefined;
+          const timeChanged = startVal !== localVal(startAt) || Number(val("bkDur")) !== mins;
+          const patch = {
             event_id: editing.id, title: val("bkTitle"),
-            ...(startVal !== localVal(startAt) || Number(val("bkDur")) !== mins ? {start:start.toISOString(),end:end.toISOString()} : {}),
+            ...(timeChanged ? {start:start.toISOString(),end:end.toISOString()} : {}),
+            ...(resourceNow !== undefined && resourceNow !== (editing.resource_id || null) ? { resource_id: resourceNow } : {}),
             location: val("bkLoc"), description: val("bkNotes"),
-          });
-          S.cal = null; closeSheet(); toast("Appointment updated"); renderCalendar();
+          };
+          const saveEdit = async (force) => {
+            await api("/google-calendar/event-update", force ? { ...patch, force: true } : patch);
+            S.cal = null; closeSheet(); toast("Appointment updated"); renderCalendar();
+          };
+          try { await saveEdit(false); }
+          catch (e) { goBtn.disabled = false; if (!offerOverride(e, () => saveEdit(true))) throw e; }
           return;
         }
         const required = ["bkFirst", "bkLast", "bkPhone", "bkEmail", "bkVehicle", "bkService"];
@@ -5244,8 +5818,11 @@ function bookingSheet(dayISO, editing, prefill) {
         if (!lines.length || lines.some((l) => !l.name || l.unit_price === null || !(l.qty > 0))) {
           note.className = "note err"; note.textContent = "Every booking is invoice-ready: add at least one priced line, each with an item, a quantity and a price."; return;
         }
-        if (!confirm(`Create this booking?\n\n${val("bkService")} for ${val("bkFirst")} ${val("bkLast")}\n${start.toLocaleString()}`)) return;
-        ev.currentTarget.disabled = true;
+        // In-page question (audit 11.3): a native confirm() answers "no"
+        // silently inside a WKWebView with no UI delegate, and this is the only
+        // path that creates a booking.
+        if (!(await askConfirm(`${val("bkService")} for ${val("bkFirst")} ${val("bkLast")}\n${start.toLocaleString()}`, { title: "Create this booking?", ok: "Create booking" }))) return;
+        goBtn.disabled = true;
         const title = `${val("bkFirst")} ${val("bkLast")} — ${val("bkService")}`;
         // The server composes the CUSTOMER / VEHICLE (or JOB DETAILS) / SERVICE /
         // PRICING blocks from these fields and refuses anything incomplete.
@@ -5265,23 +5842,20 @@ function bookingSheet(dayISO, editing, prefill) {
                 job_title: payload.title, job_start: payload.start, job_location: "", job_details: details });
             } catch (err) { toast(`Couldn't put crew on the job: ${err.message}`, "err"); }
           }
-          S.cal = null; closeSheet(); toast("Appointment booked"); renderCalendar();
+          if (wrapEl) { wrapEl._isDirty = null; wrapEl._discard?.(); }
+          S.cal = null; closeSheet(); renderCalendar();
+          // Audit 04-09: an identical request replays the existing appointment
+          // rather than creating a second one — say so instead of "booked".
+          if (created?.replayed || created?.event?.replayed) toast("This exact appointment already exists — nothing new was created. Change the time or details to book another.", "err");
+          else toast("Appointment booked");
         };
         try {
           await finish(await api("/google-calendar/bookings", payload));
         } catch (e) {
-          if (e.data?.error !== "outside_hours") throw e;
-          // Outside business hours: say so and offer the iPhone's override.
-          ev.currentTarget.disabled = false;
-          note.className = "note err";
-          note.innerHTML = `${esc(e.message)}<br><button class="btn ghost wide" style="margin-top:9px" id="bkForce">&#10003;&nbsp; Book outside hours anyway</button>`;
-          note.querySelector("#bkForce").onclick = async (ev2) => {
-            ev2.currentTarget.disabled = true;
-            try { await finish(await api("/google-calendar/bookings", { ...payload, force: true })); }
-            catch (err) { ev2.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
-          };
+          goBtn.disabled = false;
+          if (!offerOverride(e, async () => finish(await api("/google-calendar/bookings", { ...payload, force: true })))) throw e;
         }
-      } catch (e) { ev.currentTarget.disabled = false; note.className = "note err"; note.textContent = e.message; }
+      } catch (e) { goBtn.disabled = false; note.className = "note err"; note.textContent = e.message; }
     };
   });
 }
@@ -5641,7 +6215,7 @@ async function renderPhone(cachedBoard = null) {
     S.phone = d;
     tabBadge("phone", (d.needsYou || []).length);
     view().innerHTML = `<div class="sect phone-command-center phone-os">
-      ${d.hasNumber ? phoneOSHeader(d) + '<div class="phone-os-content">' + phoneLaneBody(d) + '</div>' + phoneOSDock(d) : pageHead("Phone") + `<button class="btn wide" id="phone-guided-demo">Try the phone walkthrough</button><p class="note">Sample conversation only — no live calls, texts or bookings.</p>` + requestNumberCard(d.pendingRequest, d.numberLocked)}
+      ${d.hasNumber ? phoneOSHeader(d) + '<div class="phone-os-content">' + phoneLaneBody(d) + '</div>' + phoneOSDock(d) : pageHead("Phone") + `<button class="btn wide" id="phone-guided-demo">Try the phone walkthrough</button><p class="note">Sample conversation only — no live calls, texts or bookings.</p>` + requestNumberCard(d.pendingRequest, d.numberLocked, d)}
     </div>`;
     if($("phone-guided-demo")) $("phone-guided-demo").onclick=phoneGuidedDemo;
     if (!d.hasNumber) wireRequestNumber(d.pendingRequest, d.numberLocked);
@@ -5932,17 +6506,29 @@ async function phoneThreadSheet(t) {
     button.onclick=async()=>{button.disabled=true;const height=chat.scrollHeight,top=chat.scrollTop;try{const d=await api("/phone",{action:"thread",conversation_id:t.id,before_at:oldestMessage.occurredAt,before_id:oldestMessage.id});historyMore=!!d.hasMore;oldestMessage=d.messages?.[0]||oldestMessage;button.remove();chat.insertAdjacentHTML("afterbegin",(d.messages||[]).map(phoneBubble).join(""));wireOlder();chat.scrollTop=top+chat.scrollHeight-height;}catch(e){showErr(e.message);button.disabled=false;}};
   }
 
+  // One key per draft: kept across a failed tap, replaced after a successful
+  // one, so a retry after a timeout replays the first send instead of
+  // texting the customer twice (server dedupes on it).
+  let sendKey = null, sendKeyBody = "";
   wrap.querySelector("#phsend").onclick = async (e) => {
     const field = wrap.querySelector("#phdraft");
     const body = field.value.trim();
     if (!body) return;
     e.currentTarget.disabled = true;
+    // Edited wording is a new text and gets a new key.
+    if (!sendKey || sendKeyBody !== body) { sendKey = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2); sendKeyBody = body; }
     try {
-      await api("/phone", { action: "reply", conversation_id: t.id, to_number: t.peerNumber, body });
+      await api("/phone", { action: "reply", conversation_id: t.id, to_number: t.peerNumber, body, idempotency_key: sendKey });
+      sendKey = null; sendKeyBody = "";
       field.value = "";
       await load(false);
       renderPhone();
-    } catch (ex) { showErr(ex.message); smsSendFailed(ex); }
+    } catch (ex) {
+      showErr(ex.message); smsSendFailed(ex);
+      // The first attempt may already be on the thread — show it before the
+      // owner decides whether to tap again.
+      if (ex?.status === 409 && ex?.data?.error === "send_in_progress") await load(false);
+    }
     e.currentTarget.disabled = false;
   };
 
@@ -5983,7 +6569,7 @@ function phoneEventSheet(ev) {
     <p class="sh-sub">${esc(dayLabel(ev.occurredAt))} · ${esc(timeLabel(ev.occurredAt))} · ${esc(ev.direction)} · ${esc(ev.status)}</p>
     ${ev.voicemailUrl ? `<button class="btn em" id="evplay" style="margin-top:10px">&#9654; Play voicemail</button><div id="evplayer"></div>` : ""}
     ${ev.transcript ? `<p class="note" style="margin-top:9px">${esc(ev.transcript)}</p>` : ""}
-    <p class="note" style="margin-top:9px">${ev.autoReplySent ? "Auto-reply sent: “" + esc(ev.autoReplyText || "") + "”" : "No auto-reply was sent for this call."}</p>
+    <p class="note" style="margin-top:9px">${ev.autoReplySent ? "Auto-reply sent: “" + esc(ev.autoReplyText || "") + "”" : ev.autoReplyError ? "Auto-reply " + esc(ev.autoReplyError) + "." : "No auto-reply was sent for this call."}</p>
     <div class="rowbtns" style="margin-top:14px">
       <button class="btn primary" id="evbook">Book appointment</button>
       <a class="btn ghost" href="tel:${esc(ev.callerNumber)}">Call back</a>
@@ -7334,6 +7920,7 @@ function apptReminderCard(d) {
       : "Text tomorrow's customers automatically and ask them to confirm. The ones who can't make it tell you the night before, while you can still fill the slot."}</p>
     <p class="note" style="margin-top:8px">Each customer is texted <b>once per appointment</b>, ever. Anyone whose appointment has no phone number on it is reported to you, never skipped quietly.</p>
     ${on && r.lastRunAt ? `<p class="note" style="margin-top:6px">Last run ${esc(new Date(r.lastRunAt).toLocaleString())}.</p>` : ""}
+    ${on && r.lastError ? `<p class="note err" style="margin-top:6px">The last scheduled run sent nothing: ${esc(r.lastError)}</p>` : ""}
     <div class="rowbtns" style="margin-top:12px">
       <button class="btn" id="rempreview">See tonight's list</button>
       <button class="btn ${on ? "" : "em"}" id="remtoggle">${on ? "Turn off" : "Turn on reminders"}</button>
@@ -7425,9 +8012,9 @@ async function apptReminderPreviewSheet() {
     catch (err) { sh.querySelector("#rembody").innerHTML = `<p class="note">${esc(err.message)}</p>`; return; }
     if (d.error) { sh.querySelector("#rembody").innerHTML = `<p class="note">${esc(d.error)}</p>`; return; }
     const items = d.items || [];
-    const label = { will_send: '<span class="pill live">WILL SEND</span>', already_sent: '<span class="pill">ALREADY SENT</span>', no_number: '<span class="pill" style="color:var(--red)">NO PHONE NUMBER</span>' };
+    const label = { will_send: '<span class="pill live">WILL SEND</span>', already_sent: '<span class="pill">ALREADY SENT</span>', no_number: '<span class="pill" style="color:var(--red)">NO PHONE NUMBER</span>', opted_out: '<span class="pill" style="color:var(--red)">TEXTED STOP</span>' };
     sh.querySelector("#rembody").innerHTML = `
-      <p class="sub">${d.appointments} appointment${d.appointments === 1 ? "" : "s"} on ${esc(d.day)} — <b>${d.would_send}</b> would get a text.${d.no_number ? ` <b>${d.no_number}</b> have no phone number on the appointment and would need you to text them yourself.` : ""}</p>
+      <p class="sub">${d.appointments} appointment${d.appointments === 1 ? "" : "s"} on ${esc(d.day)} — <b>${d.would_send}</b> would get a text.${d.no_number ? ` <b>${d.no_number}</b> have no phone number on the appointment and would need you to text them yourself.` : ""}${d.opted_out ? ` <b>${d.opted_out}</b> texted STOP and will not be texted — call them instead.` : ""}</p>
       <p class="note">Nothing has been sent. This is exactly what would go out.</p>
       ${items.length ? items.map((it) => `<div class="kv" style="display:block"><div>${label[it.state] || ""} <b>${esc(it.title)}</b></div>
         <div><small style="color:var(--dim)">${esc(it.when)}${it.to ? " · " + esc(it.to) : ""}</small></div>
@@ -7570,15 +8157,20 @@ function phoneSettingsSheet(d) {
   });
 }
 
-function requestNumberCard(pending, locked) {
+function requestNumberCard(pending, locked, lock = {}) {
   // Subscription-only since 2026-08-31. Show what the line DOES and the way to
   // get it, rather than a form whose only possible answer is "subscribe first".
   if (locked && !pending) {
+    // Already subscribed, still on the free trial (16-03): the number opens
+    // with the first payment. Say when — never "Subscribe" to someone who did.
+    const cardOnFile = lock.numberLockReason === "trial_card_on_file";
+    const unlockDay = cardOnFile && lock.numberUnlocksAt ? dayLabel(lock.numberUnlocksAt) : "";
     return `<div class="panel">
       <h3>&#128241; Your own business line</h3>
       <p class="sub">A local number of your own, included with your subscription: missed calls text the caller back automatically, every lead lands in your Leads list, and you can reply right from this tab.</p>
       <p class="note" style="margin-top:10px">Live calling and texting require a subscription, an available number and provider activation. Setup is usually the same business day, but carrier checks can take longer. Front Desk requires Pro. Try the sample walkthrough before subscribing.</p>
-      ${inAndroidApp() ? `<p class="note" style="margin-top:13px">${SUBSCRIPTION_REQUIRED}</p>`
+      ${cardOnFile ? `<p class="note ok" style="margin-top:13px">Your card is on file — nothing more to do. Your number unlocks with your first payment${unlockDay ? ` on ${esc(unlockDay)}` : " when your free trial ends"}, and the request form appears here then.</p>`
+        : inAndroidApp() ? `<p class="note" style="margin-top:13px">${SUBSCRIPTION_REQUIRED}</p>`
         : `<button class="btn em wide" style="margin-top:13px" id="rnsubscribe">Subscribe to get your number</button>`}
       <div class="note" id="rnnote" style="margin-top:8px"></div>
     </div>`;
@@ -7616,6 +8208,27 @@ function wireRequestNumber(pending, locked) {
       try { const c = await startCheckout(); location.href = c.url; }
       catch (err) { if (err.cancelled) return; const note = $("rnnote"); note.className = "note err"; note.textContent = err.message; }
     };
+    // Audit 16-03 (2026-09-17): the server hands out a number only once the
+    // subscription is ACTIVE. A trial that already added a card is still
+    // "trialing" until the trial converts, so "Subscribe to get your number"
+    // would only bounce them to the billing portal. Say what actually happens.
+    if (sub) api("/stripe-billing/status", {}).then((st) => {
+      const live = $("rnsubscribe"); if (!live || !st) return;
+      const status = String(st.subscription_status || "");
+      const paidUp = st.card_on_file === true || st.apple_subscribed === true;
+      if (status === "trialing" && paidUp) {
+        const when = st.trial_ends_at ? dateShort(st.trial_ends_at) : null;
+        const p = document.createElement("p"); p.className = "note"; p.id = "rnunlock"; p.style.marginTop = "13px"; p.style.color = "var(--cyan)";
+        p.textContent = `You're subscribed — nothing more to buy. Your subscription starts${when ? ` on ${when}` : " when your free trial ends"}, and your business number can be requested from then.`;
+        live.replaceWith(p);
+      } else if (status === "past_due" && st.portal_available) {
+        live.textContent = "Update your card to get your number";
+        live.onclick = async () => {
+          try { const c = await api("/stripe-billing/portal", {}); location.href = c.url; }
+          catch (err) { const note = $("rnnote"); note.className = "note err"; note.textContent = err.message; }
+        };
+      }
+    }).catch(() => {});
     return;
   }
   $("rnsubmit").onclick = async (e) => {
@@ -7844,6 +8457,8 @@ function gpRender() {
   const lastPosted = posted[0];
   const cadence = { daily: "daily", three_week: "Mon·Wed·Fri", weekly: "weekly" }[s.cadence] || "daily";
   const status = !b.connected ? ["Connect Google", "var(--orange)"]
+    : b.location_pending ? ["Choose your listing", "var(--orange)"]
+    : b.degraded ? ["Google is slow right now", "var(--orange)"]
     : !s.enabled ? ["Off — post by hand", "var(--dim)"]
     : s.mode === "auto" ? [`Autopilot · ${cadence} · ${gpHour(s.post_hour)}`, "var(--emerald)"]
     : [`Asks you · ${cadence} · ${gpHour(s.post_hour)}`, "var(--cyan)"];
@@ -7868,13 +8483,23 @@ function gpRender() {
       </div>
     </div>`;
   };
+  // Truthful states: a post Ledger sent but never heard back about is
+  // "unconfirmed" with a Check Google button — never a Post button; a post
+  // Google rejected after the fact is "Failed" with the reason.
   const histRow = (h) => `<div class="gphist ${esc(h.status)}">
       ${h.photo ? `<img src="${esc(h.photo.url)}" alt="">` : `<i></i>`}
-      <div><b>${{ posted: "Posted", failed: "Failed", expired: "Expired draft", deleted: "Removed from Google" }[h.status] || h.status}${h.google_state && h.status === "posted" ? ` · ${esc(h.google_state.toLowerCase())}` : ""}</b>
+      <div><b${h.status === "unknown" || h.status === "posting" || h.status === "failed" ? ` style="color:var(--orange)"` : ""}>${{ posted: "Posted", failed: "Failed", expired: "Expired draft", deleted: "Removed from Google", unknown: "Unconfirmed — checking Google", posting: "Posting…" }[h.status] || h.status}${h.google_state && h.status === "posted" ? ` · ${esc(h.google_state.toLowerCase())}` : ""}</b>
         <p>${esc((h.summary || "").slice(0, 140))}${(h.summary || "").length > 140 ? "…" : ""}</p>
+        ${(h.status === "unknown" || h.status === "failed") && h.error ? `<p class="note" style="color:var(--orange);margin:2px 0 0">${esc(h.error)}</p>` : ""}
         <small>${esc(gpRel(h.posted_at || h.created_at))}${h.cta_type ? ` · ${esc(GP_CTA_LABEL[h.cta_type] || h.cta_type)}` : ""}</small></div>
-      ${h.status === "posted" ? `<div class="acts">${h.search_url ? `<a class="pillbtn sm" href="${esc(h.search_url)}" target="_blank" rel="noopener">View</a>` : ""}<button class="pillbtn sm" data-gpdel="${esc(h.id)}">Remove</button></div>` : ""}
+      ${h.status === "posted" ? `<div class="acts">${h.search_url ? `<a class="pillbtn sm" href="${esc(h.search_url)}" target="_blank" rel="noopener">View</a>` : ""}<button class="pillbtn sm" data-gpdel="${esc(h.id)}">Remove</button></div>`
+        : h.status === "unknown" ? `<div class="acts"><button class="pillbtn sm" data-gpcheck="${esc(h.id)}">Check Google</button></div>` : ""}
     </div>`;
+  const unconfirmed = history.filter((h) => h.status === "unknown" || h.status === "posting");
+  // A grant that reaches more than one listing waits for the owner's choice (08-08).
+  const locationChooser = b.location_pending ? `<div class="gpsec" style="margin-top:10px"><b>Which listing should Ledger post to?</b>
+      <p class="note">This Google account manages ${(b.location_choices || []).length} listings. Pick one — Ledger only ever posts to the listing you choose.</p>
+      ${(b.location_choices || []).map((c) => `<button class="btn" style="display:block;width:100%;text-align:left;margin-top:6px" data-gploc="${esc(c.name)}"><b>${esc(c.title || c.name)}</b>${c.address ? `<br><small class="note">${esc(c.address)}</small>` : ""}</button>`).join("")}</div>` : "";
 
   const rhythm = b.rhythm || { days: [], posted_30: posted.length, streak_weeks: 0 };
   const days14 = (rhythm.days || []).slice(-14);
@@ -7902,11 +8527,14 @@ function gpRender() {
       ${drafts.length ? `<div class="t"><b>Waiting for your OK</b><span class="ckr">${drafts.length === 1 ? "1 DRAFT" : drafts.length + " DRAFTS"}</span></div>${drafts.map(draftCard).join("")}`
         : `<div class="ckr" style="color:var(--cyan)">NEXT UP</div>
            <p class="sub" style="margin-top:6px">${s.enabled ? "Ledger drafts the next post on schedule from a fresh photo. Want one sooner? Draft it now." : "Nothing waiting. Draft a post now, or turn on the schedule and Ledger keeps the listing fresh for you."}</p>`}
+      ${unconfirmed.length ? `<p class="note" style="color:var(--orange)">&#9888; ${unconfirmed.length === 1 ? "One post" : unconfirmed.length + " posts"} Ledger sent but hasn't confirmed with Google yet — see Recent. Nothing goes out twice.</p>` : ""}
+      ${locationChooser}
       <div class="rowbtns" style="margin-top:12px">
-        <button class="btn em" id="gpnew" ${!b.connected ? "disabled" : ""}>&#10024; Draft a post now</button>
+        <button class="btn em" id="gpnew" ${!b.connected || b.location_pending ? "disabled" : ""}>&#10024; Draft a post now</button>
         <button class="btn" id="gpsettings">Settings</button>
       </div>
       ${!b.connected ? `<p class="note">Connect Google Business Profile under Business profile &amp; settings first.</p>` : ""}
+      ${b.connected && b.degraded ? `<p class="note" style="color:var(--orange)">${esc(b.degraded)} No need to reconnect.</p>` : ""}
       ${s.last_skip_reason && s.enabled ? `<p class="note" style="color:var(--orange)">&#9888; ${esc(s.last_skip_reason)}</p>` : ""}
     </div>
 
@@ -7928,7 +8556,7 @@ function gpRender() {
     ${gpCoachHTML()}
 
     ${history.length ? `<div class="cglass gpsec gpcard crise" style="--i:5"><div class="t"><b>Recent</b><button class="pillbtn sm" id="gphist">${GP.showHistory ? "Hide" : "Show " + history.length}</button></div>
-      ${GP.showHistory ? history.map(histRow).join("") : ""}</div>` : ""}
+      ${GP.showHistory ? history.map(histRow).join("") : unconfirmed.map(histRow).join("")}</div>` : ""}
   </div>`;
 
   $("gpfiles").onchange = (e) => gpUpload([...e.target.files]);
@@ -7942,6 +8570,8 @@ function gpRender() {
   on("[data-gpsave]", "click", (e) => gpSaveEdit(e.currentTarget.dataset.gpsave, e.currentTarget), slot);
   on("[data-gpcancel]", "click", (e) => gpCancel(e.currentTarget.dataset.gpcancel), slot);
   on("[data-gpdel]", "click", (e) => gpDelete(e.currentTarget.dataset.gpdel), slot);
+  on("[data-gpcheck]", "click", (e) => gpReconcile(e.currentTarget.dataset.gpcheck, e.currentTarget), slot);
+  on("[data-gploc]", "click", (e) => gpChooseLocation(e.currentTarget.dataset.gploc, e.currentTarget), slot);
   on("[data-gpsum]", "focus", (e) => { GP.expanded.add(e.currentTarget.dataset.gpsum); e.currentTarget.rows = 8; }, slot);
   on("[data-gpsum]", "input", (e) => gpCountUpdate(e.currentTarget), slot);
   if ($("gpinfo")) $("gpinfo").onclick = () => { const t = $("gpinfotext"); t.hidden = !t.hidden; };
@@ -7955,6 +8585,7 @@ function gpRender() {
 function gpNextLine(b) {
   const s = b.settings || {};
   if (!b.connected) return ["Connect Google Business Profile under Business profile & settings and posting lights up.", "var(--orange)"];
+  if (b.location_pending) return ["Choose which listing Ledger should post to (below) and posting lights up.", "var(--orange)"];
   if (s.last_skip_reason && s.enabled) return [s.last_skip_reason, "var(--orange)"];
   if (GP.scheduleNeedsRefresh && s.enabled) return ["Schedule saved — checking the next post time…", "var(--cyan)"];
   if (s.enabled && b.next_post_at) {
@@ -8052,7 +8683,12 @@ async function gpUpload(files) {
       const r = await api("/google-business-profile/photo-add", { image, media_type: "image/jpeg", source: "upload" });
       if (r.duplicate) dup++; else if (r.photo && r.photo.status === "flagged") flagged++;
       done++;
-    } catch (e) { toast(e.message || "That photo didn't upload", "err"); }
+    } catch (e) {
+      // An iPhone HEIC dropped into a browser that can't decode it: say so,
+      // and where the same photo does work (08-10).
+      const heic = /\.hei[cf]$/i.test(file.name || "") || /image\/hei[cf]/i.test(file.type || "");
+      toast(heic && /readable image/i.test(e.message || "") ? "That's an iPhone HEIC photo, which this browser can't read — add it from the Ledger AI app on your phone, or export it as a JPEG first." : (e.message || "That photo didn't upload"), "err");
+    }
   }
   prog.style.display = "none";
   toast(done ? `${done} photo${done === 1 ? "" : "s"} added${dup ? ` (${dup} already there)` : ""}${flagged ? ` · ${flagged} need your OK` : ""}` : "Nothing added");
@@ -8185,7 +8821,34 @@ async function gpPublish(id, btn) {
     const r = await api("/google-business-profile/post-publish", { post_id: id });
     toast(r.post && r.post.google_state === "LIVE" ? "Posted — it's live on Google" : "Posted — Google is putting it up now");
     GP.showHistory = true; await gpLoad(true);
-  } catch (e) { btn.disabled = false; btn.textContent = "Post to Google"; toast(e.message, "err"); gpLoad(true); }
+  } catch (e) {
+    // Sent but unanswered (08-01): the post is on hold under Recent with a
+    // Check Google button — there is no Post button to tap again.
+    if (e.data && e.data.post_status === "unknown") { toast(e.message, "err"); GP.showHistory = true; gpLoad(true); return; }
+    btn.disabled = false; btn.textContent = "Post to Google"; toast(e.message, "err"); gpLoad(true);
+  }
+}
+
+// "Check Google" on an unconfirmed post: Ledger asks Google's own list whether
+// the post landed. Posted → it moves to history with its Google name; not
+// there after a settling period → it comes back as a draft. Never re-posts.
+async function gpReconcile(id, btn) {
+  btn.disabled = true; btn.textContent = "Checking…";
+  try {
+    const r = await api("/google-business-profile/post-reconcile", { post_id: id });
+    toast(r.outcome === "posted" ? "Found it — the post is on Google" : r.outcome === "draft" ? "Google never got it — it's back as a draft" : "Still checking — Google hasn't shown it yet. Try again in a few minutes.");
+    await gpLoad(true);
+  } catch (e) { btn.disabled = false; btn.textContent = "Check Google"; toast(e.message, "err"); }
+}
+
+// One-time listing choice for a Google account that manages several (08-08).
+async function gpChooseLocation(name, btn) {
+  btn.disabled = true;
+  try {
+    const r = await api("/google-business-profile/posts-location", { location_name: name });
+    toast(`Ledger will post to ${r.bound && r.bound.business_name ? r.bound.business_name : "that listing"}`);
+    await gpLoad(true);
+  } catch (e) { btn.disabled = false; toast(e.message, "err"); }
 }
 
 async function gpCancel(id) {
@@ -9339,14 +10002,27 @@ function todoSheet(t) {
 }
 
 /* ---------------- CHAT ---------------- */
+const CHAT_DRAFT_KEY = "ledger.draft.chat";
+// The chat pane is a layer like a sheet: it owns a history entry while open so
+// Back closes it (audit 11.1), and whatever is typed in the box stays there
+// across close/open (audit 11.2c) — callers that seed a prompt assign it
+// straight after openChat().
 function openChat() {
-  $("chatwrap").classList.add("open");
-  $("box").value = ""; // callers that seed a prompt assign it straight after this
-
-  setTimeout(() => $("box").focus(), 60);
+  const wrap = $("chatwrap"); if (!wrap) return;
+  if (!wrap.classList.contains("open")) { wrap._opener = rememberOpener(); layerPush("chat"); }
+  wrap.classList.add("open");
+  setTimeout(() => $("box")?.focus(), 60);
   restoreChatHistory();
 }
-function closeChat() { $("chatwrap").classList.remove("open"); $("box").value = ""; }
+function closeChat() {
+  const wrap = $("chatwrap"); if (!wrap) return;
+  const wasOpen = wrap.classList.contains("open");
+  wrap.classList.remove("open");
+  if (!wasOpen) return;
+  layerPop("chat");
+  restoreFocus(wrap._opener);
+  reloadIfUpdatePending();
+}
 function newConversation() {
   S.conversationId = null; accountStorage.removeItem("ledger.conv");
   S.historyChecked = true; // an explicit fresh start is not a reload to recover from
@@ -9376,7 +10052,7 @@ function sys(t) { bubble("sys", esc(t)); }
 
 function banner() {
   const b = $("banner"); if (b) b.style.display = S.advisor ? "block" : "none";
-  const p = $("advisor"); if (p) p.className = "pill" + (S.advisor ? " on" : "");
+  const p = $("advisor"); if (p) { p.className = "pill" + (S.advisor ? " on" : ""); p.setAttribute("aria-pressed", S.advisor ? "true" : "false"); }
 }
 function toggleAdvisor() {
   if (!S.advisor && accountStorage.getItem("ledger.advisorNotice") !== "1") {
@@ -9417,8 +10093,9 @@ async function powerUpSheet() {
   });
 }
 
-/* Texting credit — the $25/month included with the business number, metered at
-   the carrier's real per-text cost and topped up $25 at a time. Rides on the
+/* Texting credit — the plan's monthly amount included with the business number
+   ($10 Solo, $25 Pro — always read off the usage payload, never typed here),
+   metered at the carrier's real per-text cost and topped up $25 at a time. Rides on the
    same usage call as the AI meter (S.usage.sms); hidden on a bring-your-own
    line, where the other provider bills the texts. (Kyle 2026-09-05) */
 function smsMeterHtml(s) {
@@ -9428,7 +10105,7 @@ function smsMeterHtml(s) {
     ${texts ? `<div class="kv" style="margin-top:4px"><span>Texts</span><span>${esc(texts)}</span></div>` : ""}
     <div style="height:7px;background:rgba(255,255,255,.07);border-radius:99px;margin-top:9px;overflow:hidden">
       <div style="height:100%;width:${Math.min(pct, 100)}%;background:${pct >= 80 ? "var(--orange)" : "linear-gradient(90deg,var(--cyan),var(--purple))"}"></div></div>
-    ${s?.topup_usd > 0 ? `<p class="note" style="margin-top:6px">Includes ${money(s.topup_usd)} added this month. Resets on the 1st.</p>` : `<p class="note" style="margin-top:6px">${s ? money(s.credit_usd) : "$25"} included every month with your business number. Resets on the 1st.</p>`}`;
+    ${s?.topup_usd > 0 ? `<p class="note" style="margin-top:6px">Includes ${money(s.topup_usd)} added this month. Resets on the 1st.</p>` : `<p class="note" style="margin-top:6px">${s ? money(s.credit_usd) + " included" : "Your plan's texting credit is included"} every month with your business number. Resets on the 1st.</p>`}`;
 }
 async function textingSheet() {
   let s = S.usage?.sms || null;
@@ -9518,6 +10195,7 @@ async function send() {
     return;
   }
   box.value = ""; box.style.height = "auto";
+  try { accountStorage.removeItem(CHAT_DRAFT_KEY); } catch {}
   openChat();
   bubble("msg me", esc(text));
   const t = bubble("typing", "Ledger is thinking…");
@@ -9537,6 +10215,7 @@ async function send() {
     (d.email_drafts || []).forEach(emailDraftCard);
     (d.sms_drafts || []).forEach(smsDraftCard);
     (d.print_jobs || []).forEach(printJobCard);
+    (d.action_drafts || []).forEach(actionCard);
     S.qboStale = true; S.board = null; // books may have moved — refetch on next tab visit
   } catch (e) {
     t.remove();
@@ -9545,6 +10224,7 @@ async function send() {
       // question goes back in the box so a retry is one tap.
       bubble("msg ai err", "⚠️ " + esc(e.message || "Ledger's AI helper is unavailable right now — try again in a few minutes."));
       box.value = text; box.style.height = "auto"; box.style.height = Math.min(box.scrollHeight, 120) + "px";
+      try { accountStorage.setItem(CHAT_DRAFT_KEY, text); } catch {}
     } else {
       bubble("msg ai err", "⚠️ " + esc(e.message));
       if (e.status === 402) { if (/subscription|trial|renew/i.test(e.message)) billingCheck(); else powerUpSheet(); }
@@ -9568,7 +10248,17 @@ function postedMessage(e) {
   return doc && /already_posted/i.test(e.message || "") ? `Already posted as #${doc}.` : e.message;
 }
 
-const termsRow = (v) => `<label class="emailrow">Payment due
+// QuickBooks resolves exactly two terms by shape (due now / Net 30). Built-in
+// books drafts carry terms_days and get the composer's four choices, opening
+// on the customer's or workspace default the server resolved.
+const termsRow = (v, days) => days != null
+  ? `<label class="emailrow">Payment due
+    <select class="tm pillbtn" data-terms-days="1">
+      ${[[0, "COD (due today)"], [15, "Net 15"], [30, "Net 30"], [60, "Net 60"]].map(([n, l]) =>
+        `<option value="${n}"${Number(days) === n ? " selected" : ""}>${l}</option>`).join("")}
+      ${[0, 15, 30, 60].includes(Number(days)) ? "" : `<option value="${Number(days)}" selected>Net ${Number(days)}</option>`}
+    </select></label>`
+  : `<label class="emailrow">Payment due
     <select class="tm pillbtn">
       <option value="due_now"${v === "net30" ? "" : " selected"}>Due now</option>
       <option value="net30"${v === "net30" ? " selected" : ""}>Net 30</option>
@@ -9582,19 +10272,26 @@ function draftCard(d, label, confirmPath, cancelPath) {
     <table>${lines}<tr><td class="total">Subtotal</td><td class="total">${money(d.subtotal)}</td></tr>
     ${d.tax_total != null ? `<tr><td>${esc(d.tax_name || "Tax")}${d.tax_rate ? ` (${Math.round(d.tax_rate * 10000) / 100}%)` : ""}</td><td>${money(d.tax_total)}</td></tr>
     <tr><td class="total">Total</td><td class="total">${money(d.total)}</td></tr>` : `<tr><td colspan="2" class="note">Tax is added when you confirm.</td></tr>`}</table>
-    ${isInvoice ? termsRow(d.terms) : ""}
+    ${isInvoice ? termsRow(d.terms, d.terms_days) : ""}
+    ${isInvoice && d.issue_date ? `<div class="note">Issued ${esc(d.issue_date)}${d.due_date ? ` · Due ${esc(d.due_date)}` : ""} — the due date follows the terms you pick.</div>` : ""}
     ${d.customer_email ? `<label class="emailrow"><input type="checkbox" class="em" checked> Email to ${esc(d.customer_email)}${(d.customer_email_cc || []).length ? ` · cc ${esc(d.customer_email_cc.join(", "))}` : ""}${d.recipients_locked ? ` <span class="note">(your standing rule for this customer)</span>` : ""}</label>` : ""}
     <label class="emailrow"><input type="checkbox" class="pr" ${accountStorage.getItem("ledger.printAfterPosting") === "1" ? "checked" : ""}> Print after posting</label>
     <div class="row"><button class="btn cancel">Cancel</button><button class="btn confirm">Confirm</button></div>`);
   const cardBtns = () => [card.querySelector(".confirm"), card.querySelector(".cancel")].filter(Boolean);
   card.querySelector(".pr").onchange = (e) => accountStorage.setItem("ledger.printAfterPosting", e.target.checked ? "1" : "0");
+  // Rules the server hands back (a $0 total, a possible duplicate) are asked
+  // once and answered on the retry — the draft itself is untouched meanwhile.
+  const acknowledged = { force: false, allow_zero: false };
   card.querySelector(".confirm").onclick = async () => {
     cardBtns().forEach((b) => b.disabled = true);
     try {
       const sendEmail = card.querySelector(".em")?.checked ?? false;
       const wantPrint = card.querySelector(".pr")?.checked ?? false;
-      const terms = card.querySelector(".tm")?.value;
-      const raw = await api(confirmPath, { draft_id: d.draft_id, send_email: sendEmail, ...(terms ? { terms } : {}) });
+      const tm = card.querySelector(".tm");
+      const terms = tm && !tm.dataset.termsDays ? tm.value : undefined;
+      const termsDays = tm && tm.dataset.termsDays ? Number(tm.value) : undefined;
+      const raw = await api(confirmPath, { draft_id: d.draft_id, send_email: sendEmail, ...(terms ? { terms } : {}), ...(termsDays != null ? { terms_days: termsDays } : {}),
+        ...(acknowledged.force ? { force: true } : {}), ...(acknowledged.allow_zero ? { allow_zero: true } : {}) });
       const r = raw.posted || raw; // the server nests the result under `posted`
       const what = label.startsWith("ESTIMATE") ? "Estimate" : "Invoice";
       cardDone(card, `✅ ${what}${r.doc_number ? " " + r.doc_number : ""} posted` + (r.total != null ? ` — ${money(r.total)}` : "")
@@ -9606,7 +10303,14 @@ function draftCard(d, label, confirmPath, cancelPath) {
       if (wantPrint && (r.qbo_invoice_id || r.id)) {
         printPdfById(r.qbo_invoice_id || r.id, r.doc_number, label.startsWith("ESTIMATE") ? "estimate" : "invoice");
       }
-    } catch (e) { cardBtns().forEach((b) => b.disabled = false); toast(postedMessage(e), "err"); }
+    } catch (e) {
+      cardBtns().forEach((b) => b.disabled = false);
+      if (e.status === 409 && e.data?.zero_total) {
+        if (confirm("This invoice is for $0.00. Create it anyway?")) { acknowledged.allow_zero = true; return card.querySelector(".confirm").onclick(); }
+      } else if (e.status === 409 && e.data?.duplicate_of) {
+        if (confirm(e.message + "\n\nCreate anyway?")) { acknowledged.force = true; return card.querySelector(".confirm").onclick(); }
+      } else toast(postedMessage(e), "err");
+    }
   };
   card.querySelector(".cancel").onclick = async () => {
     cardBtns().forEach((b) => b.disabled = true);
@@ -9694,6 +10398,38 @@ function smsDraftCard(d) {
   };
 }
 
+// Confirm card for the tool calls the model may only STAGE (audit 07.02): crew
+// dispatch texts, Front Desk / auto-reply changes, invoice-recipient rules, an
+// invoice emailed to a new address, the email send permission. The server holds
+// the exact reviewed payload; the tap replays that row and nothing else.
+function actionCard(d) {
+  const rows = (d.details || []).map((r) => `<tr><td>${esc(r.label)}</td><td style="white-space:pre-wrap">${esc(r.value)}</td></tr>`).join("");
+  const card = bubble("card", `<h3>${esc(d.title || "CONFIRM")}</h3><div class="cust">${esc(d.summary || "")}</div>
+    ${rows ? `<table>${rows}</table>` : ""}
+    <div class="emailrow">Nothing happens until you tap ${esc(d.confirm_label || "Confirm")}.</div>
+    <div class="row"><button class="btn cancel">Cancel</button><button class="btn confirm">${esc(d.confirm_label || "Confirm")}</button></div>`);
+  const btns = () => [card.querySelector(".confirm"), card.querySelector(".cancel")].filter(Boolean);
+  card.querySelector(".confirm").onclick = async () => {
+    btns().forEach((b) => b.disabled = true);
+    try {
+      const r = await api("/ledger-ai", { action: "action-confirm", draft_id: d.draft_id });
+      const res = r.result || {};
+      const done = d.kind === "dispatch_crew" ? "✅ Dispatch text sent"
+        : d.kind === "send_invoice_email" ? "✅ Invoice emailed" + (res.to ? " to " + res.to : "")
+        : d.kind === "email_autosend" ? "✅ Ledger may now send emails on its own"
+        : d.kind === "set_customer_invoice_rule" ? "✅ Rule saved" + (res.summary ? " — " + res.summary : "")
+        : "✅ Applied";
+      cardDone(card, done);
+      if (d.kind === "set_front_desk" || d.kind === "update_phone_autoreply") S.phone = null; // Phone tab refetches its board
+    } catch (e) { btns().forEach((b) => b.disabled = false); if (!smsSendFailed(e)) toast(e.message, "err"); }
+  };
+  card.querySelector(".cancel").onclick = async () => {
+    btns().forEach((b) => b.disabled = true);
+    try { await api("/ledger-ai", { action: "action-cancel", draft_id: d.draft_id }); cardDone(card, "Cancelled — nothing was changed"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+  };
+}
+
 function printJobCard(j) {
   const card = bubble("card", `<h3>PRINT</h3><div class="cust">#${esc(j.doc_number)} · ${esc(j.customer || "")}</div>
     <table><tr><td>${esc(j.type || "invoice")}</td><td>${money(j.total)}</td></tr>
@@ -9752,10 +10488,12 @@ function connectionStatus(row) {
 function renderConnectionRows(slot, map) {
   slot.innerHTML = (S.connError ? '<p class="note err">Connection status is temporarily unavailable. Your saved connections have not been removed.</p><button class="btn ghost" data-conn-retry>Retry status</button>' : "") + CONNECTORS.map(c => {
     const row = map[c.key], status = connectionStatus(row);
-    const disconnect = row && c.key === "quickbooks" ? '<button class="btn ghost" data-qbo-disconnect="1">Disconnect</button>' : "";
+    // Every connected row can be cut (audit 10.2); QuickBooks keeps its own
+    // handler because it also flips the workspace back to built-in books.
+    const disconnect = !row ? "" : c.key === "quickbooks" ? '<button class="btn ghost" data-qbo-disconnect="1">Disconnect</button>' : `<button class="btn ghost" data-disconnect="${c.key}">Disconnect</button>`;
     return `<div class="kv"><span>${esc(c.name)}<br><small style="color:var(--dim)">${esc(row?.display_name || c.detail)}</small></span><span style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap"><button class="btn ghost" data-connect="${c.start}" ${S.connError ? "disabled" : ""}>${status === "Connected" ? '<span style="color:var(--emerald)">Connected</span> · Reconnect' : status === "Not connected" ? "Connect" : esc(status)}</button>${disconnect}</span></div>`;
   }).join("");
-  wireConnect(slot); wireDisconnectQuickBooks(slot);
+  wireConnect(slot); wireDisconnectQuickBooks(slot); wireDisconnectConnector(slot, (latest) => { if (slot.isConnected) renderConnectionRows(slot, latest); });
   const retry = slot.querySelector("[data-conn-retry]");
   if (retry) retry.onclick = async () => { retry.disabled = true; const latest = await connectionStates(); if (slot.isConnected) renderConnectionRows(slot, latest); };
 }
@@ -9982,18 +10720,24 @@ async function businessSheet() {
 
     <div class="eyebrow" style="margin-top:20px">“HEY LEDGER”</div>
     <div class="panel" style="margin-top:8px">
-      <div class="kv" style="align-items:center;border-bottom:0;padding-top:2px"><span style="color:var(--text)"><b>Say “Hey Ledger” to open Ledger Live</b></span>
+      ${S.voice?.available ? `<div class="kv" style="align-items:center;border-bottom:0;padding-top:2px"><span style="color:var(--text)"><b>Say “Hey Ledger” to open Ledger Live</b></span>
         <button class="pswx${WAKE.on ? " on" : ""}" id="wakeTog" role="switch" aria-checked="${WAKE.on}" aria-label="Hey Ledger"${wakeSupported() ? "" : " disabled"}><i></i></button></div>
       <p class="note" style="margin-top:4px">${wakeSupported()
         ? "Works while this tab is open and on screen — your browser does the listening, and the mic stays on while the switch is on. On a phone, the Ledger AI iPhone app has the same switch."
         : "This browser can't listen for a wake word. Use Chrome or Edge on a computer, or the Ledger AI iPhone app."}</p>
-      <p class="note" style="margin-top:6px;color:var(--cyan)">On iPhone, “Hey Siri, talk to Ledger” works anywhere — even with the app closed.</p>
+      <p class="note" style="margin-top:6px;color:var(--cyan)">On iPhone, “Hey Siri, talk to Ledger” works anywhere — even with the app closed.</p>`
+      // Voice is paused (audit 16-04): no switch, no mic, and the truth in one line.
+      : `<div class="kv" style="align-items:center;border-bottom:0;padding-top:2px"><span style="color:var(--text)"><b>Ledger Live is paused</b></span>
+        <button class="pswx" id="wakeTog" role="switch" aria-checked="false" aria-label="Hey Ledger" disabled><i></i></button></div>
+      <p class="note" style="margin-top:4px" id="wakepaused">${esc(S.voice?.message || "Ledger Live is temporarily paused. Typed chat is still available.")} The “Hey Ledger” wake word and the microphone stay off until voice is back.</p>`}
     </div>
     ${u?.sms ? `<div class="eyebrow" style="margin-top:20px">TEXTING CREDIT</div>
     <div class="panel" style="margin-top:8px">
       ${u.sms.metered ? `${smsMeterHtml(u.sms)}
       <button class="btn ghost wide" style="margin-top:11px" id="bsms">💬 Add $25 texting credit</button>`
-      : `<p class="note" style="margin-top:0">Your texts run on your own line, so that provider bills them. A Ledger business number includes $25 of texting every month.</p>`}
+      // The included amount is the plan's ($10 Solo, $25 Pro) — read off the
+      // workspace, never typed here (audit 16-07, 2026-09-17).
+      : `<p class="note" style="margin-top:0">Your texts run on your own line, so that provider bills them. A Ledger business number includes ${Number.isFinite(Number(u.sms.credit_usd)) ? money0(u.sms.credit_usd) : "your plan's texting credit"} of texting every month.</p>`}
     </div>` : ""}
 
     <div class="eyebrow" style="margin-top:20px" id="connhead">CONNECTED SERVICES</div>
@@ -10154,12 +10898,16 @@ async function businessSheet() {
       } catch { slot.textContent = "Booking unavailable right now."; }
     };
     renderBooking();
+    // One billing read for the whole sheet: the plan card and the team card
+    // both need to know how this workspace pays (audit 16-02, 2026-09-17).
+    const billingStatus = api("/stripe-billing/status", {}).catch(() => null);
     // Which tier this shop is on, in words, with the one button that moves it.
     // A customer should never have to guess what they are paying for.
     (async () => {
       const slot = sh.querySelector("#planslot"); if (!slot) return;
       try {
-        const st = await api("/stripe-billing/status", {});
+        const st = await billingStatus;
+        if (!st) throw new Error("Plan unavailable right now.");
         const key = st.plan || "pro";
         const spec = (st.plans || []).find((p) => p.key === key);
         const b = PLAN_BLURB[key] || { tag: "", line: "", extra: "" };
@@ -10208,16 +10956,18 @@ async function businessSheet() {
     sh.querySelector("#bout").onclick = () => supa.auth.signOut().then(() => location.reload());
     sh.querySelector("#bdel").onclick = async (e) => {
       // App Store 5.1.1(v): a real, in-app, no-undo path — not a support-ticket request.
-      if (!confirm("Delete your account? This permanently deletes your account and cannot be undone — receipts, conversations and connections go with it. If you're the workspace owner, this also deletes the workspace and every teammate's account.")) return;
-      const typed = prompt('Type DELETE to confirm.');
+      const btn = e.currentTarget;
+      if (btn.disabled) return;
+      const typed = await confirmAccountDeletion(DELETE_ACCOUNT_WARNING);
       if (typed !== "DELETE") { if (typed !== null) toast("Account not deleted — you didn't type DELETE.", "err"); return; }
-      e.currentTarget.disabled = true; e.currentTarget.textContent = "Deleting…";
+      btn.disabled = true; btn.textContent = "Deleting…";
       try {
-        await api("/workspace-profile", { action: "delete-account", confirm: "DELETE" });
+        const done = await api("/workspace-profile", { action: "delete-account", confirm: "DELETE" });
+        if (done?.notice) alert(done.notice);
         await supa.auth.signOut();
         location.reload();
       } catch (err) {
-        e.currentTarget.disabled = false; e.currentTarget.textContent = "Delete account";
+        btn.disabled = false; btn.textContent = "Delete account";
         toast(err.message, "err");
       }
     };
@@ -10241,10 +10991,24 @@ async function businessSheet() {
       const me = (t.members || []).find((m) => (m.email || "").toLowerCase() === S.email);
       if (me) S.profile.role = me.role;
       const slot = sh.querySelector("#teamslot");
+      // Seat billing is a Stripe subscription item (audit 16-02): an App Store
+      // subscription has no seat product, so an invite there would hand out a
+      // login nothing bills. Say so instead of promising "$299/mo per seat".
+      const bst = await billingStatus;
+      const appleBilled = bst?.billing_source === "apple";
+      const isOwner = (S.profile?.role || (S.team?.members || []).find((m) => (m.email || "").toLowerCase() === S.email)?.role) === "owner";
       slot.innerHTML = `${(t.members || []).map((m) => `<div class="kv"><span>${esc(m.email)}</span><span>${esc(m.role)} ${me?.role === "owner" && m.role !== "owner" ? `<button class="btn ghost" data-team-remove="${esc(m.userId)}">Remove</button>` : ""}</span></div>`).join("")}
         ${(t.invites || []).map((i) => `<div class="kv"><span>${esc(i.email)}</span><span style="color:var(--gold)">${i.locked ? "Locked" : i.expired ? "Expired" : "Waiting to join"} ${me?.role === "owner" ? `<button class="btn ghost" data-team-revoke="${esc(i.id)}">Revoke</button>` : ""}</span></div>`).join("")}
-        ${(S.profile?.role || (S.team?.members || []).find((m) => (m.email || "").toLowerCase() === S.email)?.role) === "owner" ? `<div style="margin-top:10px"><input id="invmail" type="email" placeholder="teammate@business.com">
-          ${inAndroidApp() ? "" : `<button class="btn ghost wide" style="margin-top:8px" id="invgo">Invite — $299/mo per seat</button>`}</div>` : ""}`;
+        ${(S.profile?.role || (S.team?.members || []).find((m) => (m.email || "").toLowerCase() === S.email)?.role) === "owner"
+          // Seat price and availability come from the server (16-02 / 02-06):
+          // an App Store-billed or complimentary workspace is told why it
+          // cannot add a seat instead of being handed a button that fails.
+          // Solo keeps the button — its 402 opens the "move up to Pro" door.
+          ? (t.seats && t.seats.available === false && t.seats.reason !== "plan_solo"
+            ? `<p class="note" style="margin-top:10px">${esc(t.seats.message || "Teammate seats aren't available on this plan.")}</p>`
+            : `<div style="margin-top:10px"><input id="invmail" type="email" placeholder="teammate@business.com">
+          ${inAndroidApp() ? "" : `<button class="btn ghost wide" style="margin-top:8px" id="invgo">Invite — $${Number(t.seats?.price_usd) || 299}/mo per seat</button>`}</div>`)
+          : ""}`;
       const manage = async (button, action, key, prompt) => {
         if (!confirm(prompt)) return;
         button.disabled = true;
@@ -10399,15 +11163,36 @@ function supportChatSheet() {
    Same verdict as the server's entitlement module: trial over with no card,
    or any status other than active / past_due / trialing = locked. Nothing
    in the app opens; the only doors are pay, export, delete, sign out. */
+// One wording for both delete buttons. Teammates keep their logins and simply
+// lose access; an App Store subscription is Apple's to cancel, not ours.
+const DELETE_ACCOUNT_WARNING = "Delete your account? This permanently deletes your account and cannot be undone — receipts, conversations and connections go with it. If you're the workspace owner, this also deletes the workspace and removes every teammate's access (their logins are kept). Want a copy first? Download your Books archive before deleting. A subscription bought on our website is cancelled with the account; one bought through the App Store must be cancelled in your iPhone's Settings → Subscriptions.";
 function accessLocked(row) {
   const status = String(row?.subscription_status ?? "trialing");
   if (status === "active" || status === "past_due") return false;
   if (status === "trialing") return Boolean(row?.trial_ends_at) && new Date(row.trial_ends_at).getTime() <= Date.now();
   return true;
 }
+// Account deletion asks twice, in the page (audit 11.3): the warning, then the
+// word DELETE. Resolves the typed text, or null when the owner backs out.
+async function confirmAccountDeletion(ownerNote) {
+  const ok = await askConfirm("This permanently deletes your account and cannot be undone — receipts, conversations and connections go with it. " + ownerNote, { title: "Delete your account?", ok: "Continue", danger: true });
+  if (!ok) return null;
+  return askPrompt("Type DELETE to confirm.", { title: "Delete your account?", ok: "Delete account", placeholder: "DELETE" });
+}
+
+// The lock screen keeps asking billing until the webhook unlocks the workspace.
+// It used to ask every 6 s forever, hidden tab included (audit 11.9): now it
+// pauses while the tab is hidden, checks again the moment it is shown (that is
+// the Back-from-Stripe moment), and slows down the longer nothing changes.
 let lockPoll = null;
+function lockPollStop() {
+  if (!lockPoll) return;
+  clearTimeout(lockPoll.timer);
+  document.removeEventListener("visibilitychange", lockPoll.onVisible);
+  lockPoll = null;
+}
 function lockView(seed) {
-  if (lockPoll) clearInterval(lockPoll);
+  lockPollStop();
   closeSheet?.();
   const s = seed || {};
   const status = String(s.subscription_status ?? "trialing");
@@ -10428,37 +11213,63 @@ function lockView(seed) {
     <p style="margin-top:12px;font-size:12.5px"><a href="privacy.html" style="color:var(--dim)">Privacy</a> &middot; <a href="terms.html" style="color:var(--dim)">Terms</a> &middot; <a href="support.html" style="color:var(--dim)">Support</a></p></div>`;
   const lkPay = $("lk-pay");
   if (lkPay) lkPay.onclick = async (e) => {
-    e.currentTarget.disabled = true;
+    const btn = e.currentTarget;
+    btn.disabled = true;
     try {
       // A shop that already has a Stripe customer resumes in the portal; a
       // trial that never added a card goes to checkout.
       const st = await api("/stripe-billing/status", {}).catch(() => ({}));
       const c = expiredTrial || !st.portal_available ? await startCheckout() : await api("/stripe-billing/portal", {});
       location.href = c.url;
-    } catch (err) { if (!err.cancelled) toast(err.message, "err"); e.currentTarget.disabled = false; }
+    } catch (err) { if (!err.cancelled) toast(err.message, "err"); btn.disabled = false; }
   };
   $("lk-export").onclick = async (e) => {
     e.preventDefault();
     try {
-      const ex = await api("/books", { action: "archive" });
+      // The pre-delete copy: records plus time-limited links to every receipt photo.
+      const ex = await api("/books", { action: "archive", include_receipt_links: true });
       downloadBooksExport(ex);
       toast("Export downloaded");
     } catch (err) { toast(err.message, "err"); }
   };
+  // One request at a time: a double tap must not send two deletions.
+  let lkDeleting = false;
   $("lk-delete").onclick = async (e) => {
     e.preventDefault();
-    if (!confirm("Delete your account? This permanently deletes your account and cannot be undone — receipts, conversations and connections go with it. If you're the workspace owner, this also deletes the workspace and every teammate's access.")) return;
-    const typed = prompt("Type DELETE to confirm.");
+    if (lkDeleting) return;
+    const typed = await confirmAccountDeletion(DELETE_ACCOUNT_WARNING);
     if (typed !== "DELETE") { if (typed !== null) toast("Account not deleted — you didn't type DELETE.", "err"); return; }
-    try { await api("/workspace-profile", { action: "delete-account", confirm: "DELETE" }); await supa.auth.signOut(); location.reload(); }
+    lkDeleting = true;
+    try {
+      const done = await api("/workspace-profile", { action: "delete-account", confirm: "DELETE" });
+      if (done?.notice) alert(done.notice);
+      await supa.auth.signOut(); location.reload();
+    }
     catch (err) { toast(err.message, "err"); }
+    finally { lkDeleting = false; }
   };
   $("lk-out").onclick = (e) => { e.preventDefault(); supa.auth.signOut().then(() => location.reload()); };
   // Payment lands by webhook a few seconds after Stripe sends them back here:
   // keep asking, and open the app the moment the workspace is unlocked.
-  lockPoll = setInterval(async () => {
-    try { const st = await api("/stripe-billing/status", {}); if (st.access && st.access !== "locked") { clearInterval(lockPoll); location.reload(); } } catch {}
-  }, 6000);
+  const poll = { attempts: 0, timer: null, inFlight: false, onVisible: null };
+  const delayFor = (n) => n < 10 ? 6000 : n < 20 ? 30000 : 120000;
+  const check = async () => {
+    poll.timer = null;
+    if (document.hidden || poll.inFlight) return;   // resumes on visibilitychange
+    poll.attempts++; poll.inFlight = true;
+    try { const st = await api("/stripe-billing/status", {}); if (st.access && st.access !== "locked") { lockPollStop(); location.reload(); return; } } catch {}
+    poll.inFlight = false;
+    if (lockPoll !== poll || poll.timer) return;
+    poll.timer = setTimeout(check, delayFor(poll.attempts));
+  };
+  poll.onVisible = () => {
+    if (document.hidden || lockPoll !== poll || poll.timer || poll.inFlight) return;
+    poll.attempts = 0;                    // just came back: ask right away, then at the fast cadence again
+    void check();
+  };
+  document.addEventListener("visibilitychange", poll.onVisible);
+  lockPoll = poll;
+  poll.timer = setTimeout(check, 6000);
 }
 
 // One sign-in everywhere (2026-09-05, #7): email + password on the web, the
@@ -10559,6 +11370,9 @@ const authErr = (error) => {
   if (/email not confirmed/i.test(m)) return "Confirm your email first — the link is in your inbox (check Spam).";
   if (/already registered|already been registered/i.test(m)) return "That email already has an account — sign in instead.";
   if (/rate limit|too many/i.test(m)) return "Too many tries — give it a minute and try again.";
+  // GoTrue refuses password/email changes on an AAL1 session once a verified
+  // factor exists (audit 01.1). Say what to do instead of echoing "AAL2".
+  if (error?.code === "insufficient_aal" || /aal2/i.test(m)) return "Enter your authenticator code first, then save the new password — tap Save again to get the prompt.";
   return m || "Something went wrong — try again.";
 };
 const emailOf = () => ($("email")?.value || "").trim().toLowerCase();
@@ -10797,7 +11611,13 @@ async function boot() {
     root.innerHTML='<div class="panel"><h2>Security check unavailable</h2><p>Your business stays locked until we can verify your sign-in.</p><button class="btn primary" id="mfa-retry">Retry</button><button class="btn ghost" id="mfa-signout">Sign out</button></div>';
     $("mfa-retry").onclick=()=>void boot();$("mfa-signout").onclick=()=>supa.auth.signOut().then(()=>location.reload());return;
   }
-  if (qs.get("signup")) history.replaceState({}, "", location.pathname);
+  // The website's pricing cards say which plan was clicked (?plan=solo|pro,
+  // 2026-09-17). Remembered for this tab so checkout can honour it — and can
+  // say so plainly if that plan cannot be sold right now (launch audit 16-06).
+  const planParam = String(qs.get("plan") || "").toLowerCase();
+  if (planParam === "solo" || planParam === "pro") { try { sessionStorage.setItem("ledger.planHint", planParam); } catch {} }
+  try { S.planHint = sessionStorage.getItem("ledger.planHint") || null; } catch {}
+  if (qs.get("signup") || qs.get("plan")) history.replaceState({}, "", location.pathname);
   if (qs.get("reset")) { newPasswordView(); return; }
   S.email = (session.user?.email || "").toLowerCase();
   try {
@@ -10812,7 +11632,7 @@ async function boot() {
     S.conversationId = accountStorage.getItem("ledger.conv");
     // Know what is connected before the first screen paints, so a built-in
     // books shop never fires QuickBooks/Google requests it can't answer.
-    await Promise.all([loadProfile(b), connectionStates()]);
+    await Promise.all([loadProfile(b), connectionStates(), loadVoiceState()]);
     accountBoundary.assertCurrent(expected);
     // An interview that was open when the app closed comes straight back.
     const ob = onboardPending();
@@ -10820,13 +11640,25 @@ async function boot() {
     appView();
   } catch {
     if (accountBoundary.stopped) return;
-    root.innerHTML = '<div class="panel"><h2>Unable to load your business</h2><p>Check your connection and try again.</p><button class="btn primary" id="business-retry">Retry</button></div>';
-    $("business-retry").onclick = () => void boot();
+    bootErrorView();
     return;
   }
   // app.html#vin opens the scanner straight away (Home Screen shortcut / QR on the shop wall).
   if (location.hash === "#vin") { history.replaceState(null, "", location.pathname); vinScannerSheet(); }
 }
+// The boot catch-all used to offer Retry and nothing else (audit 11.9): a
+// sign-in that can no longer load ("Signed out", a revoked session) had no way
+// out, and an offline message never changed when the connection came back.
+function bootErrorView() {
+  const offline = navigator.onLine === false;
+  root.innerHTML = `<div class="panel"><h2>Unable to load your business</h2>
+    <p>${offline ? "You're offline. Ledger will try again as soon as your connection is back." : "Check your connection and try again."}</p>
+    <button class="btn primary" id="business-retry">Retry</button> <button class="btn ghost" id="business-signout">Sign out</button></div>`;
+  $("business-retry").onclick = () => void boot();
+  $("business-signout").onclick = () => supa.auth.signOut().then(() => location.reload());
+}
+window.addEventListener("online", () => { if ($("business-retry")) void boot(); });
+window.addEventListener("offline", () => { if ($("business-retry")) bootErrorView(); });
 /* ---------------- Client Hub sharing (web parity 2026-09-02) ----------------
    The iPhone hands a customer their portal link from the customer screen; the
    web twin does the same. One link per QBO customer, get-or-create, with
@@ -11262,8 +12094,12 @@ function pushSettingsCard(slot) {
 const WAKE = { on: accountStorage.getItem("ledger.wakeWord") === "1", rec: null, ready: false, denied: false, last: 0 };
 const WAKE_PHRASES = ["hey ledger", "hey ledgers", "hey ledge", "hey leger", "hey lodger", "hey lecher", "hey letcher"];
 function wakeSupported() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+// The wake word exists only to open Ledger Live. While Live is paused (audit
+// 16-04) the recognizer is never constructed and the mic is never requested —
+// a remembered "on" switch from before the pause stays parked, not armed.
+function wakeAllowed() { return S.voice?.available === true; }
 function wakeSync() {
-  const want = WAKE.on && WAKE.ready && !WAKE.denied && wakeSupported() && document.visibilityState === "visible" && !LIVE;
+  const want = wakeAllowed() && WAKE.on && WAKE.ready && !WAKE.denied && wakeSupported() && document.visibilityState === "visible" && !LIVE;
   if (want && !WAKE.rec) wakeStart();
   if (!want && WAKE.rec) wakeStop();
 }
@@ -11295,6 +12131,7 @@ function wakeStart() {
 }
 function wakeStop() { const r = WAKE.rec; WAKE.rec = null; try { r?.stop(); } catch {} }
 function wakeToggle(btn) {
+  if (!wakeAllowed()) { toast(S.voice?.message || "Ledger Live is temporarily paused. Typed chat is still available."); return; }
   WAKE.on = !WAKE.on; WAKE.denied = false;
   accountStorage.setItem("ledger.wakeWord", WAKE.on ? "1" : "0");
   if (btn) { btn.classList.toggle("on", WAKE.on); btn.setAttribute("aria-checked", String(WAKE.on)); }
@@ -11329,6 +12166,8 @@ function liveReadyTone() {
 }
 function liveSheet() {
   if (LIVE) { LIVE.draw(); return; }
+  // Paused (audit 16-04): say so and stop — no session request, no mic prompt.
+  if (!S.voice?.available) { toast(S.voice?.message || "Ledger Live is temporarily paused. Typed chat is still available."); return; }
   wakeStop();
   // drafts = email drafts (rendered on end, as before); cards = every other confirm
   // card voice can now produce (invoice, estimate, booking, reminder, text, print) —
@@ -11395,7 +12234,8 @@ function liveSheet() {
             (r.reminder_drafts || []).forEach((x) => L.cards.push(() => reminderCard(x)));
             (r.sms_drafts || []).forEach((x) => L.cards.push(() => smsDraftCard(x)));
             (r.print_jobs || []).forEach((x) => L.cards.push(() => printJobCard(x)));
-            if (r.email_drafts || r.invoice_drafts || r.estimate_drafts || r.booking_drafts || r.reminder_drafts || r.sms_drafts || r.print_jobs) L.draw();
+            (r.action_drafts || []).forEach((x) => L.cards.push(() => actionCard(x)));
+            if (r.email_drafts || r.invoice_drafts || r.estimate_drafts || r.booking_drafts || r.reminder_drafts || r.sms_drafts || r.print_jobs || r.action_drafts) L.draw();
           } catch (e) { output = JSON.stringify({ error: e.message || "tool failed" }); }
           send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: c.call_id, output } });
         }
@@ -11455,11 +12295,24 @@ const MIGRATE_FIELD_LABELS = {
 };
 // Excel (.xlsx/.xls) is what most shops actually export. Read the first sheet in the browser and hand the
 // backend the same CSV text a .csv file would give — SheetJS is fetched only when an Excel file is chosen.
+// CSV bytes as text (audit 2026-09-17, 12.9). `file.text()` always decodes
+// UTF-8, so Excel's "Unicode Text" export (UTF-16 with a byte-order mark) came
+// through as NUL-studded garbage the server then blamed on the header row.
+function decodeSpreadsheetText(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let text;
+  if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) text = new TextDecoder("utf-16le").decode(bytes.subarray(2));
+  else if (bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) text = new TextDecoder("utf-16be").decode(bytes.subarray(2));
+  else text = new TextDecoder("utf-8").decode(bytes);   // strips a UTF-8 BOM itself
+  if (text.includes("\x00")) throw new Error("That file isn't text I can read. Export it as CSV or Excel and try again.");
+  return text;
+}
 async function readSpreadsheetAsCsv(file) {
-  if (!/\.(xlsx|xlsm|xls)$/i.test(file.name || "")) return file.text();
+  if (!/\.(xlsx|xlsm|xls)$/i.test(file.name || "")) return decodeSpreadsheetText(await file.arrayBuffer());
   if (file.size > 6000000) throw new Error("That file is over 6 MB. Split it before importing; nothing was saved.");
   const XLSX = await import("./assets/vendor/xlsx-0.20.3.mjs");
-  const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array" });
+  // cellDates:false matches the server-side Excel reader (spreadsheet.ts) so a workbook reads the same on web and iPhone.
+  const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: "array", cellDates: false });
   if (!wb.SheetNames.length) throw new Error("That Excel file has no sheets in it.");
   let selected = wb.SheetNames[0];
   if (wb.SheetNames.length > 1) selected = await new Promise((resolve, reject) => {
@@ -11487,7 +12340,10 @@ function catalogImportSheet(kind="products") {
   sheet(`<h2>${kind==="services" ? "Import services" : "Import products"}</h2><p class="note">Choose the worksheet, check the columns and review every exception before saving.</p><div id="catslot"></div>`,sh=>renderCatalog(sh,kind));
 }
 function bringDataSheet() {
-  const C = { file: null, csv: "", analysis: null, map: {}, busy: false, result: null, error: "", mergeMode:"keep" };
+  // `seq` (audit 2026-09-17, 12.1): every analyze carries a sequence number.
+  // A response that lands after a newer pick was made is dropped, so the
+  // mapping on screen is always the last choice — same fence as the iPhone.
+  const C = { file: null, csv: "", analysis: null, map: {}, busy: false, result: null, error: "", mergeMode:"keep", seq: 0 };
   const paint = () => {
     const box = document.querySelector("#mgbox"); if (!box) return;
     if (C.result) {
@@ -11495,16 +12351,17 @@ function bringDataSheet() {
       box.innerHTML = `
         <div class="cmpsect" style="text-align:center">
           <div style="font-size:40px">&#10003;</div>
-          <h3 style="margin:6px 0">Imported</h3>
+          <h3 style="margin:6px 0">${r.replayed ? "Already imported — nothing changed" : "Imported"}</h3>
+          ${r.replayed ? `<p class="note">This exact file was imported before and is still in place, so nothing was added or changed. The counts below are from that import. An undone import can be imported again.</p>` : ""}
           <p><b>${r.customers.created}</b> new customer${r.customers.created === 1 ? "" : "s"} · <b>${r.customers.matched}</b> already here${r.customers.updated ? ` (${r.customers.updated} filled in)` : ""}</p>
           ${r.kind === "vehicles" ? `<p><b>${r.vehicles.created}</b> new vehicle${r.vehicles.created === 1 ? "" : "s"} · <b>${r.vehicles.matched}</b> already here</p>` : ""}
           ${r.issue_count ? `<p class="note">${r.issue_count} row${r.issue_count === 1 ? "" : "s"} need a look. <a href="#" id="mgissues">Download the list</a></p>` : `<p class="note">Every row came in clean.</p>`}
-          ${r.skipped ? `<p class="note">${r.skipped} row${r.skipped === 1 ? "" : "s"} skipped (no name).</p>` : ""}
+          ${r.skipped ? `<p class="note">${r.skipped} row${r.skipped === 1 ? "" : "s"} skipped — no name, over the row limit, or refused; the list says which.</p>` : ""}
         </div>
         <button class="btn primary wide" id="mgdone">Done</button>
         <button class="linkbtn" id="mgagain" style="margin-top:8px">Import another file</button>`;
       box.querySelector("#mgdone").onclick = () => { closeSheet(); S.customers = null; if (typeof loadNativeCustomers === "function") loadNativeCustomers(); };
-      box.querySelector("#mgagain").onclick = () => { Object.assign(C, { file: null, csv: "", analysis: null, map: {}, result: null, error: "" }); paint(); };
+      box.querySelector("#mgagain").onclick = () => { C.seq++; Object.assign(C, { file: null, csv: "", analysis: null, map: {}, result: null, error: "", busy: false }); paint(); };
       const iss = box.querySelector("#mgissues");
       if (iss) iss.onclick = (e) => { e.preventDefault(); downloadCsv("import-needs-a-look.csv", "Row,Issue\n" + r.issues.map((i) => `${i.line},"${i.issues.join("; ").replace(/"/g, '""')}"`).join("\n") + "\n"); };
       return;
@@ -11525,13 +12382,15 @@ function bringDataSheet() {
       box.querySelector("#mgpick").onclick = () => input.click();
       input.onchange = async () => {
         const file = input.files?.[0]; if (!file) return;
+        const seq = ++C.seq;
         C.busy = true; C.error = ""; paint();
         try {
-          C.file = file;
-          C.csv = await readSpreadsheetAsCsv(file);
-          const a = await api("/migrate/analyze", { csv: C.csv, file_name: file.name });
+          const csv = await readSpreadsheetAsCsv(file);
+          const a = await api("/migrate/analyze", { csv, file_name: file.name });
+          if (seq !== C.seq) return;
+          C.file = file; C.csv = csv;
           C.analysis = a; C.map = { ...(a.map || {}) };
-        } catch (e) { C.error = e.message; }
+        } catch (e) { if (seq !== C.seq) return; C.error = e.message; }
         C.busy = false; paint();
       };
       box.querySelector("#mgtplc").onclick = async (e) => { e.preventDefault(); const t = await api("/migrate/template", { kind: "customers" }); downloadCsv("ledger-customers-template.csv", t.csv); };
@@ -11551,6 +12410,7 @@ function bringDataSheet() {
         <p>Found <b>${a.summary.customers}</b> customer${a.summary.customers === 1 ? "" : "s"}${a.kind === "vehicles" ? ` and <b>${a.summary.vehicles}</b> vehicle${a.summary.vehicles === 1 ? "" : "s"}` : ""}. ${a.summary.with_email} with an email, ${a.summary.with_phone} with a phone.${a.needs_review ? ` <b>${a.needs_review}</b> need a look after import.` : ""}</p>
         ${a.truncated ? `<p class="note err">Only the first 20,000 rows will import — split the file for the rest.</p>` : ""}
         ${nameOk ? "" : `<p class="note err">Pick which column holds the customer's name.</p>`}
+        ${a.ambiguous_rows ? `<p class="note err">${a.ambiguous_rows} row${a.ambiguous_rows === 1 ? "" : "s"} (${esc((a.merge_preview || []).filter(r => r.ambiguous).map(r => r.line).slice(0, 20).join(", "))}${a.ambiguous_rows > 20 ? "…" : ""}) match more than one saved customer, so this import would stop without saving anything. Give those customers different emails, phones or Customer IDs, then check again.</p>` : ""}
       </div>
       <details ${nameOk ? "" : "open"}><summary class="eyebrow" style="cursor:pointer;margin:10px 0">Check the columns</summary>
         <div class="cmpsect">${fields.map(pick).join("")}</div></details>
@@ -11559,24 +12419,39 @@ function bringDataSheet() {
         ${(a.preview || []).map((p) => `<div class="note" style="margin-top:6px">${p.customer ? esc(`${p.customer.first_name} ${p.customer.last_name}`.trim() + (p.customer.company ? ` · ${p.customer.company}` : "") + (p.customer.email ? ` · ${p.customer.email}` : "") + (p.customer.phone ? ` · ${p.customer.phone}` : "") + (p.customer.extras ? ` · ${p.customer.extras}` : "")) : "<i>no customer</i>"}${p.customer?.notes ? `<details><summary>All saved notes and extra fields</summary><pre style="white-space:pre-wrap">${esc(p.customer.notes)}</pre></details>` : ""}${p.vehicle ? esc(` — ${[p.vehicle.year, p.vehicle.make, p.vehicle.model].filter(Boolean).join(" ")}${p.vehicle.vin ? ` (${p.vehicle.vin})` : p.vehicle.plate ? ` (${p.vehicle.plate})` : ""}`) : ""}${p.issues.length ? ` <span style="color:var(--gold)">· ${esc(p.issues.join("; "))}</span>` : ""}</div>`).join("")}
       </div>
       ${(a.merge_preview || []).some(r=>r.existing) ? `<div class="cmpsect"><label>When uploaded values conflict<select id="mgmerge" class="cmpinput"><option value="keep"${C.mergeMode === "keep" ? " selected" : ""}>Keep saved values</option><option value="replace"${C.mergeMode === "replace" ? " selected" : ""}>Use uploaded nonblank values</option></select></label><p class="note">Blank cells never erase saved information. All original values stay in the import archive.</p><details><summary>Review repeat-upload changes</summary>${a.merge_preview.filter(r=>r.existing).map(r=>`<p class="note">Row ${r.line}</p>${r.changes.map(c=>`<p class="note">${esc(c.field)}: ${esc(c.status)} · saved: ${esc(String(c.previous ?? ""))} · uploaded: ${esc(String(c.incoming ?? ""))}</p>`).join("")}`).join("")}</details></div>` : ""}
-      <button class="btn primary wide" id="mggo" ${C.busy || !nameOk ? "disabled" : ""}>${C.busy ? "Importing…" : `Import ${a.summary.customers} customer${a.summary.customers === 1 ? "" : "s"}${a.kind === "vehicles" ? ` + ${a.summary.vehicles} vehicles` : ""}`}</button>
+      <button class="btn primary wide" id="mggo" ${C.busy || !nameOk || a.ambiguous_rows ? "disabled" : ""}>${C.busy ? (C.progress || "Importing…") : `Import ${a.summary.customers} customer${a.summary.customers === 1 ? "" : "s"}${a.kind === "vehicles" ? ` + ${a.summary.vehicles} vehicles` : ""}`}</button>
       <button class="linkbtn" id="mgback" style="margin-top:8px">Choose a different file</button>
-      <p class="note" style="margin-top:8px">Already-known customers are matched by email, phone or name and never duplicated. Running the same file twice adds nothing.</p>
+      <p class="note" style="margin-top:8px">Already-known customers are matched by email, phone or name and never duplicated. Running the same file twice adds nothing; an import you undid can be imported again.</p>
       ${C.error ? `<p class="note err">${esc(C.error)}</p>` : ""}`;
     box.querySelectorAll("[data-mgf]").forEach((sel) => sel.onchange = async () => {
       C.map[sel.dataset.mgf] = sel.value;
+      const seq = ++C.seq;
       C.busy = true; paint();
-      try { C.analysis = await api("/migrate/analyze", { csv: C.csv, file_name: C.file?.name, column_map: C.map, kind: a.kind }); C.map = { ...(C.analysis.map || {}) }; }
-      catch (e) { C.error = e.message; }
+      try {
+        const fresh = await api("/migrate/analyze", { csv: C.csv, file_name: C.file?.name, column_map: C.map, kind: a.kind });
+        if (seq !== C.seq) return;   // a newer pick is already on its way
+        C.analysis = fresh; C.map = { ...(fresh.map || {}) };
+      }
+      catch (e) { if (seq !== C.seq) return; C.error = e.message; }
       C.busy = false; paint();
     });
-    box.querySelector("#mgback").onclick = () => { Object.assign(C, { file: null, csv: "", analysis: null, map: {}, error: "" }); paint(); };
+    box.querySelector("#mgback").onclick = () => { C.seq++; Object.assign(C, { file: null, csv: "", analysis: null, map: {}, error: "", busy: false }); paint(); };
     if(box.querySelector("#mgmerge")) box.querySelector("#mgmerge").onchange=e=>{C.mergeMode=e.target.value};
     box.querySelector("#mggo").onclick = async () => {
-      C.busy = true; C.error = ""; paint();
-      try { C.result = await api("/migrate/import", { csv: C.csv, file_name: C.file?.name, column_map: C.map, kind: a.kind, merge_mode:C.mergeMode, source: (C.file?.name || "import").replace(/\.[^.]+$/, "").slice(0, 40) }); toast("Import finished"); }
+      C.busy = true; C.error = ""; C.progress = ""; paint();
+      try {
+        const body = { csv: C.csv, file_name: C.file?.name, column_map: C.map, kind: a.kind, merge_mode:C.mergeMode, source: (C.file?.name || "import").replace(/\.[^.]+$/, "").slice(0, 40), continuation: true };
+        let r = await api("/migrate/import", body);
+        // Continuation (12.6; server side owned by lane 05): a long QuickBooks
+        // import answers in pages. A server that never says `partial` answers once.
+        while (r && r.partial === true && Number.isInteger(r.next_cursor)) {
+          if (Number.isInteger(r.processed) && Number.isInteger(r.total)) { C.progress = `Importing… ${r.processed} of ${r.total}`; paint(); }
+          r = await api("/migrate/import", { ...body, cursor: r.next_cursor, import_id: r.import_id });
+        }
+        C.result = r; toast("Import finished");
+      }
       catch (e) { C.error = e.message; }
-      C.busy = false; paint();
+      C.busy = false; C.progress = ""; paint();
     };
   };
   sheet(`<h2>Bring your data</h2><div id="mgbox"></div>`, () => paint());
@@ -11597,7 +12472,7 @@ function exportDataSheet() {
       try { const r = await api("/migrate/export", { kind }); downloadCsv(name, r.csv); note.textContent = `${r.count.toLocaleString()} ${kind} exported.`; }
       catch (e) { note.textContent = e.message; }
     };
-    sh.querySelector("#mgxbusiness").onclick=async()=>{note.textContent="Preparing…";try{downloadBooksExport(await booksApi({action:"archive"}));note.textContent="Business records archive prepared. See its manifest for coverage and exclusions."}catch(e){note.textContent=e.message}};
+    sh.querySelector("#mgxbusiness").onclick=async()=>{note.textContent="Preparing…";try{downloadBooksExport(await booksApi({action:"archive",include_receipt_links:true}));note.textContent="Business records archive prepared. See its manifest for coverage and exclusions; receipt photo links inside it expire in 12 hours."}catch(e){note.textContent=e.message}};
     sh.querySelector("#mgxcat").onclick=async()=>{note.textContent="Preparing…";try{const r=await api("/catalog",{action:"export"});downloadJson("ledger-catalog-archive.json",r.archive);note.textContent="Catalog, original values and retained versions exported."}catch(e){note.textContent=e.message}};
     sh.querySelector("#mgxhistory").onclick=importHistorySheet;
     sh.querySelector("#mgxc").onclick = () => run("customers", "ledger-customers.csv");
@@ -11725,7 +12600,7 @@ function downloadJson(filename,value) {
 function importHistorySheet() {
  sheet(`<h2>Import history &amp; recovery</h2><p class="note">Download original values and row exceptions. Customer-only imports can be undone if no later edits or linked records would be lost. Vehicle and QuickBooks imports need record-by-record review.</p><div id="ihrows">Loading…</div>`,async sh=>{
  const slot=sh.querySelector("#ihrows");
- try {const r=await api("/migrate/history",{});slot.innerHTML=(r.imports||[]).map(i=>`<div class="cmpsect"><b>${esc(i.file_name||"Import")}</b><p class="note">${esc(new Date(i.created_at).toLocaleString())} · ${i.row_count} rows${i.undone_at ? " · Undone" : ""}</p><button class="btn" data-original="${i.id}">Download original &amp; exceptions</button>${i.can_undo ? `<button class="btn ghost" data-undo="${i.id}">Undo this import</button>` : ""}<p class="note" data-result="${i.id}"></p></div>`).join("") || '<p class="note">No imports yet.</p>';
+ try {const r=await api("/migrate/history",{});slot.innerHTML=(r.imports||[]).map(i=>`<div class="cmpsect"><b>${esc(i.file_name||"Import")}</b><p class="note">${esc(new Date(i.created_at).toLocaleString())} · ${i.row_count} rows${i.undone_at ? " · Undone" : ""}</p>${i.vehicles_error ? `<p class="note err">Customers were saved but vehicles were not: ${esc(i.vehicles_error)} Import the same file again to finish.</p>` : ""}<button class="btn" data-original="${i.id}">Download original &amp; exceptions</button>${i.can_undo ? `<button class="btn ghost" data-undo="${i.id}">Undo this import</button>` : ""}<p class="note" data-result="${i.id}"></p></div>`).join("") || '<p class="note">No imports yet.</p>';
  slot.querySelectorAll("[data-original]").forEach(btn=>btn.onclick=async()=>{btn.disabled=true;try{const data=await api("/migrate/original",{import_id:btn.dataset.original});downloadJson("ledger-import-original.json",data.archive)}catch(e){slot.querySelector(`[data-result="${btn.dataset.original}"]`).textContent=e.message}finally{btn.disabled=false}});
  slot.querySelectorAll("[data-undo]").forEach(btn=>btn.onclick=async()=>{if(!confirm("Undo the customer changes from this import? Ledger will refuse if later changes or linked records would be lost."))return;btn.disabled=true;try{await api("/migrate/undo",{import_id:btn.dataset.undo});toast("Import undone");importHistorySheet()}catch(e){slot.querySelector(`[data-result="${btn.dataset.undo}"]`).textContent=e.message;btn.disabled=false}});
  }catch(e){slot.textContent=e.message;}
