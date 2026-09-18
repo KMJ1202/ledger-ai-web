@@ -25,6 +25,8 @@
 <script type="application/ld+json" id="faqld">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Does it replace my bookkeeper or accountant?", "acceptedAnswer": {"@type": "Answer", "text": "No, and it isn't trying to. Ledger reads your live books so you can ask questions and get things done without waiting — it doesn't do your year-end. Most owners keep their bookkeeper and hand them cleaner books: receipts filed the day they arrive, invoices that actually went out, nothing missing at month-end."}}, {"@type": "Question", "name": "What if I don't use QuickBooks?", "acceptedAnswer": {"@type": "Answer", "text": "You can still run everything. Ledger has its own built-in books — invoices, customers, receipts, who owes you — so you can start without QuickBooks and connect it later if you ever want to. If you're already on QuickBooks Online, you connect it once and Ledger works from your real numbers."}}, {"@type": "Question", "name": "Who can see my books and my customers?", "acceptedAnswer": {"@type": "Answer", "text": "You, and anyone you invite as a teammate. That's it. We never sell your data, never use it for ads, and never train AI models on it. No Ledger staff reads your books or email as a matter of course — only if you ask us for help with something specific, and with your knowledge. Every connection can be cut off by you at any time from inside the app under Connections — QuickBooks, Gmail and Google alike (QuickBooks can also be cut from your Intuit account's connected apps). The full plain-English version is in our Privacy Policy."}}, {"@type": "Question", "name": "Can it do something I didn't ask for?", "acceptedAnswer": {"@type": "Answer", "text": "No. Every invoice, booking, review reply, receipt post and text is drafted first and waits for your tap. Nothing leaves your business without your confirm. The only things that go out on their own are the lanes you switch on yourself — the missed-call text-back, the night-before reminder, and Front Desk, which answers texts and voicemails for you when you can't and shows you every reply in the Phone tab. All three are off until you turn them on, and you write the first two messages yourself."}}, {"@type": "Question", "name": "How does the free trial work?", "acceptedAnswer": {"@type": "Answer", "text": "Create your account for a 14-day software trial, no card required. Eligible new owners and businesses receive one shared US$20 AI onboarding credit for the entire trial after email, two-step sign-in and phone verification. It does not reset monthly or multiply with teammates. AI pauses when the credit is used; saved setup remains available during the trial. Try the built-in books and a scripted phone walkthrough. Live calling/texting requires a paid subscription, an available number and provider activation; Front Desk requires Pro. Connected services need their own setup. On day 14 you decide: add a card and keep going, or do nothing and nothing is charged. If you keep it and later leave, cancel anytime from Business profile & settings → Subscription & billing — you keep access to the end of the month you've paid for."}}, {"@type": "Question", "name": "How long does setup take, really?", "acceptedAnswer": {"@type": "Answer", "text": "Create your account and connect QuickBooks — or skip it and use the built-in books: under ten minutes, and you're asking questions. Booking and crew setup can be started from Business profile & settings. Phone activation is usually the same business day after subscribing, but number availability and carrier checks can take longer. Complete these steps there — or set them up on the optional free 30-minute onboarding call with the founder, usually in your first day or two. There's no setup fee and no consultant."}}, {"@type": "Question", "name": "What does the AI allowance mean? Will I get surprise bills?", "acceptedAnswer": {"@type": "Answer", "text": "Ledger Solo includes $60 a month of AI use and $10 a month of texting on your business number. Ledger Pro includes $150 a month of AI use and $25 a month of texting. A question to Ledger costs about 11¢ on average, so $60 is roughly 550 questions a month and $150 roughly 1,400. Both meters are visible in the app. Texting usage depends on message length, destination and carrier charges. Any top-up is shown with its price before you buy it; nothing is added automatically."}}, {"@type": "Question", "name": "Does it work on Android, or on my desk computer?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Ledger runs on iPhone, Android (through the web app) and any desktop browser — same account, same books. Your crew and customers don't install anything at all: they get a link."}}]}</script>
 <link rel="stylesheet" href="/assets/crewdemo.css?v=2">
 <script src="/assets/crewdemo.js?v=2" defer></script>
+<link rel="stylesheet" href="/assets/showcase.css?v=1">
+<script src="/assets/showcase.js?v=1" defer></script>
 </head>
 <body>
 
@@ -55,7 +57,7 @@
             <a href="/integrations/google-business/"><img class="mico" src="/assets/icons/googlebusiness.svg" alt=""> Google Business Profile</a>
           </div>
         </div>
-        <a href="/#platform">See it work</a>
+        <a href="/#platform">See it in action</a>
         <a href="#pricing">Pricing</a>
         <a href="/talk/">Book a call</a>
         <a href="/support/">Support</a>
@@ -111,151 +113,111 @@
 </div>
 
 
-<section id="platform" class="tight">
-  <div class="wrap">
-    <div class="oshead"><span class="dash"></span><span class="code">Ledger OS // Platform</span></div>
-    <h2 class="sectitle">One platform. <span class="grad">The whole operation.</span></h2>
-    <p class="subtext">Eight pillars, each deep enough to replace something you're paying for today — every one of them shown as real footage of the app on a demo shop, Northside Auto. Pick a pillar to jump to it.</p>
-    <nav class="pillarnav" aria-label="Jump to a pillar">
-      <a href="#copilot" style="--c:var(--gold)"><i></i>The AI Copilot</a>
-      <a href="#inventory" style="--c:var(--teal)"><i></i>Inventory &amp; pricing</a>
-      <a href="#invoicing" style="--c:var(--emerald)"><i></i>Invoicing &amp; Getting Paid</a>
-      <a href="#booking" style="--c:var(--orange)"><i></i>Booking &amp; Front Desk</a>
-      <a href="#phone" style="--c:var(--blue)"><i></i>Business Phone</a>
-      <a href="#crew-live" style="--c:var(--cyan)"><i></i>Crew Command</a>
-      <a href="#client-hub" style="--c:var(--purple)"><i></i>Client Hub</a>
-      <a href="#reviews" style="--c:var(--magenta)"><i></i>Reviews &amp; Reputation</a>
-    </nav>
-    <p class="pillarfoot">Crew, customers and their portals never cost a seat on either plan. <a href="#pricing">How seats work →</a></p>
+<section id="platform" class="sc-showcase" aria-labelledby="sc-heading" data-showcase>
+ <div class="wrap sc-wrap">
+  <header class="sc-heading"><div><p class="sc-eyebrow"><span></span>SEE IT IN ACTION</p><h2 id="sc-heading">Your business.<br class="sc-mobile-break"> <span>One swipe ahead.</span></h2></div><p class="sc-intro">Real app screens. Everyday moments, handled.<br>Pick a moment. See what Ledger can do.</p></header>
+  <nav class="sc-topics" aria-label="Choose a Ledger AI example"><button type="button" class="sc-topic" data-topic="0" aria-pressed="true" aria-controls="sc-stage"><span class="sc-topic-number">01</span>Ask Ledger</button><button type="button" class="sc-topic" data-topic="1" aria-pressed="false" aria-controls="sc-stage"><span class="sc-topic-number">02</span>Inventory</button><button type="button" class="sc-topic" data-topic="2" aria-pressed="false" aria-controls="sc-stage"><span class="sc-topic-number">03</span>Finance</button><button type="button" class="sc-topic" data-topic="3" aria-pressed="false" aria-controls="sc-stage"><span class="sc-topic-number">04</span>Booking</button><button type="button" class="sc-topic" data-topic="4" aria-pressed="false" aria-controls="sc-stage"><span class="sc-topic-number">05</span>Business phone</button><button type="button" class="sc-topic" data-topic="5" aria-pressed="false" aria-controls="sc-stage"><span class="sc-topic-number">06</span>Your crew</button><button type="button" class="sc-topic" data-topic="6" aria-pressed="false" aria-controls="sc-stage"><span class="sc-topic-number">07</span>Customers</button><button type="button" class="sc-topic" data-topic="7" aria-pressed="false" aria-controls="sc-stage"><span class="sc-topic-number">08</span>Reviews</button></nav>
+  <div class="sc-stage" id="sc-stage" role="region" aria-roledescription="carousel" aria-label="Ledger AI in action">
+   <div class="sc-atmosphere" aria-hidden="true"><div class="sc-aura"></div><div class="sc-grid"></div><div class="sc-orbit"></div><span class="sc-watermark">LEDGER</span></div>
+   <div class="sc-stories"><article class="sc-story" id="showcase-copilot" data-story="0" style="--sc-accent:#3ac8f5">
+ <div class="sc-kicker"><span>01 / 08</span><i aria-hidden="true"></i>Your AI copilot</div>
+ <h3>Big questions.<br> <em>Clear answers.</em></h3><p class="sc-description">“How did we do this month?” Ask in plain English. Ledger reads your connected books and brings back the numbers that matter.</p>
+ <p class="sc-result"><span aria-hidden="true">✓</span>Your business, on speaking terms.</p>
+ <div class="sc-clips" role="group" aria-label="Ask Ledger examples"><button type="button" class="sc-clip" data-clip-index="0" aria-pressed="true">Ask about your sales</button></div>
+ <a class="sc-detail" href="/features/ai/">Explore ask ledger <span aria-hidden="true">↗</span></a>
+ </article><article class="sc-story" id="inventory" data-story="1" style="--sc-accent:#42dbcb">
+ <div class="sc-kicker"><span>02 / 08</span><i aria-hidden="true"></i>Inventory &amp; pricing</div>
+ <h3>Your prices.<br> <em>Ready to quote.</em></h3><p class="sc-description">Bring your price list. Review the import. Then ask what’s in stock and what it sells for — without hunting through a spreadsheet.</p>
+ <p class="sc-result"><span aria-hidden="true">✓</span>Answers from the list you reviewed.</p>
+ <div class="sc-clips" role="group" aria-label="Inventory examples"><button type="button" class="sc-clip" data-clip-index="0" aria-pressed="true">Find stock &amp; pricing</button><button type="button" class="sc-clip" data-clip-index="1" aria-pressed="false">Import a price list</button></div>
+ <a class="sc-detail" href="/features/invoicing/">Explore inventory <span aria-hidden="true">↗</span></a>
+ </article><article class="sc-story" id="invoicing" data-story="2" style="--sc-accent:#2fe0a0">
+ <div class="sc-kicker"><span>03 / 08</span><i aria-hidden="true"></i>Invoices &amp; getting paid</div>
+ <h3>From the job<br> <em>to the bottom line.</em></h3><p class="sc-description">See your books, review a quote and understand your profit. QuickBooks or Ledger’s built-in books — you stay in control.</p>
+ <p class="sc-result"><span aria-hidden="true">✓</span>Drafted by Ledger. Confirmed by you.</p>
+ <div class="sc-clips" role="group" aria-label="Finance examples"><button type="button" class="sc-clip" data-clip-index="0" aria-pressed="true">See your books</button><button type="button" class="sc-clip" data-clip-index="1" aria-pressed="false">Accept a quote</button><button type="button" class="sc-clip" data-clip-index="2" aria-pressed="false">Check profit</button><button type="button" class="sc-clip" data-clip-index="3" aria-pressed="false">Review receipts</button></div>
+ <a class="sc-detail" href="/features/invoicing/">Explore finance <span aria-hidden="true">↗</span></a>
+ </article><article class="sc-story" id="booking" data-story="3" style="--sc-accent:#ffb768">
+ <div class="sc-kicker"><span>04 / 08</span><i aria-hidden="true"></i>Booking &amp; calendar</div>
+ <h3>A full day.<br> <em>A clearer picture.</em></h3><p class="sc-description">See what’s next, check the day’s jobs and let customers request a time from their own phone. No app download needed.</p>
+ <p class="sc-result"><span aria-hidden="true">✓</span>One calendar. Less back-and-forth.</p>
+ <div class="sc-clips" role="group" aria-label="Booking examples"><button type="button" class="sc-clip" data-clip-index="0" aria-pressed="true">See the day</button><button type="button" class="sc-clip" data-clip-index="1" aria-pressed="false">Request a booking</button></div>
+ <a class="sc-detail" href="/features/booking/">Explore booking <span aria-hidden="true">↗</span></a>
+ </article><article class="sc-story" id="phone" data-story="4" style="--sc-accent:#83a8ff">
+ <div class="sc-kicker"><span>05 / 08</span><i aria-hidden="true"></i>Business phone</div>
+ <h3>Miss the call.<br> <em>Keep the conversation.</em></h3><p class="sc-description">When you enable text-back, a missed call gets a reply. Voicemails, messages and new leads come together in one place.</p>
+ <p class="sc-result"><span aria-hidden="true">✓</span>Automatic lanes you choose to switch on.</p>
+ <div class="sc-clips" role="group" aria-label="Business phone examples"><button type="button" class="sc-clip" data-clip-index="0" aria-pressed="true">Follow a missed call</button></div>
+ <a class="sc-detail" href="/features/phone/">Explore business phone <span aria-hidden="true">↗</span></a>
+ </article><article class="sc-story" id="crew-live" data-story="5" style="--sc-accent:#51dcff">
+ <div class="sc-kicker"><span>06 / 08</span><i aria-hidden="true"></i>Crew command</div>
+ <h3>Out on the job.<br> <em>Still in the picture.</em></h3><p class="sc-description">See who’s clocked in, open the crew map and review their time cards. A clearer view of the team, wherever the day takes you.</p>
+ <p class="sc-result"><span aria-hidden="true">✓</span>Worker links included with Pro.</p>
+ <div class="sc-clips" role="group" aria-label="Your crew examples"><button type="button" class="sc-clip" data-clip-index="0" aria-pressed="true">Open the crew map</button><button type="button" class="sc-clip" data-clip-index="1" aria-pressed="false">Meet the team</button><button type="button" class="sc-clip" data-clip-index="2" aria-pressed="false">Review time cards</button><button type="button" class="sc-clip" data-clip-index="3" aria-pressed="false">See completed jobs</button></div>
+ <a class="sc-detail" href="/features/crew/">Explore your crew <span aria-hidden="true">↗</span></a>
+ </article><article class="sc-story" id="client-hub" data-story="6" style="--sc-accent:#c3a0ff">
+ <div class="sc-kicker"><span>07 / 08</span><i aria-hidden="true"></i>Client hub</div>
+ <h3>One simple link.<br> <em>Their whole story.</em></h3><p class="sc-description">Customers can see invoices, respond to quotes and request their next service. You see the same relationship from your side.</p>
+ <p class="sc-result"><span aria-hidden="true">✓</span>No customer app. No customer seat fee.</p>
+ <div class="sc-clips" role="group" aria-label="Customers examples"><button type="button" class="sc-clip" data-clip-index="0" aria-pressed="true">Open a customer portal</button><button type="button" class="sc-clip" data-clip-index="1" aria-pressed="false">See your directory</button></div>
+ <a class="sc-detail" href="/features/client-hub/">Explore customers <span aria-hidden="true">↗</span></a>
+ </article><article class="sc-story" id="reviews" data-story="7" style="--sc-accent:#f08cce">
+ <div class="sc-kicker"><span>08 / 08</span><i aria-hidden="true"></i>Reviews &amp; reputation</div>
+ <h3>Their feedback.<br> <em>Your voice.</em></h3><p class="sc-description">Read the review. Check Ledger’s suggested reply. Make it yours, then approve it for Google — every word stays in your hands.</p>
+ <p class="sc-result"><span aria-hidden="true">✓</span>Review first. Publish when you’re ready.</p>
+ <div class="sc-clips" role="group" aria-label="Reviews examples"><button type="button" class="sc-clip" data-clip-index="0" aria-pressed="true">Review a reply</button></div>
+ <a class="sc-detail" href="/integrations/google-business/">Explore reviews <span aria-hidden="true">↗</span></a><button type="button" class="sc-real-proof">Watch a real shop’s review reply <span aria-hidden="true">↗</span></button>
+ </article></div>
+   <div class="sc-visual"><div class="sc-viewport" tabindex="0" aria-label="Swipeable iPhone gallery" aria-describedby="sc-gesture"><article class="sc-card" data-card="0" aria-roledescription="slide" aria-label="1 of 8: Ask Ledger">
+ <div class="sc-device"><span class="sc-side-button" aria-hidden="true"></span><div class="sc-glass">
+ <img class="sc-poster" src="/assets/video/app-ask.jpg" alt="Ledger AI Ask Ledger screen, recorded with demo data" width="390" height="847" loading="lazy" draggable="false">
+ <video class="sc-video" muted playsinline preload="none" poster="/assets/video/app-ask.jpg" aria-label="Ask Ledger app recording, silent" tabindex="-1"></video>
+ <button class="sc-expand" type="button" aria-label="Expand Ask Ledger recording"><span aria-hidden="true">⤢</span></button>
+ </div></div><span class="sc-card-label">01 <b>Ask Ledger</b></span></article><article class="sc-card" data-card="1" aria-roledescription="slide" aria-label="2 of 8: Inventory">
+ <div class="sc-device"><span class="sc-side-button" aria-hidden="true"></span><div class="sc-glass">
+ <img class="sc-poster" src="/assets/video/app-stock.jpg" alt="Ledger AI Inventory screen, recorded with demo data" width="390" height="847" loading="lazy" draggable="false">
+ <video class="sc-video" muted playsinline preload="none" poster="/assets/video/app-stock.jpg" aria-label="Inventory app recording, silent" tabindex="-1"></video>
+ <button class="sc-expand" type="button" aria-label="Expand Inventory recording"><span aria-hidden="true">⤢</span></button>
+ </div></div><span class="sc-card-label">02 <b>Inventory</b></span></article><article class="sc-card" data-card="2" aria-roledescription="slide" aria-label="3 of 8: Finance">
+ <div class="sc-device"><span class="sc-side-button" aria-hidden="true"></span><div class="sc-glass">
+ <img class="sc-poster" src="/assets/video/app-finance.jpg" alt="Ledger AI Finance screen, recorded with demo data" width="390" height="847" loading="lazy" draggable="false">
+ <video class="sc-video" muted playsinline preload="none" poster="/assets/video/app-finance.jpg" aria-label="Finance app recording, silent" tabindex="-1"></video>
+ <button class="sc-expand" type="button" aria-label="Expand Finance recording"><span aria-hidden="true">⤢</span></button>
+ </div></div><span class="sc-card-label">03 <b>Finance</b></span></article><article class="sc-card" data-card="3" aria-roledescription="slide" aria-label="4 of 8: Booking">
+ <div class="sc-device"><span class="sc-side-button" aria-hidden="true"></span><div class="sc-glass">
+ <img class="sc-poster" src="/assets/video/app-calendar.jpg" alt="Ledger AI Booking screen, recorded with demo data" width="390" height="847" loading="lazy" draggable="false">
+ <video class="sc-video" muted playsinline preload="none" poster="/assets/video/app-calendar.jpg" aria-label="Booking app recording, silent" tabindex="-1"></video>
+ <button class="sc-expand" type="button" aria-label="Expand Booking recording"><span aria-hidden="true">⤢</span></button>
+ </div></div><span class="sc-card-label">04 <b>Booking</b></span></article><article class="sc-card" data-card="4" aria-roledescription="slide" aria-label="5 of 8: Business phone">
+ <div class="sc-device"><span class="sc-side-button" aria-hidden="true"></span><div class="sc-glass">
+ <img class="sc-poster" src="/assets/video/app-phone.jpg" alt="Ledger AI Business phone screen, recorded with demo data" width="390" height="847" loading="lazy" draggable="false">
+ <video class="sc-video" muted playsinline preload="none" poster="/assets/video/app-phone.jpg" aria-label="Business phone app recording, silent" tabindex="-1"></video>
+ <button class="sc-expand" type="button" aria-label="Expand Business phone recording"><span aria-hidden="true">⤢</span></button>
+ </div></div><span class="sc-card-label">05 <b>Business phone</b></span></article><article class="sc-card" data-card="5" aria-roledescription="slide" aria-label="6 of 8: Your crew">
+ <div class="sc-device"><span class="sc-side-button" aria-hidden="true"></span><div class="sc-glass">
+ <img class="sc-poster" src="/assets/video/crew-map.jpg" alt="Ledger AI Your crew screen, recorded with demo data" width="390" height="847" loading="lazy" draggable="false">
+ <video class="sc-video" muted playsinline preload="none" poster="/assets/video/crew-map.jpg" aria-label="Your crew app recording, silent" tabindex="-1"></video>
+ <button class="sc-expand" type="button" aria-label="Expand Your crew recording"><span aria-hidden="true">⤢</span></button>
+ </div></div><span class="sc-card-label">06 <b>Your crew</b></span></article><article class="sc-card" data-card="6" aria-roledescription="slide" aria-label="7 of 8: Customers">
+ <div class="sc-device"><span class="sc-side-button" aria-hidden="true"></span><div class="sc-glass">
+ <img class="sc-poster" src="/assets/video/app-clienthub.jpg" alt="Ledger AI Customers screen, recorded with demo data" width="390" height="847" loading="lazy" draggable="false">
+ <video class="sc-video" muted playsinline preload="none" poster="/assets/video/app-clienthub.jpg" aria-label="Customers app recording, silent" tabindex="-1"></video>
+ <button class="sc-expand" type="button" aria-label="Expand Customers recording"><span aria-hidden="true">⤢</span></button>
+ </div></div><span class="sc-card-label">07 <b>Customers</b></span></article><article class="sc-card" data-card="7" aria-roledescription="slide" aria-label="8 of 8: Reviews">
+ <div class="sc-device"><span class="sc-side-button" aria-hidden="true"></span><div class="sc-glass">
+ <img class="sc-poster" src="/assets/video/app-reviews.jpg" alt="Ledger AI Reviews screen, recorded with demo data" width="390" height="847" loading="lazy" draggable="false">
+ <video class="sc-video" muted playsinline preload="none" poster="/assets/video/app-reviews.jpg" aria-label="Reviews app recording, silent" tabindex="-1"></video>
+ <button class="sc-expand" type="button" aria-label="Expand Reviews recording"><span aria-hidden="true">⤢</span></button>
+ </div></div><span class="sc-card-label">08 <b>Reviews</b></span></article></div>
+    <div class="sc-media-controls"><button type="button" class="sc-play" aria-label="Play recording">▶ <span>Play</span></button><span class="sc-media-note">Real app footage · silent</span><button type="button" class="sc-larger">Larger view <span aria-hidden="true">⤢</span></button></div>
+   </div>
   </div>
-</section>
-
-<section id="inventory" class="tight fblock">
-  <div class="wrap">
-    <div class="oshead"><span class="dash" style="background:var(--teal);box-shadow:0 0 8px var(--teal)"></span><span class="code" style="color:var(--teal)">Ledger OS // Inventory & pricing</span></div>
-    <h2 class="sectitle">Upload your price list. <span class="grad">Ledger sells from it.</span></h2>
-    <p class="subtext">Bring a CSV or Excel table with a header row. Choose the worksheet, review the suggested columns and resolve flagged prices before saving. Ledger can then use your reviewed list for quotes; file-size and row limits apply.</p>
-    <div class="crewdemo flip" data-app-demo>
-      <div class="cd-phone"><div class="phoneframe"><div class="screen"><div class="cd-screen" role="img" aria-label="Ledger AI — real app footage, silent"><div class="cd-tap" aria-hidden="true"><span>Tap to play</span></div></div></div></div></div>
-      <div class="cd-steps" role="group" aria-label="Inventory & pricing footage clips">
-        <button type="button" class="cd-step active" data-clip="pricelist" data-src="/assets/video/app-pricelist.mp4" data-poster="/assets/video/app-pricelist.jpg" data-tone="teal" aria-pressed="true"><span class="cd-num">01</span><span><span class="cd-title">Choose a file. Check the mapping. Import.</span><span class="cd-desc">Northside Auto drops in tire-pricing-sept.csv. Ledger finds 40 rows, shows which column it took for price, size, cost and stock, and loads them in one tap. Recorded in the web app.</span></span><i class="cd-bar"></i></button>
-        <button type="button" class="cd-step" data-clip="stock" data-src="/assets/video/app-stock.mp4" data-poster="/assets/video/app-stock.jpg" data-tone="teal" aria-pressed="false"><span class="cd-num">02</span><span><span class="cd-title">Now it quotes from your list</span><span class="cd-desc">Back in the app: “Do we have 265/70R17?” — eight options in stock with the sell price on each, from the file uploaded a minute earlier.</span></span><i class="cd-bar"></i></button>
-        <div class="cd-step static" data-tone="teal"><span class="cd-num">03</span><span><span class="cd-title">Replace the file whenever prices change</span><span class="cd-desc">Nothing stale gets quoted. Ledger says it doesn't know rather than guessing a price it was never given.</span></span></div>
-      </div>
-    </div>
-    <p class="cd-fine"><span>Real app footage · Northside Auto, a demo shop with made-up customers · silent</span><a href="/features/invoicing/">Quotes and invoices, in full →</a></p>
-  </div>
-</section>
-
-<section id="invoicing" class="tight fblock">
-  <div class="wrap">
-    <div class="oshead"><span class="dash" style="background:var(--emerald);box-shadow:0 0 8px var(--emerald)"></span><span class="code" style="color:var(--emerald)">Ledger OS // Invoicing & getting paid</span></div>
-    <h2 class="sectitle">Invoices, quotes and profit — <span class="grad">drafted by conversation, confirmed by you.</span></h2>
-    <p class="subtext">Numbered, taxed invoices and estimates on QuickBooks or Ledger's built-in books. Card payments, hosted pay pages, mark-paid, print, reminders — and what you actually made today.</p>
-    <div class="crewdemo" data-app-demo>
-      <div class="cd-phone"><div class="phoneframe"><div class="screen"><div class="cd-screen" role="img" aria-label="Ledger AI — real app footage, silent"><div class="cd-tap" aria-hidden="true"><span>Tap to play</span></div></div></div></div></div>
-      <div class="cd-steps" role="group" aria-label="Invoicing & getting paid footage clips">
-        <button type="button" class="cd-step active" data-clip="finance" data-src="/assets/video/app-finance.mp4" data-poster="/assets/video/app-finance.jpg" data-tone="emerald" aria-pressed="true"><span class="cd-num">01</span><span><span class="cd-title">Live books at a glance</span><span class="cd-desc">This month, the last 14 days, month-over-month and the run-rate — then the estimates lane, where Dylan Reyes' leveling-kit quote is one tap from print, share or invoice.</span></span><i class="cd-bar"></i></button>
-        <button type="button" class="cd-step" data-clip="estimate" data-src="/assets/video/app-estimate.mp4" data-poster="/assets/video/app-estimate.jpg" data-tone="emerald" aria-pressed="false"><span class="cd-num">02</span><span><span class="cd-title">The customer answers from their phone</span><span class="cd-desc">Dylan opens the quote link Northside sent, reads every line, and taps Accept. Nothing posts to the books until it's converted.</span></span><i class="cd-bar"></i></button>
-        <button type="button" class="cd-step" data-clip="profit" data-src="/assets/video/app-profit.mp4" data-poster="/assets/video/app-profit.jpg" data-tone="emerald" aria-pressed="false"><span class="cd-num">03</span><span><span class="cd-title">Sell minus real cost</span><span class="cd-desc">Profit so far today, sales before tax, recorded costs and the daily trend. Costs come from receipts and supplier invoices, not a guessed margin.</span></span><i class="cd-bar"></i></button>
-        <button type="button" class="cd-step" data-clip="receipts" data-src="/assets/video/app-receipts.mp4" data-poster="/assets/video/app-receipts.jpg" data-tone="emerald" aria-pressed="false"><span class="cd-num">04</span><span><span class="cd-title">Receipts filed from your inbox</span><span class="cd-desc">Receipt Radar reads the supplier invoices that land in Gmail — vendor, total, tax — and photo receipts too. Everything waits for your tap before it posts.</span></span><i class="cd-bar"></i></button>
-      </div>
-    </div>
-    <p class="cd-fine"><span>Real app footage · Northside Auto, a demo shop with made-up customers · silent</span><a href="/features/invoicing/">Everything Invoicing does →</a></p>
-  </div>
-</section>
-
-<section id="booking" class="tight fblock">
-  <div class="wrap">
-    <div class="oshead"><span class="dash" style="background:var(--orange);box-shadow:0 0 8px var(--orange)"></span><span class="code" style="color:var(--orange)">Ledger OS // Booking & Front Desk</span></div>
-    <h2 class="sectitle">A calendar that runs the day. <span class="grad">A booking page that fills it.</span></h2>
-    <p class="subtext">Next up, today's run sheet, the week and the month — checked against Google Calendar so nothing double-books. Customers request a time from a public page, no account needed.</p>
-    <div class="crewdemo flip" data-app-demo>
-      <div class="cd-phone"><div class="phoneframe"><div class="screen"><div class="cd-screen" role="img" aria-label="Ledger AI — real app footage, silent"><div class="cd-tap" aria-hidden="true"><span>Tap to play</span></div></div></div></div></div>
-      <div class="cd-steps" role="group" aria-label="Booking & Front Desk footage clips">
-        <button type="button" class="cd-step active" data-clip="calendar" data-src="/assets/video/app-calendar.mp4" data-poster="/assets/video/app-calendar.jpg" data-tone="orange" aria-pressed="true"><span class="cd-num">01</span><span><span class="cd-title">Next up, then the run sheet</span><span class="cd-desc">Dylan Reyes' F-150 is in under two hours. Sarah Mitchell's mount &amp; balance is done. Open time shows as room for jobs, and the busiest days fill in as the month goes.</span></span><i class="cd-bar"></i></button>
-        <button type="button" class="cd-step" data-clip="booking" data-src="/assets/video/app-booking.mp4" data-poster="/assets/video/app-booking.jpg" data-tone="orange" aria-pressed="false"><span class="cd-num">02</span><span><span class="cd-title">Customers book themselves</span><span class="cd-desc">Jordan Lee wants four winters on his Wrangler. He sends the request from Northside's public page — no app, no login — and it lands in Leads, ready to confirm.</span></span><i class="cd-bar"></i></button>
-        <div class="cd-step static" data-tone="orange"><span class="cd-num">03</span><span><span class="cd-title">Night-before reminders, automatically</span><span class="cd-desc">Every appointment can carry a reminder text. Customers reply, the reply lands in the feed, and no-shows drop.</span></span></div>
-      </div>
-    </div>
-    <p class="cd-fine"><span>Real app footage · Northside Auto, a demo shop with made-up customers · silent</span><a href="/features/booking/">Everything Booking does →</a></p>
-  </div>
-</section>
-
-<section id="phone" class="tight fblock">
-  <div class="wrap">
-    <div class="oshead"><span class="dash" style="background:var(--blue);box-shadow:0 0 8px var(--blue)"></span><span class="code" style="color:var(--blue)">Ledger OS // Business Phone</span></div>
-    <h2 class="sectitle">Miss the call. <span class="grad">Never miss the customer.</span></h2>
-    <p class="subtext">A dedicated business number. When enabled, missed calls trigger an automatic text reply, the caller is saved as a lead, voicemail is written out, and Front Desk answers texts when you can't.</p>
-    <div class="crewdemo" data-app-demo>
-      <div class="cd-phone"><div class="phoneframe"><div class="screen"><div class="cd-screen" role="img" aria-label="Ledger AI — real app footage, silent"><div class="cd-tap" aria-hidden="true"><span>Tap to play</span></div></div></div></div></div>
-      <div class="cd-steps" role="group" aria-label="Business Phone footage clips">
-        <button type="button" class="cd-step active" data-clip="phone" data-src="/assets/video/app-phone.mp4" data-poster="/assets/video/app-phone.jpg" data-tone="blue" aria-pressed="true"><span class="cd-num">01</span><span><span class="cd-title">Two missed calls, both already texted back</span><span class="cd-desc">(587) 555-1204 left a voicemail — Ledger texted them back in seconds. Front Desk answered 46 customers this week and booked two jobs on its own.</span></span><i class="cd-bar"></i></button>
-        <div class="cd-step static" data-tone="blue"><span class="cd-num">02</span><span><span class="cd-title">Commands you switch on</span><span class="cd-desc">Front Desk, auto text-back, appointment reminders, crew reminders — each one shows what it did, hour by hour, in your feed.</span></span></div>
-        <div class="cd-step static" data-tone="blue"><span class="cd-num">03</span><span><span class="cd-title">Keep your number, or use the new one</span><span class="cd-desc">Forward your existing line with your carrier's codes, or put the new number on your website and invoices. Texting is included.</span></span></div>
-      </div>
-    </div>
-    <p class="cd-fine"><span>Real app footage · Northside Auto, a demo shop with made-up customers · silent</span><a href="/features/phone/">Everything Business Phone does →</a></p>
-  </div>
-</section>
-
-<section id="crew-live" class="tight fblock">
-  <div class="wrap">
-    <div class="oshead"><span class="dash" style="background:var(--cyan);box-shadow:0 0 8px var(--cyan)"></span><span class="code" style="color:var(--cyan)">Ledger OS // Crew Command</span></div>
-    <h2 class="sectitle">Your crew, <span class="grad">live.</span></h2>
-    <p class="subtext">Who's on the clock, where they are right now, and the hours they've punched — recorded from the iPhone app exactly as it ships today. Your crew needs no app and costs $0 a seat.</p>
-    <div class="crewdemo flip" data-app-demo>
-      <div class="cd-phone"><div class="phoneframe"><div class="screen"><div class="cd-screen" role="img" aria-label="Ledger AI — real app footage, silent"><div class="cd-tap" aria-hidden="true"><span>Tap to play</span></div></div></div></div></div>
-      <div class="cd-steps" role="group" aria-label="Crew Command footage clips">
-        <button type="button" class="cd-step active" data-clip="crew-hub" data-src="/assets/video/crew-hub.mp4" data-poster="/assets/video/crew-hub.jpg" data-tone="cyan" aria-pressed="true"><span class="cd-num">01</span><span><span class="cd-title">Your crew, live</span><span class="cd-desc">Mike Doyle, Dave Ruiz and Sam Lee: who's on the clock, hours this week, jobs this month — and the live map one tap away.</span></span><i class="cd-bar"></i></button>
-        <button type="button" class="cd-step" data-clip="crew-map" data-src="/assets/video/crew-map.mp4" data-poster="/assets/video/crew-map.jpg" data-tone="gold" aria-pressed="false"><span class="cd-num">02</span><span><span class="cd-title">Where everyone is, right now</span><span class="cd-desc">Live pins with drive times, and Call · Text · Route · Centre on every crew card. Customers get honest arrival texts.</span></span><i class="cd-bar"></i></button>
-        <button type="button" class="cd-step" data-clip="crew-timecards" data-src="/assets/video/crew-timecards.mp4" data-poster="/assets/video/crew-timecards.jpg" data-tone="emerald" aria-pressed="false"><span class="cd-num">03</span><span><span class="cd-title">Time cards that fill themselves</span><span class="cd-desc">Crew clock in from their job link — the hours land here the second they tap. Week, month, overtime, payroll export.</span></span><i class="cd-bar"></i></button>
-        <button type="button" class="cd-step" data-clip="crew-track" data-src="/assets/video/crew-track.mp4" data-poster="/assets/video/crew-track.jpg" data-tone="purple" aria-pressed="false"><span class="cd-num">04</span><span><span class="cd-title">Who's carrying the load</span><span class="cd-desc">Jobs completed per tech — last 7 days, this month, all time.</span></span><i class="cd-bar"></i></button>
-      </div>
-    </div>
-    <p class="cd-fine"><span>Real app footage · Northside Auto, a demo shop with a made-up crew · silent</span><a href="/features/crew/">Everything Crew Command does →</a></p>
-  </div>
-</section>
-
-<section id="client-hub" class="tight fblock">
-  <div class="wrap">
-    <div class="oshead"><span class="dash" style="background:var(--purple);box-shadow:0 0 8px var(--purple)"></span><span class="code" style="color:var(--purple)">Ledger OS // Client Hub</span></div>
-    <h2 class="sectitle">Every customer gets a portal. <span class="grad">No app, no password, no seat fee.</span></h2>
-    <p class="subtext">A personal link with their live balance, open invoices with a pay button, quotes they approve in one tap, service history and a Book-a-service button.</p>
-    <div class="crewdemo" data-app-demo>
-      <div class="cd-phone"><div class="phoneframe"><div class="screen"><div class="cd-screen" role="img" aria-label="Ledger AI — real app footage, silent"><div class="cd-tap" aria-hidden="true"><span>Tap to play</span></div></div></div></div></div>
-      <div class="cd-steps" role="group" aria-label="Client Hub footage clips">
-        <button type="button" class="cd-step active" data-clip="clienthub" data-src="/assets/video/app-clienthub.mp4" data-poster="/assets/video/app-clienthub.jpg" data-tone="purple" aria-pressed="true"><span class="cd-num">01</span><span><span class="cd-title">Dana Whitfield opens her link</span><span class="cd-desc">$1,260 open on invoice 1076, her approved timing-belt quote, and the battery from last month — then straight into the invoice and its payment options.</span></span><i class="cd-bar"></i></button>
-        <button type="button" class="cd-step" data-clip="customers" data-src="/assets/video/app-customers.mp4" data-poster="/assets/video/app-customers.jpg" data-tone="purple" aria-pressed="false"><span class="cd-num">02</span><span><span class="cd-title">Your side of the same record</span><span class="cd-desc">The Directory: who's owing, who's worth asking for a review, and Call · Text · Review on every card. Alice Nkemelu's profile, her history, and her client-hub link.</span></span><i class="cd-bar"></i></button>
-        <div class="cd-step static" data-tone="purple"><span class="cd-num">03</span><span><span class="cd-title">Unlimited customers, $0 forever</span><span class="cd-desc">Portals are included on both plans. Every customer gets one; none of them ever costs a seat.</span></span></div>
-      </div>
-    </div>
-    <p class="cd-fine"><span>Real app footage · Northside Auto, a demo shop with made-up customers · silent</span><a href="/features/client-hub/">Everything Client Hub does →</a></p>
-  </div>
-</section>
-
-<section id="reviews" class="tight fblock">
-  <div class="wrap">
-    <div class="oshead"><span class="dash" style="background:var(--magenta);box-shadow:0 0 8px var(--magenta)"></span><span class="code" style="color:var(--magenta)">Ledger OS // Reviews & Reputation</span></div>
-    <h2 class="sectitle">Google reviews, answered <span class="grad">in your voice.</span></h2>
-    <p class="subtext">Every review lands in the app with the rating, what they're saying, and a reply drafted the way you'd write it. Nothing publishes until you approve every word.</p>
-    <div class="crewdemo flip" data-app-demo>
-      <div class="cd-phone"><div class="phoneframe"><div class="screen"><div class="cd-screen" role="img" aria-label="Ledger AI — real app footage, silent"><div class="cd-tap" aria-hidden="true"><span>Tap to play</span></div></div></div></div></div>
-      <div class="cd-steps" role="group" aria-label="Reviews & Reputation footage clips">
-        <button type="button" class="cd-step active" data-clip="reviews" data-src="/assets/video/app-reviews.mp4" data-poster="/assets/video/app-reviews.jpg" data-tone="magenta" aria-pressed="true"><span class="cd-num">01</span><span><span class="cd-title">4.9 across 187 reviews — one waiting on you</span><span class="cd-desc">Northside's Reviews lane: the rating, the split, the latest three from Google with their replies, and who's worth asking next.</span></span><i class="cd-bar"></i></button>
-        <div class="cd-step static" data-tone="magenta"><span class="cd-num">02</span><span><span class="cd-title">Drafted in your voice</span><span class="cd-desc">Say “reply to my latest review” in Ask Ledger. It answers what the customer actually said, and posts only when you confirm.</span></span></div>
-        <div class="cd-step static" data-tone="magenta"><span class="cd-num">03</span><span><span class="cd-title">Ask at the high point</span><span class="cd-desc">Every customer in the Directory has an Ask-for-a-review button — it sends your real Google review link right after a job they loved.</span></span></div>
-      </div>
-    </div>
-    <div class="cd-wide">
-      <video data-review-demo controls muted playsinline preload="none" width="1280" height="720" poster="/assets/video/ledger-google-reviews-v2.jpg" aria-label="Ledger AI Google Reviews demonstration — a real review answered and posted" aria-describedby="review-demo-description">
-        <source src="/assets/video/ledger-google-reviews-v2.mp4" type="video/mp4">
-        <a href="/assets/video/ledger-google-reviews-v2.mp4">Watch the Ledger Google Reviews demo</a>.
-      </video>
-    </div>
-    <p class="cd-wide-cap" id="review-demo-description">The reply, start to finish — a real review at the founder's own shop · 29 seconds · silent, captioned</p>
-    <p class="cd-fine"><span>Real app footage · Northside Auto, a demo shop with made-up customers · silent</span><a href="/integrations/google-business/">How review replies work →</a></p>
-  </div>
+  <footer class="sc-footer"><p id="sc-gesture"><span aria-hidden="true">↔</span> <span class="sc-desktop-hint">Drag to explore</span><span class="sc-touch-hint">Swipe to explore</span><span class="sc-hint-extra"> · or choose a topic above</span></p><div class="sc-pagination"><button type="button" class="sc-prev" aria-label="Previous example">←</button><span class="sc-count" aria-hidden="true"><b>01</b> / 08</span><button type="button" class="sc-next" aria-label="Next example">→</button></div></footer>
+  <p class="sc-disclosure">Actual Ledger AI recordings · Northside Auto is a demo business with fictional customers and crew.<br>iPhone and web app footage. Features depend on plan and setup. <a href="/business-fit.html">Find your business fit ↗</a></p>
+  <p class="sc-status sc-sr" role="status" aria-live="polite" aria-atomic="true"></p>
+  <noscript><p class="sc-nojs">Swipe through the screens above. Open a feature page for the full walkthrough.</p></noscript>
+ </div>
+ <dialog class="sc-dialog" aria-labelledby="sc-dialog-title" aria-describedby="sc-dialog-desc"><div class="sc-dialog-top"><div><h3 id="sc-dialog-title">Ledger AI in action</h3><p id="sc-dialog-desc">Real app footage · demo business · silent</p></div><button type="button" class="sc-close" aria-label="Close expanded recording" autofocus>✕</button></div><video controls playsinline muted preload="none"></video><p class="sc-dialog-note">This is a recording, not an interactive app. Use the player controls to pause or replay.</p></dialog>
 </section>
 
 <section class="tight">
@@ -556,7 +518,7 @@
         <a href="/integrations/google-business/">Google Business Profile</a>
       </div>
       <div class="fcol"><h5>Company</h5>
-        <a href="/#platform">See it work</a>
+        <a href="/#platform">See it in action</a>
         <a href="/#pricing">Pricing</a>
         <a href="/talk/">Book a call</a>
         <a href="/support/">Support</a>
