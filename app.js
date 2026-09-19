@@ -1239,7 +1239,7 @@ async function renderHome() {
           <div class="status inline"><i></i>Ready</div></div>
       </div>
 
-      <div id="hometrial"></div><div id="homesetup"></div>
+      <div id="homebiztype"></div><div id="hometrial"></div><div id="homesetup"></div>
 
       <button class="bizrow" id="bizsettings">
         <span class="ic">${segIc("gear")}</span>
@@ -1324,6 +1324,7 @@ async function renderHome() {
     else setTab(k);
   });
   on("[data-ask]", "click", (e) => { openChat(); $("box").value = e.currentTarget.dataset.ask; send(); });
+  drawBusinessTypeBanner();
   loadHomeTrial(), loadHomeSetup();
   loadHomeKpis();
   loadHomeReviewsPulse();
@@ -1802,6 +1803,35 @@ function shopProfileSheet(onDone, opts = {}) {
       } catch (e) { btn.disabled = false; note.className = "note err"; note.textContent = e.message; }
     };
   });
+}
+
+// A workspace that never answered "what kind of business?" gets generic
+// screens: no VIN scan, no vehicle on a booking, no tire wording. One line at
+// the top of Home says the setting exists and opens the same screen the
+// checklist does. Dismissed for the session only — it is back next time until
+// a type is saved, and it disappears the moment one is. Same wording as the
+// iPhone app.
+const BIZTYPE_BANNER_DISMISSED = "ledger.bizTypeBannerHidden";
+function drawBusinessTypeBanner() {
+  const slot = $("homebiztype"); if (!slot) return;
+  slot.innerHTML = "";
+  if (S.shop?.business_type) return;
+  const role = S.profile?.role || (S.team?.members || []).find((m) => (m.email || "").toLowerCase() === S.email)?.role || "owner";
+  if (role !== "owner") return;
+  let dismissed = false;
+  try { dismissed = sessionStorage.getItem(BIZTYPE_BANNER_DISMISSED) === "1"; } catch {}
+  if (dismissed) return;
+  slot.innerHTML = `<div class="hbanner" id="biztypebanner" style="margin-bottom:10px">
+      <span class="ic">&#9889;</span>
+      <span class="m"><b>Finish setting up your business — 1 minute</b></span>
+      <button class="retry" id="biztypego">Finish</button>
+      <button class="retry" id="biztypehide" aria-label="Hide this until next time">Later</button>
+    </div>`;
+  slot.querySelector("#biztypego").onclick = () => shopProfileSheet(() => { drawBusinessTypeBanner(); loadHomeSetup(); });
+  slot.querySelector("#biztypehide").onclick = () => {
+    try { sessionStorage.setItem(BIZTYPE_BANNER_DISMISSED, "1"); } catch {}
+    slot.innerHTML = "";
+  };
 }
 
 // Three-step setup checklist at the top of Home for a workspace that is not
@@ -6486,7 +6516,7 @@ function phoneSetupSheet(d) {
     </div>
     <p class="note" style="margin-top:6px">Works on Bell, Rogers, Telus, Fido, Koodo, AT&amp;T and T-Mobile. On Verizon, use your carrier's call forwarding settings instead of these codes.</p>
     <h3 style="margin-top:18px">2 &middot; Or advertise your new number</h3>
-    <p class="sub">Put ${esc(formatE164(d.number.e164))} on your website, Google Business Profile, invoices and vehicles as your primary line going forward. No forwarding needed — it just works.</p>
+    <p class="sub">Put ${esc(formatE164(d.number.e164))} on your website, Google Business Profile, invoices${isAuto() ? " and vehicles" : ""} as your primary line going forward. No forwarding needed — it just works.</p>
     <h3 style="margin-top:18px">Voicemail greeting script</h3>
     <p class="sub">Read this into your carrier's greeting recorder (recording the audio itself is still a manual step — this just gives you the words).</p>
     <p class="note" id="vmscript" style="margin-top:8px;white-space:pre-wrap">${esc(script)}</p>
@@ -8150,7 +8180,7 @@ function frontDeskSheet(d) {
       <button class="btn ${fd.booking === false ? "em" : ""}" data-fdbook="0" type="button">No, just quote</button>
     </div>
     <label class="fld" style="margin-top:14px">YOUR STANDING INSTRUCTIONS</label>
-    <textarea id="fdinstr" rows="4" placeholder="e.g. Always ask what vehicle. Never book Saturdays before 10. We don't do alignments.">${esc(fd.instructions || "")}</textarea>
+    <textarea id="fdinstr" rows="4" placeholder="${isAuto() ? "e.g. Always ask what vehicle. Never book Saturdays before 10. We don&#39;t do alignments." : "e.g. Always ask what the job is. Never book Saturdays before 10. We don&#39;t do rush work."}">${esc(fd.instructions || "")}</textarea>
     <p class="note" style="margin-top:6px">Written in your words, followed on every reply.</p>
     <label class="fld" style="margin-top:14px">MAX TEXTS TO ONE CALLER PER DAY</label>
     <input id="fdcap" type="number" min="1" max="30" value="${Number(fd.maxRepliesPerCaller || 8)}">
@@ -9386,7 +9416,7 @@ function nativeProfileSheet(c) {
       : `<div class="note">No invoices yet.</div>`}
 
     <div class="lanehead" style="margin-top:16px">
-      <span class="eyebrow" style="color:var(--dim)">Vehicles, services &amp; appointments</span>
+      <span class="eyebrow" style="color:var(--dim)">${isAuto() ? "Vehicles, services &amp; appointments" : "Services &amp; appointments"}</span>
       <span class="note">${events.length}</span></div>
     ${events.length ? `<div class="list" style="margin-top:8px">${events.slice(0, 40).map((e) => `
       <button class="item" data-cev="${esc(e.id)}">
@@ -9728,7 +9758,7 @@ function customerSheet(c) {
       : `<div class="note">No invoices in the loaded QuickBooks history.</div>`}
 
     <div class="lanehead" style="margin-top:16px">
-      <span class="eyebrow" style="color:var(--dim)">Vehicles, services &amp; appointments</span>
+      <span class="eyebrow" style="color:var(--dim)">${isAuto() ? "Vehicles, services &amp; appointments" : "Services &amp; appointments"}</span>
       <span class="note">${events.length}</span></div>
     ${events.length ? `<div class="list" style="margin-top:8px">${events.slice(0, 40).map((e) => `
       <button class="item" data-cev="${esc(e.id)}">
@@ -12596,7 +12626,7 @@ function exportDataSheet() {
     <p class="sh-sub">Choose a spreadsheet for everyday use or an exact-data archive. CSV text is made safe to open in spreadsheets; archives retain the original values. Archives are for portability, not a one-click whole-business restore.</p>
     <div class="cmpsect">
       <button class="btn primary wide" id="mgxc">Customers</button><button class="btn wide" id="mgxbusiness">Business records archive (ZIP)</button><button class="btn wide" id="mgxcat">Catalog &amp; import history archive</button><button class="btn wide" id="mgxhistory">Customer import originals &amp; recovery</button>
-      <button class="btn wide" id="mgxv" style="margin-top:8px">Vehicles (with their customers)</button>
+      ${isAuto() ? `<button class="btn wide" id="mgxv" style="margin-top:8px">Vehicles (with their customers)</button>` : ""}
       <button class="btn wide" id="mgxi" style="margin-top:8px">Invoices &amp; payments</button>
     </div>
     <p class="note" id="mgxnote"></p>`, (sh) => {
@@ -12610,7 +12640,8 @@ function exportDataSheet() {
     sh.querySelector("#mgxcat").onclick=async()=>{note.textContent="Preparing…";try{const r=await api("/catalog",{action:"export"});downloadJson("ledger-catalog-archive.json",r.archive);note.textContent="Catalog, original values and retained versions exported."}catch(e){note.textContent=e.message}};
     sh.querySelector("#mgxhistory").onclick=importHistorySheet;
     sh.querySelector("#mgxc").onclick = () => run("customers", "ledger-customers.csv");
-    sh.querySelector("#mgxv").onclick = () => run("vehicles", "ledger-vehicles.csv");
+    const xv = sh.querySelector("#mgxv");
+    if (xv) xv.onclick = () => run("vehicles", "ledger-vehicles.csv");
     sh.querySelector("#mgxi").onclick = async () => {
       note.textContent = "Preparing…";
       try {
