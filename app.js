@@ -1750,7 +1750,7 @@ function servicesEditor(initial, opts = {}) {
   const row = (s, i) => `<div class="svcrow" data-i="${i}">
       <input class="cmpinput" data-sn placeholder="Service or product" aria-label="Service or product" maxlength="200" value="${esc(String(s.name ?? ""))}">
       <input class="cmpinput" data-sp type="number" min="0" step="0.01" inputmode="decimal" placeholder="Price" aria-label="Price before tax" value="${esc(String(s.price ?? ""))}">
-      <input class="cmpinput" data-sd type="number" min="5" max="1440" step="5" inputmode="numeric" placeholder="Minutes" aria-label="Minutes it takes" value="${esc(String(s.duration_minutes ?? ""))}">
+      <input class="cmpinput" data-sd type="number" min="5" max="1440" step="5" inputmode="numeric" placeholder="Min" aria-label="Minutes it takes" value="${esc(String(s.duration_minutes ?? ""))}">
       <button type="button" class="linkbtn svcx" data-sx title="Remove" aria-label="Remove this line">&times;</button></div>`;
   const read = () => { if (box) [...box.querySelectorAll(".svcrow")].forEach((el) => {
     const s = rows[Number(el.dataset.i)]; if (!s) return;
@@ -2216,8 +2216,8 @@ function onboardingFlow(opts = {}) {
         <div class="obtoprow"><span class="obstep" id="obstep">Step 1 of ${OB_STEPS}</span><button type="button" class="linkbtn" id="oblater">Finish later</button></div>
         <p class="obunder" id="obunder" aria-live="polite" hidden></p>
       </div>
-      <div class="obbody" id="obbody"><h1 id="obtitle">${esc(OB_TITLE.about)}</h1><div id="obqs"><p class="note" role="status">Loading…</p></div><p class="note obnote" id="obnote" role="alert" hidden></p></div>
-      <div class="obfoot"><div class="obbtns"><button type="button" class="btn ghost" id="obback" hidden>Back</button><button type="button" class="btn primary" id="obnext" disabled>Continue</button></div>
+      <div class="obbody" id="obbody"><h1 id="obtitle">${esc(OB_TITLE.about)}</h1><div id="obqs"><p class="note" role="status">Loading…</p></div></div>
+      <div class="obfoot"><p class="note obnote" id="obnote" role="alert" hidden></p><div class="obbtns"><button type="button" class="btn ghost" id="obback" hidden>Back</button><button type="button" class="btn primary" id="obnext" disabled>Continue</button></div>
         <button type="button" class="linkbtn obskip" id="obskip" hidden>Skip for now</button></div>
     </div>`;
   document.body.appendChild(el);
@@ -2238,19 +2238,49 @@ function onboardingFlow(opts = {}) {
     layerPop("flow");
   }
   const pinOff = () => { try { accountStorage.removeItem(OB_KEY); } catch {} };
+  // A soft keyboard covers the bottom third of a phone. While a field has
+  // focus the body gets that much extra room, so the field can always scroll
+  // clear of the keyboard; a reveal (hourly rate, service area, deposit) is
+  // scrolled into view the same way.
+  const motion = () => matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  const coarse = matchMedia("(pointer: coarse)").matches;
+  const isField = (n) => !!n && typeof n.matches === "function" && n.matches("input:not([type=checkbox]), select, textarea");
+  q("#obbody").addEventListener("focusin", (e) => {
+    if (!coarse || !isField(e.target)) return;
+    q("#obbody").classList.add("kb");
+    requestAnimationFrame(() => { try { e.target.scrollIntoView({ block: "center", behavior: motion() }); } catch {} });
+  });
+  // The room goes away a beat after the field loses focus, not on the
+  // mousedown itself: dropping 330px mid-tap would move the chip the thumb
+  // is on before the tap completes.
+  q("#obbody").addEventListener("focusout", () => {
+    setTimeout(() => { const b = q("#obbody"); if (b && !isField(document.activeElement)) b.classList.remove("kb"); }, 300);
+  });
+  const reveal = (box) => {
+    if (!box || box.hidden) return;
+    const f = box.querySelector("input:not([type=checkbox]), select, textarea");
+    if (f) { try { f.focus({ preventScroll: true }); } catch {} }
+    try { (f || box).scrollIntoView({ block: coarse && f ? "center" : "nearest", behavior: motion() }); } catch {}
+  };
   const focusFirst = () => {
     const first = q("#obqs")?.querySelector("button.chip, input:not([type=checkbox]), select, textarea, input") || q("#obnext");
     try { first?.focus({ preventScroll: true }); } catch {}
   };
   // Every visible answer of the current screen, typed the way the server wants.
   const answersOnScreen = (section) => ({ ...F.answers, ...obValues(section, F.picked[section] || {}, F.editors[section] || {}) });
+  // Returns the boxes this call revealed, so a tap that opens a question
+  // can bring it on screen.
   const applyVisibility = (section) => {
     const vis = obVisibleQuestions(section, { ...F.answers, ...(F.picked[section] || {}) });
+    const shown = [];
     q("#obqs").querySelectorAll("[data-q]").forEach((box) => {
       const k = box.dataset.q;
       if (k === "deposit_type" || k === "deposit_value") return;
-      box.hidden = !vis.includes(k);
+      const hide = !vis.includes(k);
+      if (box.hidden && !hide) shown.push(box);
+      box.hidden = hide;
     });
+    return shown;
   };
 
   // ---- one screen ----
@@ -2290,11 +2320,12 @@ function onboardingFlow(opts = {}) {
       if (key === "business_type") { const d = root.querySelector("#ob-business_description"); if (d && !d.value) d.placeholder = F.suggestions?.descriptions?.[v] || placeholderForType(v); }
       if (key === "deposit_type") {
         const box = root.querySelector('[data-q="deposit_value"]');
+        const was = box.hidden;
         box.hidden = !(v === "percent" || v === "fixed");
         box.querySelector("[data-dephint]").textContent = v === "percent" ? "Percent of the job." : `${currency} up front.`;
-        if (!box.hidden) root.querySelector("#ob-deposit_value")?.focus({ preventScroll: true });
+        if (was && !box.hidden) reveal(box);
       }
-      applyVisibility(section);
+      applyVisibility(section).forEach((box) => reveal(box));
     });
     root.querySelectorAll("input[id^='ob-'], select[id^='ob-']").forEach((inp) => {
       const key = inp.id.slice(3);
