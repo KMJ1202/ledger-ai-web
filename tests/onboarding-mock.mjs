@@ -281,7 +281,8 @@ export function handleProfile(st, body) {
     { id: "booking", title: "Create and review your first appointment", done: false },
   ], note: "Checks show saved records, not independent verification that their details are correct.", onboarding: onboardingOut(st) }; }
   if (action === "onboarding-get") { const answers = {}; for (const [k, v] of Object.entries(st.answers)) if (v != null && !(Array.isArray(v) && !v.length)) answers[k] = v;
-    return { status: st.status, schema_version: 1, current_section: st.current_section, sections: sectionsOut(st), answers, suggestions: SUGGESTIONS, started_at: st.started_at, completed_at: st.completed_at }; }
+    // currency (ISO 4217) drives every price symbol the flow shows (round 2).
+    return { status: st.status, schema_version: 1, current_section: st.current_section, sections: sectionsOut(st), answers, suggestions: SUGGESTIONS, started_at: st.started_at, completed_at: st.completed_at, currency: st.currency_code }; }
   if (action === "onboarding-save") {
     const section = body.section; if (!KEYS[section]) throw bad("Unknown section.");
     const clean = validate(section, body.answers, st);
@@ -294,7 +295,7 @@ export function handleProfile(st, body) {
     if (st.status === "not_started" || st.status === "skipped") { st.status = "in_progress"; st.started_at = st.started_at || new Date().toISOString(); }
     const i = ORDER.indexOf(section); const next = i < ORDER.length - 1 ? ORDER[i + 1] : "confirm";
     st.current_section = next;
-    return { saved: true, section, next_section: next, understanding: body.skip && !sent ? "No problem — skipped for now. You can come back any time." : understanding(section, clean, st.answers, st.currency_symbol).slice(0, 140), sections: sectionsOut(st) };
+    return { saved: true, section, next_section: next, status: st.status, understanding: body.skip && !sent ? "No problem — skipped for now. You can come back any time." : understanding(section, clean, st.answers, st.currency_symbol).slice(0, 140), sections: sectionsOut(st) };
   }
   if (action === "onboarding-complete") {
     if (!st.answers.business_type) { const e = new Error("Pick what kind of business you run first."); e.status = 409; throw e; }

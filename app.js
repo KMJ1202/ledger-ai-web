@@ -1963,14 +1963,14 @@ const OB_Q = {
   team_size: { kind: "chips", q: "How big is the team?", opts: [["solo", "Just me"], ["small", "2–5"], ["large", "6+"]] },
   region_code: { kind: "region", q: "Where are you based?", help: "Sets your default tax until you change it." },
   timezone: { kind: "timezone", q: "Your time zone" },
-  services: { kind: "services", q: "What do you sell?", help: "Name, price before tax, minutes it takes." },
+  services: { kind: "services", q: "What do you sell or do?", help: "Name, price before tax, minutes it takes.", examples: "Tap to add · example — change it" },
   pricing_model: { kind: "chips", q: "How do you charge?", opts: [["flat", "Flat price per job"], ["hourly", "Hourly + parts"], ["mix", "A mix"]] },
-  hourly_rate: { kind: "number", q: "Your hourly rate?", when: (a) => a.pricing_model === "hourly" || a.pricing_model === "mix" },
+  hourly_rate: { kind: "number", q: "Your hourly rate?", help: "{currency} per hour, before tax.", placeholder: "0", when: (a) => a.pricing_model === "hourly" || a.pricing_model === "mix" },
   quotes_first: { kind: "chips", bool: true, q: "Do you quote before starting work?", opts: [["true", "Usually"], ["false", "Rarely"]] },
   customer_mix: { kind: "chips", q: "Who do you serve?", opts: [["individuals", "Mostly individuals"], ["businesses", "Mostly businesses"], ["both", "Both"]] },
   intake_channels: { kind: "chips", multi: true, q: "How does work come in?", help: "Pick all that apply.", opts: [["phone", "Phone"], ["text", "Text"], ["online", "Online"], ["walkin", "Walk-in"], ["email", "Email"], ["social", "Social media"], ["referral", "Referrals"]] },
   job_location: { kind: "chips", q: "Where does the work happen?", opts: [["my_place", "At my place"], ["customer_place", "At the customer's place"], ["both", "Both"], ["remote", "Remote"]] },
-  service_area: { kind: "text", q: "How far do you travel?", max: 200, when: (a) => a.job_location === "customer_place" || a.job_location === "both" },
+  service_area: { kind: "text", q: "How far do you travel?", max: 200, placeholder: "Towns or how far you go", when: (a) => a.job_location === "customer_place" || a.job_location === "both" },
   typical_job_length: { kind: "chips", q: "How long is a typical job?", opts: [["under_1h", "Under an hour"], ["1_3h", "1–3 hours"], ["half_day", "Half a day"], ["full_day", "A full day"], ["multi_day", "More than a day"]] },
   repeat_business: { kind: "chips", q: "Do customers come back?", opts: [["one_off", "Mostly one-off"], ["recurring", "Mostly recurring"], ["both", "Both"]] },
   business_hours: { kind: "hours", q: "When are you open?" },
@@ -1978,14 +1978,14 @@ const OB_Q = {
   booking_lead: { kind: "chips", q: "How soon can you take a job?", opts: [["same_day", "Same day"], ["next_day", "Next day"], ["two_plus_days", "Two or more days out"]] },
   payment_methods: { kind: "chips", multi: true, q: "How do customers pay?", help: "Pick all that apply.", opts: [["cash", "Cash"], ["card", "Card"], ["etransfer", "E-transfer"], ["cheque", "Cheque"], ["financing", "Financing"], ["online", "Online"]] },
   payment_terms_days: { kind: "chips", numeric: true, q: "When is payment due?", opts: [["0", "On the day"], ["7", "Within 7 days"], ["15", "Within 15 days"], ["30", "Within 30 days"]] },
-  deposit: { kind: "deposit", q: "Do you take a deposit?", opts: [["none", "No deposit"], ["percent", "A percentage"], ["fixed", "A fixed amount"]] },
+  deposit: { kind: "deposit", q: "Do you take a deposit?", opts: [["none", "No deposit"], ["percent", "A percentage"], ["fixed", "A fixed amount"]], sub: { q: "How much?", percent: "Percent of the job.", fixed: "{currency} up front.", placeholder: "0" } },
   team_roles: { kind: "chips", multi: true, q: "Who is on the team?", help: "Pick all that apply.", opts: [["field_crew", "Field crew"], ["front_desk", "Front desk"], ["admin", "Admin"], ["other_owners", "Other owners"]], when: (a) => a.team_size !== "solo" },
   wants_front_desk: { kind: "chips", bool: true, q: "Want Ledger to answer the texts and calls you miss?", opts: [["true", "Yes"], ["false", "Not now"]] },
   uses_quickbooks: { kind: "chips", bool: true, q: "Do you use QuickBooks?", opts: OB_BOOL },
   uses_google_calendar: { kind: "chips", bool: true, q: "Do you use Google Calendar?", opts: OB_BOOL },
   ai_tone: { kind: "chips", q: "How should Ledger sound?", opts: [["friendly", "Friendly"], ["professional", "Professional"], ["brief", "Brief"]] },
   goals: { kind: "chips", multi: true, max: 3, q: "What matters most this year?", help: "Pick up to three.", opts: [["more_bookings", "More bookings"], ["get_paid_faster", "Get paid faster"], ["fewer_missed_calls", "Fewer missed calls"], ["less_admin", "Less admin"], ["better_reviews", "Better reviews"], ["grow_team", "Grow the team"]] },
-  rules: { kind: "rules", q: "Anything Ledger must always follow?", help: "Your words, up to five. Ledger keeps them word for word." },
+  rules: { kind: "rules", q: "Anything Ledger must always follow?", help: "Your words, up to five. Ledger keeps them word for word.", placeholder: "Something Ledger should always do or say", add: "+ Add another", examples: "Examples — tap to use one, then change it." },
   autonomy: { kind: "chips", multi: true, q: "What can Ledger do on its own?", help: "Preferences only — nothing switches on today.", opts: [["reminders", "Send appointment reminders"], ["review_replies", "Reply to reviews"], ["after_hours_texts", "Text back after hours"]] },
 };
 // Screen order per section — every key the owner sees. remove_service_ids
@@ -1993,6 +1993,26 @@ const OB_Q = {
 const OB_SCREEN = Object.fromEntries(Object.entries(OB_KEYS).map(([s, keys]) => [s, keys.filter((k) => k !== "remove_service_ids")]));
 const OB_PLAN_KEY = "ledger.setupPlan.v1";
 const OB_UI = { back: null };
+// Every shared string the flow, the Home banner, the Settings panel and the
+// first-day sheet show. tests/export-onboarding-copy.mjs writes this table
+// (with OB_SECTIONS and OB_Q) to tests/onboarding-copy.v1.json, which the
+// iPhone app adopts word for word — so the words live here, once.
+const OB_COPY = {
+  skip: "Skip for now", back: "Back", continue: "Continue", saving: "Saving…", later: "Finish later", finish: "Looks right — finish",
+  confirm_step: "One last look", confirm_title: OB_TITLE.confirm,
+  note_type_first: "Pick what kind of business you run — the rest can wait.",
+  note_409: "Pick what kind of business you run first.", go_about: "Go to About",
+  note_retry: "That didn't save. Your answers are still here — try again.", retry: "Retry",
+  loading: "Loading…", summary_loading: "Putting it together…", summary_empty: "Nothing answered yet — tap Change on a section below.",
+  row_done: "Answered", row_skipped: "Skipped for now", row_todo: "Not answered yet", change: "Change",
+  banner_title: "Finish telling Ledger about your business — {done} of {total} done", banner_sub: "Pick up where you left off — your answers are saved.",
+  resume: "Resume", banner_later: "Later",
+  knows_title: "What Ledger knows", knows_empty: "Ledger doesn't know your business yet. A few short questions fix that.",
+  update: "Update answers", finish_setup: "Finish setup", set_up: "Set up Ledger",
+  plan_title: "Your first working day", plan_intro: "Picked from what you told Ledger. Tap a step to do it now — anything that needs a number, a card or a plan says so.",
+  applied_title: "Already set up from your answers", needs: "Needs: ", example: "example — change it",
+};
+const obFill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
 
 // ---- Pure helpers (unit-tested in tests/onboarding-flow.mjs) --------------
 function obVisibleQuestions(section, answers) {
@@ -2099,12 +2119,44 @@ function obSeed(section, answers) {
   }
   return p;
 }
-const obCurrencySymbol = () => { try { return money(0).replace(/[\d.,\s]/g, "") || "$"; } catch { return "$"; } };
+// The symbol in front of every price the flow shows, from onboarding-get's
+// currency (ISO 4217). Dollar currencies share "$"; anything else shows its
+// code; no code at all means "$".
+function obCurrencySymbol(code) {
+  const c = String(code || "").trim().toUpperCase();
+  if (!c || ["CAD", "USD", "AUD", "NZD"].includes(c)) return "$";
+  if (c === "GBP") return "£";
+  if (c === "EUR") return "€";
+  return c + " ";
+}
+// onboarding-save's status wins when the function sends one; an older
+// function without it means "part-way" unless the run was already complete.
+function obStatusAfterSave(prev, r) {
+  const s = r?.status;
+  if (s === "in_progress" || s === "complete") return s;
+  return prev === "complete" ? "complete" : "in_progress";
+}
+// Home's generic checklist, step 1: until onboarding is complete "Start"
+// opens the flow (at the section in progress), not the profile sheet.
+// null → the sheet, as before. No onboarding object → the sheet (an older function).
+function obChecklistSection(ob) {
+  const st = ob?.status;
+  if (st === "in_progress") return OB_ORDER.includes(ob.current_section) ? ob.current_section : "about";
+  if (st === "not_started") return "about";
+  return null;
+}
+// What onboarding-complete applied on the spot, shown once in the
+// first-day sheet. Nothing applied → nothing rendered.
+function obAppliedHtml(applied) {
+  const lines = (Array.isArray(applied) ? applied : []).map((l) => String(l || "").trim()).filter(Boolean);
+  if (!lines.length) return "";
+  return `<div class="cmpsect obapplied"><b>${esc(OB_COPY.applied_title)}</b><ul class="note" style="margin:6px 0 0;padding-left:18px">${lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul></div>`;
+}
 const obDeviceZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; } };
 // Progress copy. The confirm screen is not a step (CONTRACT §2).
 function obStepLabel(section) {
   const i = OB_ORDER.indexOf(section);
-  return section === "confirm" ? "One last look" : `Step ${i + 1} of ${OB_STEPS}`;
+  return section === "confirm" ? OB_COPY.confirm_step : `Step ${i + 1} of ${OB_STEPS}`;
 }
 function obProgressPct(section) {
   const i = OB_ORDER.indexOf(section);
@@ -2126,18 +2178,18 @@ function obQuestionHtml(key, ctx) {
     case "text": {
       const type = ctx.answers?.business_type;
       const ph = key === "business_description" ? (ctx.suggestions?.descriptions?.[type] || placeholderForType(type))
-        : key === "service_area" ? "Towns or how far you go" : "";
+        : q.placeholder || "";
       return wrap(`${lab}${help}<input id="${id}" class="cmpinput" maxlength="${q.max || 240}" value="${esc(picked[key] ?? "")}" placeholder="${esc(ph)}" autocomplete="off">`);
     }
     case "number":
-      return wrap(`${lab}<p class="note qhelp">${esc(ctx.currency)} per hour, before tax.</p><input id="${id}" class="cmpinput" type="number" min="0" step="1" inputmode="decimal" value="${esc(picked[key] ?? "")}" placeholder="0">`);
+      return wrap(`${lab}<p class="note qhelp">${esc(obFill(q.help, { currency: ctx.currency }))}</p><input id="${id}" class="cmpinput" type="number" min="0" step="1" inputmode="decimal" value="${esc(picked[key] ?? "")}" placeholder="${esc(q.placeholder || "")}">`);
     case "region": return wrap(`${lab}${help}${regionSelect(id, picked[key] || "")}`);
     case "timezone": return wrap(`${lab}${help}${timezoneSelect(id, picked[key] || ctx.timezone || "")}`);
     case "services": {
       const type = ctx.answers?.business_type;
       const ex = (ctx.suggestions?.services?.[type] || []).slice(0, 8);
-      const chips = ex.length ? `<div class="obex"><p class="note" id="q-services-ex">Tap to add · example — change it</p>
-          <div class="chips" role="group" aria-labelledby="q-services-ex">${ex.map((s, i) => `<button type="button" class="chip" data-ex="${i}" aria-pressed="false" title="example — change it">${esc(s.name)}${s.price != null ? ` · ${esc(ctx.currency)}${esc(String(s.price))}` : ""}</button>`).join("")}</div></div>` : "";
+      const chips = ex.length ? `<div class="obex"><p class="note" id="q-services-ex">${esc(q.examples)}</p>
+          <div class="chips" role="group" aria-labelledby="q-services-ex">${ex.map((s, i) => `<button type="button" class="chip" data-ex="${i}" aria-pressed="false" title="${esc(OB_COPY.example)}">${esc(s.name)}${s.price != null ? ` · ${esc(ctx.currency)}${esc(String(s.price))}` : ""}</button>`).join("")}</div></div>` : "";
       return wrap(`<label class="fld" id="q-services">${esc(q.q)}</label>${help}${chips}<div data-svced role="group" aria-labelledby="q-services">${ctx.editors.services.html()}</div>`);
     }
     case "hours":
@@ -2146,30 +2198,31 @@ function obQuestionHtml(key, ctx) {
       const t = picked.deposit_type;
       const askValue = t === "percent" || t === "fixed";
       return chipsField("deposit_type", { q: q.q, opts: q.opts }, picked)
-        + `<div class="cmpsect" data-q="deposit_value" ${askValue ? "" : "hidden"}><label class="fld" for="ob-deposit_value">How much?</label>
-          <p class="note qhelp" data-dephint>${t === "percent" ? "Percent of the job." : `${esc(ctx.currency)} up front.`}</p>
-          <input id="ob-deposit_value" class="cmpinput" type="number" min="0" step="1" inputmode="decimal" value="${esc(picked.deposit_value ?? "")}" placeholder="0"></div>`;
+        + `<div class="cmpsect" data-q="deposit_value" ${askValue ? "" : "hidden"}><label class="fld" for="ob-deposit_value">${esc(q.sub.q)}</label>
+          <p class="note qhelp" data-dephint>${esc(obDepositHint(t, ctx.currency))}</p>
+          <input id="ob-deposit_value" class="cmpinput" type="number" min="0" step="1" inputmode="decimal" value="${esc(picked.deposit_value ?? "")}" placeholder="${esc(q.sub.placeholder)}"></div>`;
     }
     case "rules": {
       const type = ctx.answers?.business_type;
       const ex = (ctx.suggestions?.rules?.[type] || []).slice(0, 3);
       const rules = Array.isArray(picked.rules) && picked.rules.length ? picked.rules : [""];
-      const chips = ex.length ? `<div class="obex"><p class="note" id="q-rules-ex">Examples — tap to use one, then change it.</p>
+      const chips = ex.length ? `<div class="obex"><p class="note" id="q-rules-ex">${esc(q.examples)}</p>
           <div class="chips" role="group" aria-labelledby="q-rules-ex">${ex.map((r, i) => `<button type="button" class="chip" data-rex="${i}" aria-pressed="false">${esc(r)}</button>`).join("")}</div></div>` : "";
       return wrap(`<label class="fld" id="q-rules">${esc(q.q)}</label>${help}${chips}<div data-rulesbox role="group" aria-labelledby="q-rules">${rules.map((r, i) => obRuleRow(r, i)).join("")}</div>
-        <button type="button" class="linkbtn" data-ruleadd style="margin-top:8px" ${rules.length >= 5 ? "hidden" : ""}>+ Add another</button>`);
+        <button type="button" class="linkbtn" data-ruleadd style="margin-top:8px" ${rules.length >= 5 ? "hidden" : ""}>${esc(q.add)}</button>`);
     }
     default: return "";
   }
 }
-const obRuleRow = (r, i) => `<input class="cmpinput" data-rule="${i}" maxlength="160" aria-label="Rule ${i + 1}" value="${esc(r)}" placeholder="Something Ledger should always do or say" autocomplete="off" style="margin-top:${i ? 6 : 0}px">`;
+const obRuleRow = (r, i) => `<input class="cmpinput" data-rule="${i}" maxlength="160" aria-label="Rule ${i + 1}" value="${esc(r)}" placeholder="${esc(OB_Q.rules.placeholder)}" autocomplete="off" style="margin-top:${i ? 6 : 0}px">`;
+const obDepositHint = (type, currency) => type === "percent" ? OB_Q.deposit.sub.percent : obFill(OB_Q.deposit.sub.fixed, { currency });
 // The confirm screen: the brief, one row per section with a Change link.
 function obConfirmHtml(summary, sections) {
   const brief = obBriefHtml(summary?.brief);
   const rows = (sections || OB_SECTIONS.slice(0, 7).map(([id, title]) => ({ id, title }))).filter((s) => s.id !== "confirm").map((s) =>
-    `<div class="obrow"><span class="m"><b>${esc(OB_TITLE[s.id] || s.title)}</b><small>${s.done ? "Answered" : s.skipped ? "Skipped for now" : "Not answered yet"}</small></span>
-      <button type="button" class="linkbtn" data-change="${esc(s.id)}" aria-label="Change ${esc(OB_TITLE[s.id] || s.title)}">Change</button></div>`).join("");
-  return `<div class="obbrief">${brief || `<p class="note">Nothing answered yet — tap Change on a section below.</p>`}</div>
+    `<div class="obrow"><span class="m"><b>${esc(OB_TITLE[s.id] || s.title)}</b><small>${esc(s.done ? OB_COPY.row_done : s.skipped ? OB_COPY.row_skipped : OB_COPY.row_todo)}</small></span>
+      <button type="button" class="linkbtn" data-change="${esc(s.id)}" aria-label="${esc(OB_COPY.change)} ${esc(OB_TITLE[s.id] || s.title)}">${esc(OB_COPY.change)}</button></div>`).join("");
+  return `<div class="obbrief">${brief || `<p class="note">${esc(OB_COPY.summary_empty)}</p>`}</div>
     <div class="obrows">${rows}</div>`;
 }
 // The home card's tailored plan (CONTRACT §6). Buttons carry the action id;
@@ -2187,7 +2240,7 @@ function obPlanHtml(plan) {
       <div class="lanehead" style="margin-top:0"><span class="eyebrow">&#9889; Your next steps</span><button class="pill" id="setuphide" title="Hide">Hide</button></div>
       ${items.map((it, i) => `<div class="setupstep${it.done ? " done" : ""}">
         <span class="num">${it.done ? "&#10003;" : i + 1}</span>
-        <span class="m"><b>${esc(it.title || "")}</b>${it.detail ? `<small>${esc(it.detail)}</small>` : ""}${it.needs ? `<small class="obneeds">Needs: ${esc(it.needs)}</small>` : ""}</span>
+        <span class="m"><b>${esc(it.title || "")}</b>${it.detail ? `<small>${esc(it.detail)}</small>` : ""}${it.needs ? `<small class="obneeds">${esc(OB_COPY.needs)}${esc(it.needs)}</small>` : ""}</span>
         ${!it.done && OB_PLAN_LABEL[it.action] ? `<button class="btn ${it === open[0] ? "primary" : "ghost"}" data-plan="${esc(it.action)}" aria-label="${esc(OB_PLAN_LABEL[it.action])}: ${esc(it.title || "")}">${esc(OB_PLAN_LABEL[it.action])}</button>` : ""}</div>`).join("")}
     </div>`;
 }
@@ -2207,18 +2260,18 @@ function onboardingFlow(opts = {}) {
   }
   const F = { opts, get: null, answers: {}, picked: {}, touched: {}, editors: {}, section: null, status: "not_started", suggestions: {}, sections: null, saving: false, summary: null };
   const bizName = opts.bizName || S.profile?.business?.name || S.profile?.name || "";
-  const currency = obCurrencySymbol();
+  let currency = obCurrencySymbol(null);
   const el = document.createElement("div");
   el.id = "obflow"; el.className = "obflow"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-labelledby", "obtitle");
   el.innerHTML = `<div class="obcol">
       <div class="obtop">
         <div class="obprog" role="progressbar" aria-label="Setup progress" aria-valuemin="0" aria-valuemax="${OB_STEPS}" aria-valuenow="0"><i style="width:0%"></i></div>
-        <div class="obtoprow"><span class="obstep" id="obstep">Step 1 of ${OB_STEPS}</span><button type="button" class="linkbtn" id="oblater">Finish later</button></div>
+        <div class="obtoprow"><span class="obstep" id="obstep">Step 1 of ${OB_STEPS}</span><button type="button" class="linkbtn" id="oblater">${esc(OB_COPY.later)}</button></div>
         <p class="obunder" id="obunder" aria-live="polite" hidden></p>
       </div>
-      <div class="obbody" id="obbody"><h1 id="obtitle">${esc(OB_TITLE.about)}</h1><div id="obqs"><p class="note" role="status">Loading…</p></div></div>
-      <div class="obfoot"><p class="note obnote" id="obnote" role="alert" hidden></p><div class="obbtns"><button type="button" class="btn ghost" id="obback" hidden>Back</button><button type="button" class="btn primary" id="obnext" disabled>Continue</button></div>
-        <button type="button" class="linkbtn obskip" id="obskip" hidden>Skip for now</button></div>
+      <div class="obbody" id="obbody"><h1 id="obtitle">${esc(OB_TITLE.about)}</h1><div id="obqs"><p class="note" role="status">${esc(OB_COPY.loading)}</p></div></div>
+      <div class="obfoot"><p class="note obnote" id="obnote" role="alert" hidden></p><div class="obbtns"><button type="button" class="btn ghost" id="obback" hidden>${esc(OB_COPY.back)}</button><button type="button" class="btn primary" id="obnext" disabled>${esc(OB_COPY.continue)}</button></div>
+        <button type="button" class="linkbtn obskip" id="obskip" hidden>${esc(OB_COPY.skip)}</button></div>
     </div>`;
   document.body.appendChild(el);
   layerPush("flow");
@@ -2228,7 +2281,7 @@ function onboardingFlow(opts = {}) {
     if (msg && retry) { const b = document.createElement("button"); b.type = "button"; b.className = "linkbtn"; b.style.marginLeft = "8px"; b.textContent = retry.label; b.onclick = retry.run; n.appendChild(b); }
   };
   const busy = (on, label) => {
-    const btn = q("#obnext"); btn.disabled = on; btn.textContent = on ? "Saving…" : label;
+    const btn = q("#obnext"); btn.disabled = on; btn.textContent = on ? OB_COPY.saving : label;
     q("#obskip").disabled = on; q("#obback").disabled = on; q("#oblater").disabled = on;
   };
   function close() {
@@ -2296,7 +2349,7 @@ function onboardingFlow(opts = {}) {
     note("");
     q("#obback").hidden = i === 0;
     q("#obskip").hidden = !obCanSkip(section);
-    busy(false, section === "confirm" ? "Looks right — finish" : "Continue");
+    busy(false, section === "confirm" ? OB_COPY.finish : OB_COPY.continue);
     OB_UI.back = () => { layerPush("flow"); if (i === 0) later(); else show(obPrevSection(section)); };
     q("#obbody").scrollTop = 0;
     if (section === "confirm") { showConfirm(); return; }
@@ -2322,7 +2375,7 @@ function onboardingFlow(opts = {}) {
         const box = root.querySelector('[data-q="deposit_value"]');
         const was = box.hidden;
         box.hidden = !(v === "percent" || v === "fixed");
-        box.querySelector("[data-dephint]").textContent = v === "percent" ? "Percent of the job." : `${currency} up front.`;
+        box.querySelector("[data-dephint]").textContent = obDepositHint(v, currency);
         if (was && !box.hidden) reveal(box);
       }
       applyVisibility(section).forEach((box) => reveal(box));
@@ -2375,7 +2428,7 @@ function onboardingFlow(opts = {}) {
     if (F.saving) return;
     if (section === "confirm") { finish(); return; }
     const picked = F.picked[section] || {};
-    if (section === "about" && !picked.business_type) { note("Pick what kind of business you run — the rest can wait."); q('[data-q="business_type"] .chip')?.focus(); return; }
+    if (section === "about" && !picked.business_type) { note(OB_COPY.note_type_first); q('[data-q="business_type"] .chip')?.focus(); return; }
     const values = obValues(section, picked, F.editors[section] || {});
     const visible = obVisibleQuestions(section, { ...F.answers, ...picked });
     const answers = obPayload(section, values, F.answers, F.touched[section], visible);
@@ -2393,7 +2446,7 @@ function onboardingFlow(opts = {}) {
       F.saving = false;
       for (const [k, v] of Object.entries(answers)) { if (v === null) delete F.answers[k]; else if (k !== "remove_service_ids") F.answers[k] = v; }
       if (r.sections) F.sections = r.sections;
-      if (F.status !== "complete") F.status = "in_progress";
+      F.status = obStatusAfterSave(F.status, r);
       if (!skipping) F.editors[section]?.services?.sync?.();
       if (!skipping) F.editors[section]?.hours?.sync?.();
       // Services come back with ids; re-seed the editor so a second Continue
@@ -2404,8 +2457,8 @@ function onboardingFlow(opts = {}) {
       show(nextSection, { under: skipping ? "" : String(r.understanding || "").trim() });
       if (wasFirst) refreshBanner();
     } catch (e) {
-      F.saving = false; busy(false, "Continue");
-      note(friendlyError(e, "That didn't save. Your answers are still here — try again."), { label: "Retry", run: () => save(section, answers, skipping) });
+      F.saving = false; busy(false, OB_COPY.continue);
+      note(friendlyError(e, OB_COPY.note_retry), { label: OB_COPY.retry, run: () => save(section, answers, skipping) });
     }
   }
   async function refreshServices() {
@@ -2423,19 +2476,19 @@ function onboardingFlow(opts = {}) {
 
   // ---- confirm & finish ----
   async function showConfirm() {
-    q("#obqs").innerHTML = `<p class="note" role="status">Putting it together…</p>`;
+    q("#obqs").innerHTML = `<p class="note" role="status">${esc(OB_COPY.summary_loading)}</p>`;
     q("#obnext").disabled = true;
     try {
       F.summary = await api("/workspace-profile", { action: "onboarding-summary" });
       if (F.section !== "confirm") return;
       q("#obqs").innerHTML = obConfirmHtml(F.summary, F.sections);
       q("#obqs").querySelectorAll("[data-change]").forEach((b) => b.onclick = () => show(b.dataset.change));
-      busy(false, "Looks right — finish");
+      busy(false, OB_COPY.finish);
       requestAnimationFrame(focusFirst);
     } catch (e) {
       if (F.section !== "confirm") return;
       q("#obqs").innerHTML = "";
-      note(friendlyError(e, "Couldn't load your summary."), { label: "Retry", run: showConfirm });
+      note(friendlyError(e, "Couldn't load your summary."), { label: OB_COPY.retry, run: showConfirm });
     }
   }
   async function finish() {
@@ -2444,9 +2497,9 @@ function onboardingFlow(opts = {}) {
     let r;
     try { r = await api("/workspace-profile", { action: "onboarding-complete" }); }
     catch (e) {
-      F.saving = false; busy(false, "Looks right — finish");
-      if (e.status === 409) { note(e.data?.error || "Pick what kind of business you run first.", { label: "Go to About", run: () => show("about") }); return; }
-      note(friendlyError(e, "Couldn't finish. Nothing was lost — try again."), { label: "Retry", run: finish });
+      F.saving = false; busy(false, OB_COPY.finish);
+      if (e.status === 409) { note(e.data?.error || OB_COPY.note_409, { label: OB_COPY.go_about, run: () => show("about") }); return; }
+      note(friendlyError(e, "Couldn't finish. Nothing was lost — try again."), { label: OB_COPY.retry, run: finish });
       return;
     }
     F.saving = false; F.status = "complete";
@@ -2467,7 +2520,7 @@ function onboardingFlow(opts = {}) {
     if (opts.firstRun) {
       openChat();
       sys(obFinishLine(r, bizName));
-      firstWorkingDaySheet();
+      firstWorkingDaySheet({ applied: r.applied });
     } else {
       toast("Ledger knows your business now.");
       if (opts.onDone) opts.onDone(r);
@@ -2505,9 +2558,10 @@ function onboardingFlow(opts = {}) {
       F.get = await api("/workspace-profile", { action: "onboarding-get" });
     } catch (e) {
       q("#obqs").innerHTML = "";
-      note(friendlyError(e, "Couldn't load your setup."), { label: "Retry", run: () => { close(); onboardingFlow(opts); } });
+      note(friendlyError(e, "Couldn't load your setup."), { label: OB_COPY.retry, run: () => { close(); onboardingFlow(opts); } });
       return;
     }
+    currency = obCurrencySymbol(F.get.currency);
     F.answers = { ...(F.get.answers || {}) };
     F.status = F.get.status || "not_started";
     F.suggestions = F.get.suggestions || {};
@@ -2593,11 +2647,11 @@ async function whatLedgerKnows(slot) {
     const ob = S.profile?.onboarding || {};
     const partWay = ob.status === "in_progress" || (ob.status === "skipped" && Number(ob.done_count) > 0);
     const brief = r ? obBriefHtml(r.brief) : "";
-    slot.innerHTML = `${err ? `<p class="note">${esc(err)}</p>` : brief ? `<div class="obbrief">${brief}</div>` : `<p class="note">Ledger doesn't know your business yet. A few short questions fix that.</p>`}
+    slot.innerHTML = `${err ? `<p class="note">${esc(err)}</p>` : brief ? `<div class="obbrief">${brief}</div>` : `<p class="note">${esc(OB_COPY.knows_empty)}</p>`}
       <div class="rowbtns" style="margin-top:10px">
-        ${partWay ? `<button class="btn primary" id="knowfinish">Finish setup</button>` : ""}
-        <button class="btn ghost" id="knowupdate">${brief ? "Update answers" : "Tell Ledger about your business"}</button>
-        ${err ? `<button class="btn ghost" id="knowretry">Retry</button>` : ""}
+        ${partWay ? `<button class="btn primary" id="knowfinish">${esc(OB_COPY.finish_setup)}</button>` : ""}
+        <button class="btn ghost" id="knowupdate">${esc(brief ? OB_COPY.update : OB_COPY.set_up)}</button>
+        ${err ? `<button class="btn ghost" id="knowretry">${esc(OB_COPY.retry)}</button>` : ""}
       </div>`;
     slot.querySelector("#knowupdate").onclick = () => onboardingFlow({ section: "about", onDone: back });
     const fin = slot.querySelector("#knowfinish"); if (fin) fin.onclick = () => onboardingFlow({ section: ob.current_section, onDone: back });
@@ -2634,11 +2688,11 @@ function drawBusinessTypeBanner() {
   if (partWay) {
     slot.innerHTML = `<div class="hbanner" id="biztypebanner" style="margin-bottom:10px;flex-wrap:wrap">
       <span class="ic">&#9889;</span>
-      <span class="m" style="flex:1 1 200px;min-width:min(100%,200px)"><b>Finish telling Ledger about your business — ${Number(ob.done_count) || 0} of ${Number(ob.total) || OB_STEPS} done</b>
-        <small style="white-space:normal;line-height:1.35;margin-top:2px">Pick up where you left off — your answers are saved.</small></span>
+      <span class="m" style="flex:1 1 200px;min-width:min(100%,200px)"><b>${esc(obFill(OB_COPY.banner_title, { done: Number(ob.done_count) || 0, total: Number(ob.total) || OB_STEPS }))}</b>
+        <small style="white-space:normal;line-height:1.35;margin-top:2px">${esc(OB_COPY.banner_sub)}</small></span>
       <span style="display:flex;gap:8px;flex:0 0 auto;margin-left:auto">
-        <button class="retry" id="biztypego">Resume</button>
-        <button class="retry" id="biztypehide" aria-label="Hide this for now">Later</button>
+        <button class="retry" id="biztypego">${esc(OB_COPY.resume)}</button>
+        <button class="retry" id="biztypehide" aria-label="Hide this for now">${esc(OB_COPY.banner_later)}</button>
       </span>
     </div>`;
     slot.querySelector("#biztypego").onclick = () => onboardingFlow({ section: ob.current_section, onDone: () => { drawBusinessTypeBanner(); loadHomeSetup(); } });
@@ -2738,7 +2792,12 @@ async function loadHomeSetup() {
     </div>`;
     wireConnect(slot);
     const shopBtn = slot.querySelector("#setupshop");
-    if (shopBtn) shopBtn.onclick = () => shopProfileSheet(() => { S.cal = null; setTab("home"); });
+    // Until onboarding is complete, Start opens the flow (2026-09-19); the profile sheet after that, as before.
+    if (shopBtn) shopBtn.onclick = () => {
+      const home = () => { S.cal = null; setTab("home"); };
+      const section = obChecklistSection(S.profile?.onboarding);
+      if (section) onboardingFlow({ section, onDone: () => { home(); drawBusinessTypeBanner(); } }); else shopProfileSheet(home);
+    };
     const native = slot.querySelector("#setupnative");
     if (native) native.onclick = async () => {
       native.disabled = true;
@@ -11690,7 +11749,7 @@ async function businessSheet() {
       ${row("bzimport", "&#128229;", "Bring your data", isAuto() ? "Preview supported customer and vehicle tables before importing" : "Preview supported customer tables before importing")}
       ${row("bzexport", "&#128228;", "Export your data", "Download your records, original imports and available history")}
     </div>
-    <div class="eyebrow" style="margin-top:20px">WHAT LEDGER KNOWS</div>
+    <div class="eyebrow" style="margin-top:20px">${esc(OB_COPY.knows_title)}</div>
     <div class="panel obknows" id="knowslot" style="margin-top:8px"><p class="note" role="status">Loading…</p></div>
     <div class="eyebrow" style="margin-top:20px">PROFILE</div>
     <label class="fld">BUSINESS NAME</label><input id="bn" value="${esc(b.name || "")}">
@@ -13669,16 +13728,17 @@ function phoneGuidedDemo(){
  sheet(`<h2>Phone walkthrough</h2><p class="eyebrow">SCRIPTED SAMPLE · NO LIVE ACTIVITY</p><div id="pdcontent" aria-live="polite"></div>`,paint);
 }
 
-function firstWorkingDaySheet(){
+function firstWorkingDaySheet(opts={}){
  // A finished onboarding brings a tailored plan (2026-09-19): those steps show here instead of the generic readiness list.
+ // opts.applied (from onboarding-complete) is what the server set up on the spot — shown here once, never on Home.
  const plan=Array.isArray(S.setupPlan)&&S.setupPlan.length?S.setupPlan:null;
- const intro=plan?"Picked from what you told Ledger. Tap a step to do it now — anything that needs a number, a card or a plan says so.":"Start with a small representative import. Check saved contacts, prices, taxes and availability, then create one invoice and appointment. Try the phone sample and review the business-fit guide before subscribing.";
- sheet(`<h2>Your first working day</h2><p class="note">${esc(intro)}</p><div id="first-steps">Checking saved setup…</div><p><a href="/business-fit.html" target="_blank" rel="noopener">Business-fit guide</a></p>`,async sh=>{
+ const intro=plan?OB_COPY.plan_intro:"Start with a small representative import. Check saved contacts, prices, taxes and availability, then create one invoice and appointment. Try the phone sample and review the business-fit guide before subscribing.";
+ sheet(`<h2>${esc(OB_COPY.plan_title)}</h2><p class="note">${esc(intro)}</p>${obAppliedHtml(opts&&opts.applied)}<div id="first-steps">Checking saved setup…</div><p><a href="/business-fit.html" target="_blank" rel="noopener">Business-fit guide</a></p>`,async sh=>{
  const slot=sh.querySelector("#first-steps");try{const r=await api("/workspace-profile",{action:"readiness"});
- const planRow=(it)=>`${it.done ? "✓" : "○"} ${esc(it.title)}${it.detail?`<small style="display:block;font-weight:500;opacity:.8;margin-top:2px">${esc(it.detail)}</small>`:""}${it.needs?`<small style="display:block;font-weight:500;opacity:.65;margin-top:2px">Needs: ${esc(it.needs)}</small>`:""}`;
+ const planRow=(it)=>`${it.done ? "✓" : "○"} ${esc(it.title)}${it.detail?`<small style="display:block;font-weight:500;opacity:.8;margin-top:2px">${esc(it.detail)}</small>`:""}${it.needs?`<small style="display:block;font-weight:500;opacity:.65;margin-top:2px">${esc(OB_COPY.needs)}${esc(it.needs)}</small>`:""}`;
  const planRows=plan?plan.map(it=>OB_PLAN_ACTIONS[it.action]&&!it.done?`<button class="btn wide" data-plan="${esc(it.action)}" style="margin:7px 0;text-align:left">${planRow(it)}</button>`:`<div class="note" style="margin:7px 0;color:var(--text)">${planRow(it)}</div>`).join(""):"";
  slot.innerHTML=(plan?planRows:r.steps.map(s=>`<button class="btn wide" data-first="${s.id}" style="margin:7px 0;text-align:left">${s.done ? "✓" : "○"} ${esc(s.title)}</button>`).join("")+`<p class="note">${esc(r.note)}</p>`)+`<button class="btn wide" id="first-staff">Staff, resource capacity &amp; time off</button><button class="btn wide" id="first-demo">Try the phone walkthrough</button>`;
  const actions={profile:()=>shopProfileSheet(),customers:bringDataSheet,services:()=>catalogImportSheet("services"),tax:()=>booksSettingsSheet(),invoice:()=>r.provider === "native" ? nativeComposerSheet() : composerSheet("invoice"),booking:()=>bookingSheet()};
  if(plan)slot.querySelectorAll("[data-plan]").forEach(btn=>btn.onclick=()=>void OB_PLAN_ACTIONS[btn.dataset.plan]());else slot.querySelectorAll("[data-first]").forEach(btn=>btn.onclick=()=>actions[btn.dataset.first]());slot.querySelector("#first-staff").onclick=schedulingResourcesSheet;slot.querySelector("#first-demo").onclick=phoneGuidedDemo;
- }catch(e){slot.textContent=e.message;const retry=document.createElement("button");retry.className="btn";retry.textContent="Retry";retry.onclick=firstWorkingDaySheet;slot.append(retry);}});
+ }catch(e){slot.textContent=e.message;const retry=document.createElement("button");retry.className="btn";retry.textContent="Retry";retry.onclick=()=>firstWorkingDaySheet(opts);slot.append(retry);}});
 }

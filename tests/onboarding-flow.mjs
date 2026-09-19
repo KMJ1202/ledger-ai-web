@@ -49,12 +49,13 @@ test("about cannot be skipped; confirm has no skip; every other section can", ()
   assert.equal(g('obCanSkip("confirm")'), false);
   for (const id of ["offer", "customers", "week", "money", "team", "ledger"]) assert.equal(g(`obCanSkip("${id}")`), true, id);
   assert.equal(g('obCanSkip("nope")'), false);
-  // The flow's DOM half honours the same helper and the only skip wording is "Skip for now".
+  // The flow's DOM half honours the same helper and the only skip wording is OB_COPY.skip, "Skip for now".
   const dom = slice("// ---- Onboarding flow (pure end)", "// ---- Onboarding flow (end)");
   assert.match(dom, /q\("#obskip"\)\.hidden = !obCanSkip\(section\)/);
   assert.match(dom, /if \(F\.saving \|\| !obCanSkip\(F\.section\)\) return;/);
-  for (const m of dom.matchAll(/>([^<>\n]*Skip[^<>\n]*)</g)) assert.equal(m[1].trim(), "Skip for now", m[1]);
-  assert.match(dom, /id="obskip" hidden>Skip for now</);
+  assert.equal(g("OB_COPY.skip"), "Skip for now");
+  assert.doesNotMatch(dom, />[^<>\n]*Skip[^<>\n]*</, "no literal skip wording outside OB_COPY");
+  assert.match(dom, /id="obskip" hidden>\$\{esc\(OB_COPY\.skip\)\}</);
 });
 
 test("conditional questions appear and disappear", () => {
@@ -159,6 +160,60 @@ test("suggestions are examples labelled 'example — change it'; placeholder com
   // Every chip is a button with aria-pressed.
   const chipsHtml = vm.runInContext(`obQuestionHtml("business_type", CTXQ)`, ctx);
   assert.equal((chipsHtml.match(/<button /g) || []).length, (chipsHtml.match(/aria-pressed=/g) || []).length);
+});
+
+test("price symbol follows onboarding-get's currency (round 2)", () => {
+  for (const c of [undefined, null, "", "CAD", "USD", "AUD", "NZD", "cad"]) assert.equal(g(`obCurrencySymbol(${JSON.stringify(c ?? null)})`), "$", String(c));
+  assert.equal(g('obCurrencySymbol("GBP")'), "£");
+  assert.equal(g('obCurrencySymbol("EUR")'), "€");
+  assert.equal(g('obCurrencySymbol("MXN")'), "MXN ");
+  assert.equal(g('obCurrencySymbol("JPY")'), "JPY ");
+  // The flow reads it from the get, after load, and the deposit hint carries it.
+  const dom = slice("// ---- Onboarding flow (pure end)", "// ---- Onboarding flow (end)");
+  assert.match(dom, /let currency = obCurrencySymbol\(null\);/);
+  assert.match(dom, /currency = obCurrencySymbol\(F\.get\.currency\);/);
+  assert.equal(g('obDepositHint("fixed", "£")'), "£ up front.");
+  assert.equal(g('obDepositHint("percent", "£")'), "Percent of the job.");
+  const html = vm.runInContext(`obQuestionHtml("hourly_rate", { picked: {}, answers: {}, editors: {}, suggestions: {}, currency: "EUR " })`, ctx);
+  assert.match(html, /EUR  per hour, before tax\./);
+});
+
+test("onboarding-save's status wins; an older function without it means part-way (round 2)", () => {
+  assert.equal(g('obStatusAfterSave("not_started", { status: "in_progress" })'), "in_progress");
+  assert.equal(g('obStatusAfterSave("in_progress", { status: "complete" })'), "complete");
+  assert.equal(g('obStatusAfterSave("not_started", { saved: true })'), "in_progress");
+  assert.equal(g('obStatusAfterSave("complete", {})'), "complete");
+  assert.equal(g('obStatusAfterSave("skipped", { status: "bogus" })'), "in_progress");
+  assert.equal(g('obStatusAfterSave("in_progress", null)'), "in_progress");
+  const dom = slice("// ---- Onboarding flow (pure end)", "// ---- Onboarding flow (end)");
+  assert.match(dom, /F\.status = obStatusAfterSave\(F\.status, r\);/);
+});
+
+test("Home checklist step 1 opens the flow until onboarding is complete (round 2, Q1)", () => {
+  assert.equal(g('obChecklistSection({ status: "not_started" })'), "about");
+  assert.equal(g('obChecklistSection({ status: "in_progress", current_section: "money" })'), "money");
+  assert.equal(g('obChecklistSection({ status: "in_progress", current_section: "nope" })'), "about");
+  assert.equal(g('obChecklistSection({ status: "in_progress" })'), "about");
+  assert.equal(g('obChecklistSection({ status: "skipped", current_section: "team" })'), null, "skipped → the profile sheet, as before");
+  assert.equal(g('obChecklistSection({ status: "complete" })'), null);
+  assert.equal(g('obChecklistSection(null)'), null); assert.equal(g('obChecklistSection({})'), null);
+  // The handler itself: flow when a section comes back, the sheet otherwise; the rest of the checklist is untouched.
+  const home = slice("async function loadHomeSetup()", "\n}\n");
+  assert.match(home, /const section = obChecklistSection\(S\.profile\?\.onboarding\);\s*if \(section\) onboardingFlow\(\{ section, onDone: \(\) => \{ home\(\); drawBusinessTypeBanner\(\); \} \}\); else shopProfileSheet\(home\);/);
+  assert.match(home, /const home = \(\) => \{ S\.cal = null; setTab\("home"\); \};/, "the sheet's onDone is what it was");
+});
+
+test("what onboarding-complete applied shows once, in the first-day sheet (round 2, Q3)", () => {
+  assert.equal(g("obAppliedHtml([])"), ""); assert.equal(g("obAppliedHtml(null)"), ""); assert.equal(g('obAppliedHtml(["", "  "])'), "");
+  const html = vm.runInContext(`obAppliedHtml(["Tax set to GST 5% for Alberta", "Payment terms: due on receipt", "<b>x</b>"])`, ctx);
+  assert.match(html, /<b>Already set up from your answers<\/b>/);
+  assert.equal((html.match(/<li>/g) || []).length, 3);
+  assert.match(html, /<li>Tax set to GST 5% for Alberta<\/li><li>Payment terms: due on receipt<\/li><li>&lt;b&gt;x&lt;\/b&gt;<\/li>/);
+  const day = slice("function firstWorkingDaySheet(", "\n}\n");
+  assert.match(day, /\$\{obAppliedHtml\(opts&&opts\.applied\)\}/);
+  const dom = slice("// ---- Onboarding flow (pure end)", "// ---- Onboarding flow (end)");
+  assert.match(dom, /firstWorkingDaySheet\(\{ applied: r\.applied \}\);/);
+  assert.doesNotMatch(slice("async function loadHomeSetup()", "\n}\n"), /applied/, "never on Home");
 });
 
 console.log(`${passed} passed`);

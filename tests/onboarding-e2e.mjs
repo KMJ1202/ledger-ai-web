@@ -186,12 +186,14 @@ async function walk(browser, name, vp, mock) {
   ok(m.underVisible, `${label("offer")}: understanding line visible after Continue ("${m.underText}")`);
   ok(await page.$eval('[data-q="hourly_rate"]', (n) => n.hidden), `${label("offer")}: hourly rate hidden before pricing picked`);
   ok(await page.$eval(".obex .chip", (c) => c.title === "example — change it" && c.getAttribute("aria-pressed") === "false"), `${label("offer")}: suggestion chips are examples`);
+  ok(await page.$eval('[data-q="services"] label', (n) => n.textContent.trim() === "What do you sell or do?"), `${label("offer")}: services question reads "What do you sell or do?"`);
   await page.click(".obex .chip[data-ex='0']");
   await page.click(".obex .chip[data-ex='1']");
   ok(await page.$$eval("[data-svcbox] [data-sn]", (ns) => ns.filter((n) => n.value).length === 2), `${label("offer")}: two example services added`);
   await chip(page, "pricing_model", "hourly");
   ok(await page.$eval('[data-q="hourly_rate"]', (n) => !n.hidden), `${label("offer")}: hourly rate shown for hourly`);
   await fill(page, "hourly_rate", 95);
+  ok(await page.$eval('[data-q="hourly_rate"] .qhelp', (n) => n.textContent.trim() === "$ per hour, before tax."), `${label("offer")}: price symbol comes from onboarding-get's currency (CAD → $)`);
   await chip(page, "quotes_first", "true");
   shots.offer = await shot(page, `${name}-2-offer`);
   await next(page, "customers");
@@ -293,6 +295,8 @@ async function walk(browser, name, vp, mock) {
   const firstMsg = await page.evaluate(() => [...document.querySelectorAll("#chatwrap .sys, #chatwrap [class*=sys]")].map((n) => n.textContent.trim()));
   ok(firstMsg.some((t) => t.includes(st.answers.business_type === "trades" ? "trades" : "")) && !/🎉/.test(chat), `${label("finish")}: first_message replaces the generic 🎉 line`);
   ok(await page.$eval("#first-steps", (n) => /You said you miss calls/.test(n.textContent)), `${label("finish")}: first-day sheet shows the plan detail lines`);
+  ok(await page.$eval("#sheetwrap", (n) => { const a = n.querySelector(".obapplied"); return !!a && /Already set up from your answers/.test(a.textContent) && a.querySelectorAll("li").length === 2 && /Tax set to GST 5% for Alberta/.test(a.textContent) && /Hours saved/.test(a.textContent) && a.nextElementSibling?.id === "first-steps"; }), `${label("finish")}: "Already set up from your answers" lists what onboarding-complete applied, under the intro`);
+  ok(await page.$$eval("#sheetwrap .btn[data-plan]", (bs) => bs.length > 0 && bs.every((b) => b.className === "btn wide")), `${label("finish")}: plan steps use the sheet's own "btn wide" row style (base 9e35ebd)`);
   shots.finish = await shot(page, `${name}-9-finish-plan-sheet`);
   // Close the first-day sheet and the chat (Escape closes the top layer) to see the plan on Home.
   await page.keyboard.press("Escape");
@@ -348,6 +352,35 @@ async function walk(browser, name, vp, mock) {
   const st2 = await (await fetch(`${mock.url}/__mock/state`)).json();
   ok(st2.sections.week?.skipped === true && st2.answers.business_hours == null, `${label("resume")}: Skip for now marks the section skipped and saves nothing`);
   ok(await page.$eval("#obunder", (n) => n.hidden), `${label("resume")}: no understanding line after a skip`);
+  ok((await (await fetch(`${mock.url}/__mock/state`)).json()).status === "in_progress", `${label("resume")}: mock status in_progress after the skip`);
+  // Finish later on a part-way run → skipped → Home's checklist step 1 opens the profile sheet, as before (round 2, Q1).
+  await page.click("#oblater");
+  await page.waitForFunction(() => !document.getElementById("obflow"));
+  await page.waitForSelector("#setupshop", { timeout: 10000 });
+  await page.waitForFunction(() => document.getElementById("biztypebanner"), null, { timeout: 10000 });
+  await page.click("#setupshop");
+  await page.waitForSelector("#sheetwrap .sheet", { timeout: 10000 });
+  ok(!(await page.$("#obflow")), `${label("checklist")}: skipped run → Start opens the profile sheet, not the flow`);
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.getElementById("sheetwrap"));
+  // A run not yet started → Start opens the flow at About; Finish later keeps it not started, so Start opens the flow again.
+  await fetch(`${mock.url}/__mock/reset`, { method: "POST", body: JSON.stringify({ scenario: "fresh" }) });
+  await page.goto(`${mock.url}/app.html?onboardingPreview=1`);
+  await page.waitForSelector("#setupshop", { timeout: 15000 });
+  ok(!(await page.$("#obflow")), `${label("checklist")}: not started → no auto-resume, Home shows the checklist`);
+  await page.click("#setupshop");
+  await page.waitForSelector("#obflow", { timeout: 10000 });
+  await page.waitForFunction((t) => document.querySelector("#obtitle")?.textContent.trim() === t && !document.querySelector("#obnext").disabled, TITLES.about, { timeout: 10000 });
+  ok(await page.$eval("#obstep", (n) => n.textContent.trim() === "Step 1 of 7"), `${label("checklist")}: not started → Start opens the flow at About (Step 1 of 7)`);
+  shots.checklist = await shot(page, `${name}-14-checklist-start-flow`);
+  await page.click("#oblater");
+  await page.waitForFunction(() => !document.getElementById("obflow"));
+  await page.waitForSelector("#setupshop", { timeout: 10000 });
+  await page.click("#setupshop");
+  await page.waitForSelector("#obflow", { timeout: 10000 });
+  ok(await page.$eval("#obstep", (n) => n.textContent.trim() === "Step 1 of 7"), `${label("checklist")}: Finish later before any answer keeps it not started — Start opens the flow again`);
+  await page.click("#oblater");
+  await page.waitForFunction(() => !document.getElementById("obflow"));
 
   const realErrors = errors.filter((e) => !/favicon|manifest|404/.test(e));
   ok(realErrors.length === 0, `${label("console")}: no page errors (${realErrors.slice(0, 3).join(" | ")})`);
