@@ -1688,118 +1688,197 @@ function shopTimezoneOptions(current) {
   };
   return all.sort((a, b) => a.localeCompare(b)).map((z) => [z, label(z)]);
 }
+// ---- Shared business-profile editors (onboarding 2026-09-19) --------------
+// One set of building blocks for every screen that asks about the business:
+// the Settings sheet (shopProfileSheet) and the sign-up onboarding
+// (onboardingFlow). Same markup, same classes, same reading rules, so the two
+// screens can never drift apart.
+
+// Tap-to-pick chips. `picked` is the answers object the group reads from and
+// writes to; a multi question keeps an array under its key. Every chip is a
+// real button with aria-pressed and the group is labelled by the question.
+function chipsField(key, q, picked) {
+  const val = picked[key];
+  const on = (v) => q.multi ? (Array.isArray(val) && val.includes(v)) : val === v;
+  return `<div class="cmpsect" data-q="${esc(key)}"${q.multi ? " data-multi" : ""}${q.max ? ` data-max="${q.max}"` : ""}>
+      <label class="fld" id="q-${esc(key)}">${esc(q.q)}</label>
+      ${q.help ? `<p class="note qhelp">${esc(q.help)}</p>` : ""}
+      <div class="chips" role="group" aria-labelledby="q-${esc(key)}">${q.opts.map(([v, l]) =>
+        `<button type="button" class="chip${on(v) ? " on" : ""}" data-v="${esc(v)}" aria-pressed="${on(v) ? "true" : "false"}">${esc(l)}</button>`).join("")}</div>
+      ${q.hint ? `<p class="note" style="margin-top:6px">${esc(q.hint)}</p>` : ""}
+    </div>`;
+}
+// Wires every chip group under `root` to `picked`. onPick(key, value, picked,
+// info) runs after each tap so a screen can react (placeholder text,
+// conditional questions). Multi groups toggle; a data-max group refuses a
+// pick past the limit and reports it as info.limited.
+function wireChips(root, picked, onPick) {
+  root.querySelectorAll("[data-q] .chip").forEach((c) => c.onclick = () => {
+    const sect = c.closest("[data-q]"), key = sect.dataset.q, v = c.dataset.v;
+    if (sect.hasAttribute("data-multi")) {
+      const cur = Array.isArray(picked[key]) ? [...picked[key]] : [];
+      const max = Number(sect.dataset.max) || 0;
+      if (cur.includes(v)) picked[key] = cur.filter((x) => x !== v);
+      else if (max && cur.length >= max) { if (onPick) onPick(key, v, picked, { limited: max }); return; }
+      else picked[key] = [...cur, v];
+      const now = picked[key].includes(v);
+      c.classList.toggle("on", now); c.setAttribute("aria-pressed", now ? "true" : "false");
+    } else {
+      sect.querySelectorAll(".chip").forEach((x) => { x.classList.remove("on"); x.setAttribute("aria-pressed", "false"); });
+      c.classList.add("on"); c.setAttribute("aria-pressed", "true"); picked[key] = v;
+    }
+    if (onPick) onPick(key, v, picked, {});
+  });
+}
+// Services and prices: name, price before tax, minutes. Keeps its own rows,
+// remembers which saved rows the owner removed, and reads back trimmed values
+// in the shape shop-profile-save and onboarding-save both take.
+function servicesEditor(initial, opts = {}) {
+  const rows = (initial || []).map((s) => ({ id: s.id, name: s.name || "", price: s.price ?? "", duration_minutes: s.duration_minutes ?? "" }));
+  while (rows.length < (opts.minRows ?? 3)) rows.push(blankService());
+  const removed = [];
+  let box = null;
+  const row = (s, i) => `<div class="svcrow" data-i="${i}">
+      <input class="cmpinput" data-sn placeholder="Service or product" aria-label="Service or product" maxlength="200" value="${esc(String(s.name ?? ""))}">
+      <input class="cmpinput" data-sp type="number" min="0" step="0.01" inputmode="decimal" placeholder="Price" aria-label="Price before tax" value="${esc(String(s.price ?? ""))}">
+      <input class="cmpinput" data-sd type="number" min="5" max="1440" step="5" inputmode="numeric" placeholder="Minutes" aria-label="Minutes it takes" value="${esc(String(s.duration_minutes ?? ""))}">
+      <button type="button" class="linkbtn svcx" data-sx title="Remove" aria-label="Remove this line">&times;</button></div>`;
+  const read = () => { if (box) [...box.querySelectorAll(".svcrow")].forEach((el) => {
+    const s = rows[Number(el.dataset.i)]; if (!s) return;
+    s.name = el.querySelector("[data-sn]").value; s.price = el.querySelector("[data-sp]").value; s.duration_minutes = el.querySelector("[data-sd]").value;
+  }); };
+  const paint = () => {
+    box.innerHTML = rows.map(row).join("");
+    box.querySelectorAll("[data-sx]").forEach((x) => x.onclick = () => {
+      read();
+      const i = Number(x.closest(".svcrow").dataset.i);
+      if (rows[i]?.id) removed.push(rows[i].id);
+      rows.splice(i, 1); if (!rows.length) rows.push(blankService());
+      paint();
+    });
+  };
+  const ed = {
+    html: () => `<div class="svchead" aria-hidden="true"><span>Service</span><span>Price ${esc(opts.currency || "$")}</span><span>Minutes</span><span></span></div>
+      <div data-svcbox>${rows.map(row).join("")}</div>
+      <button type="button" class="linkbtn" data-svcadd style="margin-top:8px">+ Add another</button>`,
+    wire(root) {
+      box = root.querySelector("[data-svcbox]"); paint();
+      root.querySelector("[data-svcadd]").onclick = () => { ed.add(blankService(), true); box.querySelector(".svcrow:last-child [data-sn]")?.focus(); };
+    },
+    // Adds a row. A suggestion fills the first empty row instead of adding one.
+    add(s, append) {
+      read();
+      const empty = append ? -1 : rows.findIndex((r) => !r.id && !String(r.name).trim());
+      if (empty >= 0) rows[empty] = { ...rows[empty], ...s }; else rows.push({ ...blankService(), ...s });
+      paint();
+    },
+    names() { read(); return rows.map((r) => String(r.name).trim().toLowerCase()).filter(Boolean); },
+    services() {
+      read();
+      return rows.filter((s) => String(s.name).trim()).map((s) => ({
+        id: s.id, name: String(s.name).trim(), price: Number(s.price) || 0, duration_minutes: s.duration_minutes ? Number(s.duration_minutes) : null,
+      }));
+    },
+    removed: () => removed,
+  };
+  return ed;
+}
+// Business hours: one row per day, a toggle and open/close times. Defaults to
+// Mon–Fri 08:00–17:00 when nothing is set. read() returns the normalized
+// { mon: { open, close } | null, … } shape, or null when every day is closed.
+function hoursEditor(initial) {
+  const hours = initial && Object.values(initial).some(Boolean) ? { ...initial }
+    : Object.fromEntries(HOUR_DAYS.map(([k]) => [k, k === "sat" || k === "sun" ? null : { open: "08:00", close: "17:00" }]));
+  let root = null;
+  return {
+    html: () => HOUR_DAYS.map(([k, l]) => { const h = hours[k]; return `<div class="hourrow" data-hday="${k}">
+        <label class="hourtoggle"><input type="checkbox" data-hon="${k}" ${h ? "checked" : ""}> <b>${l}</b></label>
+        <span class="hourtimes" ${h ? "" : "hidden"}><input type="time" data-hopen="${k}" aria-label="${l} opens at" value="${esc(h?.open || "08:00")}"> <em>to</em> <input type="time" data-hclose="${k}" aria-label="${l} closes at" value="${esc(h?.close || "17:00")}"></span>
+      </div>`; }).join(""),
+    wire(el) {
+      root = el;
+      root.querySelectorAll("[data-hon]").forEach((c) => c.onchange = () => {
+        root.querySelector(`.hourrow[data-hday="${c.dataset.hon}"] .hourtimes`).hidden = !c.checked;
+      });
+    },
+    read() {
+      const out = {};
+      for (const [k] of HOUR_DAYS) {
+        const on = root.querySelector(`[data-hon="${k}"]`).checked;
+        out[k] = on ? { open: root.querySelector(`[data-hopen="${k}"]`).value || "08:00", close: root.querySelector(`[data-hclose="${k}"]`).value || "17:00" } : null;
+      }
+      return Object.values(out).some(Boolean) ? out : null;
+    },
+  };
+}
+// The time-zone picker. keepOption adds "Keep the current setting" on top
+// when the workspace has no saved zone, so an untouched select sends nothing.
+function timezoneSelect(id, current, opts = {}) {
+  return `<select id="${esc(id)}" class="cmpinput">${opts.keepOption && !current ? `<option value="" selected>Keep the current setting</option>` : ""}${shopTimezoneOptions(current).map(([v, l]) => `<option value="${esc(v)}"${v === (current || "") ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+}
+function regionSelect(id, current) {
+  return `<select id="${esc(id)}" class="cmpinput">${REGIONS.map(([v, l]) => `<option value="${v}"${(current || "") === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+}
+const placeholderForType = (t) => (BUSINESS_TYPES.find(([v]) => v === t) || BUSINESS_TYPES[BUSINESS_TYPES.length - 1])[2];
+
 function shopProfileSheet(onDone, opts = {}) {
   const cur = { ...(S.shop || {}) };
   const picked = { intake_channels: [...(cur.intake_channels || [])] };
   for (const q of SHOP_MORE) if (!q.multi && cur[q.key]) picked[q.key] = cur[q.key];
   if (cur.business_type) picked.business_type = cur.business_type;
-  const svc = (cur.services || []).map((s) => ({ id: s.id, name: s.name || "", price: s.price ?? "", duration_minutes: s.duration_minutes ?? "" }));
-  while (svc.length < 3) svc.push(blankService());
-  const removed = [];
-  const hours = cur.business_hours && Object.values(cur.business_hours).some(Boolean) ? { ...cur.business_hours }
-    : Object.fromEntries(HOUR_DAYS.map(([k]) => [k, k === "sat" || k === "sun" ? null : { open: "08:00", close: "17:00" }]));
-  const placeholderFor = (t) => (BUSINESS_TYPES.find(([v]) => v === t) || BUSINESS_TYPES[BUSINESS_TYPES.length - 1])[2];
-  const chips = (key, q) => `<div class="cmpsect" data-q="${key}">
-      <label class="fld">${esc(q.q)}</label>
-      <div class="chips" style="display:flex;flex-wrap:wrap;gap:8px">${q.opts.map(([v, l]) => {
-        const on = q.multi ? picked.intake_channels.includes(v) : picked[key] === v;
-        return `<button type="button" class="chip${on ? " on" : ""}" data-v="${v}">${esc(l)}</button>`; }).join("")}</div>
-      ${q.hint ? `<p class="note" style="margin-top:6px">${esc(q.hint)}</p>` : ""}
-    </div>`;
-  const svcRow = (s, i) => `<div class="svcrow" data-i="${i}" style="display:grid;grid-template-columns:1.7fr .75fr .6fr 26px;gap:6px;align-items:center;margin-top:6px">
-      <input class="cmpinput" data-sn placeholder="Service or product" maxlength="200" value="${esc(String(s.name ?? ""))}">
-      <input class="cmpinput" data-sp type="number" min="0" step="0.01" inputmode="decimal" placeholder="Price" value="${esc(String(s.price ?? ""))}">
-      <input class="cmpinput" data-sd type="number" min="5" max="1440" step="5" inputmode="numeric" placeholder="Minutes" value="${esc(String(s.duration_minutes ?? ""))}">
-      <button type="button" class="linkbtn" data-sx title="Remove" aria-label="Remove this line" style="font-size:20px;line-height:1;padding:0">&times;</button></div>`;
+  const svc = servicesEditor(cur.services);
+  const hrs = hoursEditor(cur.business_hours);
   const first = !!opts.firstRun;
   sheet(`<h2>${first ? `Welcome — tell Ledger about ${esc(opts.bizName || "your business")}` : "Your business"}</h2>
     <p class="sh-sub">Tell Ledger what you do, then review your services, prices, taxes and hours before using them with customers. Phone features need a paid plan and activation; the trial includes a sample walkthrough.</p>
-    ${chips("business_type", { q: "What kind of business?", opts: BUSINESS_TYPES.map(([v, l]) => [v, l]) })}
+    ${chipsField("business_type", { q: "What kind of business?", opts: BUSINESS_TYPES.map(([v, l]) => [v, l]) }, picked)}
     <div class="cmpsect">
-      <label class="fld">In one line, what do you do?</label>
-      <input id="shopdesc" class="cmpinput" maxlength="240" value="${esc(cur.business_description || "")}" placeholder="${esc(placeholderFor(picked.business_type))}">
+      <label class="fld" for="shopdesc">In one line, what do you do?</label>
+      <input id="shopdesc" class="cmpinput" maxlength="240" value="${esc(cur.business_description || "")}" placeholder="${esc(placeholderForType(picked.business_type))}">
       <p class="note" style="margin-top:6px">Ledger describes you to customers from this, so say it the way you would.</p>
     </div>
     <div class="cmpsect">
       <label class="fld">Your services and prices</label>
-      <div style="display:grid;grid-template-columns:1.7fr .75fr .6fr 26px;gap:6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:0 4px"><span>Service</span><span>Price $</span><span>Minutes</span><span></span></div>
-      <div id="svcbox">${svc.map(svcRow).join("")}</div>
-      <button type="button" class="linkbtn" id="svcadd" style="margin-top:8px">+ Add another</button>
+      ${svc.html()}
       <p class="note" style="margin-top:6px">Price before tax, and how many minutes each one takes. These become your price list — invoices, quotes and the Front Desk all use them. Long list? Use Bring your data → Service menu, then review the saved prices and durations.</p>
     </div>
     <div class="cmpsect">
       <label class="fld">When are you open?</label>
-      ${HOUR_DAYS.map(([k, l]) => { const h = hours[k]; return `<div class="hourrow" data-hday="${k}">
-        <label class="hourtoggle"><input type="checkbox" data-hon="${k}" ${h ? "checked" : ""}> <b>${l}</b></label>
-        <span class="hourtimes" ${h ? "" : "hidden"}><input type="time" data-hopen="${k}" value="${esc(h?.open || "08:00")}"> <em>to</em> <input type="time" data-hclose="${k}" value="${esc(h?.close || "17:00")}"></span>
-      </div>`; }).join("")}
+      ${hrs.html()}
       <p class="note" style="margin-top:6px">Bookings, your booking page and your phone line all follow these hours. Change them any time here or in Calendar.</p>
     </div>
     <div class="cmpsect">
-      <label class="fld">Your time zone</label>
-      <select id="shoptz" class="cmpinput">${cur.timezone ? "" : `<option value="" selected>Keep the current setting</option>`}${shopTimezoneOptions(cur.timezone).map(([v, l]) => `<option value="${esc(v)}"${v === (cur.timezone || "") ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>
+      <label class="fld" for="shoptz">Your time zone</label>
+      ${timezoneSelect("shoptz", cur.timezone, { keepOption: true })}
       <p class="note" style="margin-top:6px">Your hours, Front Desk appointment times and customer reminders are read in this zone. It was set from the device you signed up on${cur.timezone ? ` (currently ${esc(cur.timezone)})` : ""}.</p>
     </div>
     <div class="cmpsect">
-      <label class="fld">Where do you work?</label>
+      <label class="fld" for="shoparea">Where do you work?</label>
       <input id="shoparea" class="cmpinput" maxlength="200" value="${esc(cur.service_area || "")}" placeholder="e.g. In our shop at 123 Main St · Calgary and Airdrie · we come to you">
     </div>
     <div class="cmpsect">
-      <label class="fld">Where are you?</label>
-      <select id="shopregion" class="cmpinput">${REGIONS.map(([v, l]) => `<option value="${v}"${(cur.region_code || "") === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>
+      <label class="fld" for="shopregion">Where are you?</label>
+      ${regionSelect("shopregion", cur.region_code)}
       <p class="note" style="margin-top:6px">Suggests a starting tax setup. Review your registration, tax rates and exemptions in Books settings before your first invoice.</p>
     </div>
     <details${SHOP_MORE.some((q) => (q.multi ? picked.intake_channels.length : picked[q.key])) ? " open" : ""}><summary class="eyebrow" style="cursor:pointer;margin:12px 0 4px">More about you (optional)</summary>
-      ${SHOP_MORE.map((q) => chips(q.key, q)).join("")}
+      ${SHOP_MORE.map((q) => chipsField(q.key, q, picked)).join("")}
     </details>
     <button class="btn primary wide" style="margin-top:14px" id="shopsave">${first ? "Finish setup →" : "Save"}</button>
     ${first ? `<button class="btn ghost wide" style="margin-top:8px" id="shopskip">Skip for now</button>` : ""}
     <div class="note" id="shopnote" style="margin-top:9px"></div>`, (sh) => {
-    const note = sh.querySelector("#shopnote"), btn = sh.querySelector("#shopsave"), box = sh.querySelector("#svcbox");
-    const readSvc = () => [...box.querySelectorAll(".svcrow")].forEach((row) => {
-      const s = svc[Number(row.dataset.i)]; if (!s) return;
-      s.name = row.querySelector("[data-sn]").value; s.price = row.querySelector("[data-sp]").value; s.duration_minutes = row.querySelector("[data-sd]").value;
-    });
-    const wireSvc = () => box.querySelectorAll("[data-sx]").forEach((x) => x.onclick = () => {
-      readSvc();
-      const i = Number(x.closest(".svcrow").dataset.i);
-      if (svc[i]?.id) removed.push(svc[i].id);
-      svc.splice(i, 1); if (!svc.length) svc.push(blankService());
-      box.innerHTML = svc.map(svcRow).join(""); wireSvc();
-    });
-    wireSvc();
-    sh.querySelector("#svcadd").onclick = () => {
-      readSvc(); svc.push(blankService()); box.innerHTML = svc.map(svcRow).join(""); wireSvc();
-      box.querySelector(".svcrow:last-child [data-sn]")?.focus();
-    };
-    sh.querySelectorAll(".chip").forEach((c) => c.onclick = () => {
-      const key = c.closest("[data-q]").dataset.q, v = c.dataset.v;
+    const note = sh.querySelector("#shopnote"), btn = sh.querySelector("#shopsave");
+    svc.wire(sh); hrs.wire(sh);
+    wireChips(sh, picked, (key, v) => {
       note.textContent = "";
-      if (key === "intake_channels") {
-        c.classList.toggle("on");
-        picked.intake_channels = [...c.parentElement.querySelectorAll(".chip.on")].map((x) => x.dataset.v);
-      } else {
-        c.parentElement.querySelectorAll(".chip").forEach((x) => x.classList.remove("on"));
-        c.classList.add("on"); picked[key] = v;
-        if (key === "business_type") { const d = sh.querySelector("#shopdesc"); if (d) d.placeholder = placeholderFor(v); }
-      }
-    });
-    sh.querySelectorAll("[data-hon]").forEach((c) => c.onchange = () => {
-      sh.querySelector(`.hourrow[data-hday="${c.dataset.hon}"] .hourtimes`).hidden = !c.checked;
+      if (key === "business_type") { const d = sh.querySelector("#shopdesc"); if (d) d.placeholder = placeholderForType(v); }
     });
     const skip = sh.querySelector("#shopskip");
     if (skip) skip.onclick = () => { closeSheet(); if (onDone) onDone(false); };
     btn.onclick = async () => {
       if (!picked.business_type) { note.className = "note err"; note.textContent = "Pick what kind of business you run — the rest can wait."; return; }
-      readSvc();
-      const services = svc.filter((s) => String(s.name).trim()).map((s) => ({
-        id: s.id, name: String(s.name).trim(), price: Number(s.price) || 0, duration_minutes: s.duration_minutes ? Number(s.duration_minutes) : null,
-      }));
-      const business_hours = {};
-      for (const [k] of HOUR_DAYS) {
-        const on = sh.querySelector(`[data-hon="${k}"]`).checked;
-        business_hours[k] = on ? { open: sh.querySelector(`[data-hopen="${k}"]`).value || "08:00", close: sh.querySelector(`[data-hclose="${k}"]`).value || "17:00" } : null;
-      }
+      const services = svc.services();
+      const business_hours = hrs.read();
       const region = sh.querySelector("#shopregion").value;
       // Audit 04-06: the zone is sent only when the owner changed it, so an
       // older server that ignores the field still saves everything else.
@@ -1811,8 +1890,8 @@ function shopProfileSheet(onDone, opts = {}) {
           action: "shop-profile-save", ...picked,
           business_description: sh.querySelector("#shopdesc").value.trim(),
           service_area: sh.querySelector("#shoparea").value.trim(),
-          business_hours: Object.values(business_hours).some(Boolean) ? business_hours : null,
-          services, remove_service_ids: removed, region_code: region,
+          business_hours,
+          services, remove_service_ids: svc.removed(), region_code: region,
           ...(tzChanged ? { timezone: tzPick } : {}),
         });
         S.shop = r.shop_profile;
@@ -1825,6 +1904,7 @@ function shopProfileSheet(onDone, opts = {}) {
       } catch (e) { btn.disabled = false; note.className = "note err"; note.textContent = e.message; }
     };
   });
+}
 }
 
 // A workspace that never answered "what kind of business?" gets generic
