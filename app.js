@@ -522,6 +522,11 @@ function askConfirm(message, { title = "", ok = "OK", cancel = "Cancel", danger 
     { label: ok, value: true, primary: true, kind: danger ? "danger" : "primary" },
   ] });
 }
+function askNotice(message, { title = "Heads up", ok = "OK" } = {}) {
+  return askDialog({ title, body: message, cancelValue: true, buttons: [
+    { label: ok, value: true, primary: true, kind: "primary" },
+  ] });
+}
 function askPrompt(message, { title = "", value = "", placeholder = "", ok = "OK", cancel = "Cancel", inputmode = "" } = {}) {
   return askDialog({ title: title || message, body: title ? message : "", cancelValue: null, input: { value, placeholder, inputmode }, buttons: [
     { label: cancel, value: null },
@@ -10830,7 +10835,7 @@ async function renderCatalog(sh, initialImportType = "products") {
         dealer_id: slot.querySelector("#catdealer").value.trim(),
       });
       toast("Key saved");
-      if (done.note) alert(done.note);
+      if (done.note) await askNotice(done.note, { title: "One more thing" });
       renderCatalog(sh);
     } catch (err) { btn.disabled = false; btn.textContent = "Save key"; toast(friendlyError(err, "Couldn't save that key. Try again."), "err"); }
   };
@@ -11131,7 +11136,7 @@ async function businessSheet() {
       btn.disabled = true; btn.textContent = "Deleting…";
       try {
         const done = await api("/workspace-profile", { action: "delete-account", confirm: "DELETE" });
-        if (done?.notice) alert(done.notice);
+        if (done?.notice) await askNotice(done.notice, { title: "Account deleted" });
         await supa.auth.signOut();
         location.reload();
       } catch (err) {
@@ -11410,7 +11415,7 @@ function lockView(seed) {
     lkDeleting = true;
     try {
       const done = await api("/workspace-profile", { action: "delete-account", confirm: "DELETE" });
-      if (done?.notice) alert(done.notice);
+      if (done?.notice) await askNotice(done.notice, { title: "Account deleted" });
       await supa.auth.signOut(); location.reload();
     }
     catch (err) { toast(friendlyError(err, "Couldn't delete your account. Nothing was deleted — try again."), "err"); }
