@@ -2007,6 +2007,9 @@ function obNextSection(current, serverNext) {
   const i = OB_ORDER.indexOf(current);
   return OB_ORDER[Math.min(i + 1, OB_ORDER.length - 1)];
 }
+// "Skip for now" is never offered on about (the business type is the one
+// answer the rest of the flow needs) or on the confirm screen (CONTRACT §2).
+const obCanSkip = (section) => OB_ORDER.includes(section) && section !== "about" && section !== "confirm";
 function obPrevSection(current) {
   const i = OB_ORDER.indexOf(current);
   return i > 0 ? OB_ORDER[i - 1] : null;
@@ -2031,6 +2034,8 @@ function obValues(section, picked, editors = {}) {
   const v = {};
   for (const k of OB_SCREEN[section] || []) {
     const q = OB_Q[k], raw = picked[k];
+    // autonomy is a chip group on screen but an object of booleans on the wire.
+    if (k === "autonomy") { if (Array.isArray(raw)) v.autonomy = Object.fromEntries(q.opts.map(([o]) => [o, raw.includes(o)])); continue; }
     switch (q.kind) {
       case "chips":
         if (q.multi) { if (Array.isArray(raw)) v[k] = q.opts.map(([o]) => o).filter((o) => raw.includes(o)); }
@@ -2053,7 +2058,6 @@ function obValues(section, picked, editors = {}) {
         break;
       }
       case "rules": if (Array.isArray(raw)) v.rules = raw.map((r) => String(r).trim().replace(/\s+/g, " ").slice(0, 160)).filter(Boolean).slice(0, 5); break;
-      case "autonomy": if (Array.isArray(raw)) v.autonomy = Object.fromEntries(q.opts.map(([o]) => [o, raw.includes(o)])); break;
     }
   }
   return v;
@@ -2086,12 +2090,12 @@ function obSeed(section, answers) {
   for (const k of OB_SCREEN[section] || []) {
     const q = OB_Q[k], val = a[k];
     if (val == null) continue;
+    if (k === "autonomy") { p.autonomy = Object.entries(val).filter(([, on]) => on === true).map(([o]) => o); continue; }
     switch (q.kind) {
       case "chips": p[k] = q.multi ? (Array.isArray(val) ? [...val] : []) : String(val); break;
       case "text": case "number": case "timezone": case "region": p[k] = String(val); break;
       case "deposit": p.deposit_type = val.type || ""; p.deposit_value = val.value == null ? "" : String(val.value); break;
       case "rules": p.rules = Array.isArray(val) ? val.map(String) : []; break;
-      case "autonomy": p.autonomy = Object.entries(val).filter(([, on]) => on === true).map(([o]) => o); break;
     }
   }
   return p;
@@ -2262,7 +2266,7 @@ function onboardingFlow(opts = {}) {
     if (extra.under) { under.classList.remove("obin"); void under.offsetWidth; under.classList.add("obin"); }
     note("");
     q("#obback").hidden = i === 0;
-    q("#obskip").hidden = section === "about" || section === "confirm";
+    q("#obskip").hidden = !obCanSkip(section);
     busy(false, section === "confirm" ? "Looks right — finish" : "Continue");
     OB_UI.back = () => { layerPush("flow"); if (i === 0) later(); else show(obPrevSection(section)); };
     q("#obbody").scrollTop = 0;
@@ -2348,7 +2352,7 @@ function onboardingFlow(opts = {}) {
     await save(section, answers, false);
   }
   async function skip() {
-    if (F.saving || F.section === "about" || F.section === "confirm") return;
+    if (F.saving || !obCanSkip(F.section)) return;
     await save(F.section, {}, true);
   }
   async function save(section, answers, skipping) {
