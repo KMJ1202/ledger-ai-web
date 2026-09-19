@@ -1920,7 +1920,6 @@ function shopProfileSheet(onDone, opts = {}) {
     };
   });
 }
-}
 
 // ---- Onboarding flow (start) ----------------------------------------------
 // Sign-up onboarding (2026-09-19, CONTRACT v1). Seven sections and a confirm
