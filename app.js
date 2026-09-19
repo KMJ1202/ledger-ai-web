@@ -3096,7 +3096,7 @@ async function nativeComposerSheet(kind) {
         if(err.data?.review_changed) C.setupError="Refresh setup and review the updated date and total.";
         paint();
         if (err.status === 409 && err.data?.duplicate_of) {
-          if (await askConfirm(err.message, { title: "Possible duplicate", ok: "Create anyway" })) return create.onclick(null, true, allowZero);
+          if (await askConfirm(friendlyError(err, "This looks like one you already made."), { title: "Possible duplicate", ok: "Create anyway" })) return create.onclick(null, true, allowZero);
         } else if (err.status === 409 && err.data?.zero_total) {
           if (await askConfirm(`This ${isEst ? "estimate" : "invoice"} is for $0.00. Create it anyway?`, { title: "$0.00 total", ok: "Create anyway" })) return create.onclick(null, force, true);
         } else wrap.querySelector("#bcerr").textContent = err.message;
