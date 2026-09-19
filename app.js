@@ -3610,7 +3610,10 @@ async function composerSheet(kind) {
     };
     body().querySelector("#cmpcancel").onclick = async () => {
       draftBtns().forEach((b) => b.disabled = true);
-      try { await api(isEst ? "/quickbooks-invoice/estimate-cancel" : "/quickbooks-invoice/cancel", { draft_id: d.draft_id }); } catch {}
+      // The draft always goes off this screen; if the server refused, say so
+      // rather than leaving a cancelled draft alive where the owner can't see it.
+      try { await api(isEst ? "/quickbooks-invoice/estimate-cancel" : "/quickbooks-invoice/cancel", { draft_id: d.draft_id }); }
+      catch (e) { toast(friendlyError(e, "Cleared here, but the draft may still be on the server. Check Finance."), "err"); }
       C.draft = null; draw();
     };
   }
@@ -10980,7 +10983,11 @@ async function businessSheet() {
         const sh2 = slot.querySelector("#bkshare");
         if (sh2) sh2.onclick = async () => {
           try { await navigator.share({ title: "Book with " + (S.profile?.business?.name || "us"), url: s.link }); }
-          catch { try { await navigator.clipboard.writeText(s.link); toast("Link copied"); } catch {} }
+          catch (shareErr) {
+            if (shareErr?.name === "AbortError") return; // the owner closed the share sheet
+            try { await navigator.clipboard.writeText(s.link); toast("Link copied"); }
+            catch { await linkSheet("Your booking link", s.link); }
+          }
         };
         const qrBox = slot.querySelector("#bkqr");
         if (qrBox && s.link) {
@@ -11017,7 +11024,10 @@ async function businessSheet() {
                 catch (e) { btn.disabled = false; toast(friendlyError(e, "Couldn't mark that booking handled. Try again."), "err"); }
               });
             }
-          } catch {}
+          } catch (reqErr) {
+            const rq = slot.querySelector("#bkreqs");
+            if (rq) rq.innerHTML = `<p class="note err" style="margin-top:12px">${esc(friendlyError(reqErr, "Couldn't load new booking requests. Reopen this screen to try again."))}</p>`;
+          }
         }
       } catch { slot.textContent = "Booking unavailable right now."; }
     };
