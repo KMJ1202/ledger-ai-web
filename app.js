@@ -1621,6 +1621,9 @@ async function homeCustomers() {
 // workspace that has not said yet is a generic service business — never auto.
 // Only the first question is required; everything else saves when given.
 const isAuto = () => S.shop?.business_type === "automotive";
+// What a supplier order delivered, in this business's own words. Only an
+// automotive workspace says "tires"; a NULL type is never automotive.
+const unitNoun = (n) => isAuto() ? (Number(n) === 1 ? "tire" : "tires") : (Number(n) === 1 ? "item" : "items");
 const BUSINESS_TYPES = [
   ["automotive", "Auto & tire", "e.g. Mobile tire shop in south Calgary — passenger and light truck"],
   ["trades", "Trades", "e.g. Residential HVAC — furnaces, AC and hot water tanks, 24-hour service"],
@@ -4005,7 +4008,7 @@ function msSpareLine(detail) {
   const spare = detail && Number(detail.spare_qty) > 0 ? Number(detail.spare_qty) : 0;
   if (!spare) return "";
   const bought = Number(detail.receipt_tires), sold = Number(detail.sale_tires);
-  return `<div class="ms-spare">${bought} tires on this order, ${sold} on this invoice — the other ${spare} went to another job or are still in stock. Only ${sold} tire${sold === 1 ? "'s" : "s'"} cost lands here.</div>`;
+  return `<div class="ms-spare">${bought} ${unitNoun(bought)} on this order, ${sold} on this invoice — the other ${spare} went to another job or are still in stock. Only ${sold} tire${sold === 1 ? "'s" : "s'"} cost lands here.</div>`;
 }
 // Tires on the order: the card's per-tire share says it outright; otherwise
 // count the product lines' quantities (a levy line has no size/code words).
@@ -4125,7 +4128,7 @@ function psMatchScreen(review, tally, after) {
       ${s && c.count_split ? `<button class="btn em wide" data-mscountone="${c.id}" data-sale="${s.id}" data-qty="${c.count_split.sale_qty}">&#10003;&nbsp; Yes — ${c.count_split.sale_qty} of ${c.count_split.order_qty} went here</button>`
         : s ? `<button class="btn em wide" data-msconfirm="${c.id}" data-sale="${s.id}">&#10003;&nbsp; That's the one</button>` : ""}
       <button class="btn ghost wide" data-mspick="${c.id}" data-rej="${s ? s.id : ""}">${s ? "Wrong invoice" : "Pick the invoice"}</button>
-      ${msUnits(c) > 1 ? `<button class="btn ghost wide" data-mscount="${c.id}">&#9776;&nbsp; Split by count — ${msUnits(c)} tires, several invoices</button>` : ""}
+      ${msUnits(c) > 1 ? `<button class="btn ghost wide" data-mscount="${c.id}">&#9776;&nbsp; Split by count — ${msUnits(c)} ${unitNoun(msUnits(c))}, several invoices</button>` : ""}
       <button class="btn ghost wide" data-mswait="${c.id}" data-rej="${s ? s.id : ""}">Not sold yet</button>
       <button class="btn ghost wide" data-msreturned="${c.id}">&#8630;&nbsp; Returned to supplier</button>
       <button class="btn ghost wide" data-msdrop="${c.id}">&#10005;&nbsp; Not a business cost</button>
@@ -4314,7 +4317,7 @@ function psMatchScreen(review, tally, after) {
       box.hidden = false; box.dataset.mode = "count";
       const item = proposed.find((c) => c.id === id);
       const units = msUnits(item);
-      box.innerHTML = `<p class="note" style="margin:8px 0 4px">${units} tires came in. How many went to each invoice?</p><div class="note">Loading recent invoices…</div>`;
+      box.innerHTML = `<p class="note" style="margin:8px 0 4px">${units} ${unitNoun(units)} came in. How many went to each invoice?</p><div class="note">Loading recent invoices…</div>`;
       const seen = new Set();
       const rows = [];
       if (item?.sale && !seen.has(item.sale.id)) { seen.add(item.sale.id); rows.push(item.sale); }
@@ -4329,7 +4332,7 @@ function psMatchScreen(review, tally, after) {
       const render = () => {
         const placed = Object.values(counts).reduce((a, b) => a + b, 0);
         const left = units - placed;
-        box.innerHTML = `<p class="note" style="margin:8px 0 4px">${units} tires came in. How many went to each invoice?</p>` + rows.map((s) =>
+        box.innerHTML = `<p class="note" style="margin:8px 0 4px">${units} ${unitNoun(units)} came in. How many went to each invoice?</p>` + rows.map((s) =>
           `<div class="opt ms-count-row"><b>${s.number ? "#" + esc(s.number) : "—"}</b><span>${esc(s.customer || "")} · ${msDate(s.date)}${s.lines?.length ? "<br>" + esc(s.lines[0].text) : ""}</span>
             <span class="ms-step"><button class="stepbtn" data-msdec="${s.id}" ${!(counts[s.id] > 0) ? "disabled" : ""}>−</button><i>${counts[s.id] || 0}</i><button class="stepbtn" data-msinc="${s.id}" ${left <= 0 ? "disabled" : ""}>+</button></span></div>`).join("")
           + `<div class="ms-count-sum">${placed} of ${units} placed${left > 0 ? ` · <b>${left} still in stock</b> — the sweep asks about ${left === 1 ? "it" : "them"} when ${left === 1 ? "it" : "they"} sell${left === 1 ? "s" : ""}` : ""}</div>
@@ -11808,7 +11811,11 @@ async function boot() {
     return;
   }
   // app.html#vin opens the scanner straight away (Home Screen shortcut / QR on the shop wall).
-  if (location.hash === "#vin") { history.replaceState(null, "", location.pathname); vinScannerSheet(); }
+  if (location.hash === "#vin") {
+    history.replaceState(null, "", location.pathname);
+    if (isAuto()) vinScannerSheet();
+    else toast("VIN scanning is for auto and tire businesses. Change your business type under Business profile & settings.");
+  }
 }
 // The boot catch-all used to offer Retry and nothing else (audit 11.9): a
 // sign-in that can no longer load ("Signed out", a revoked session) had no way
