@@ -341,7 +341,7 @@ let upgradeSheetOpen = false;
 function upgradeHit(d) {
   // Google Play forbids an app it distributes from pointing anywhere else to
   // pay. Inside the Android wrapper we state the fact and stop there.
-  if (inAndroidApp()) { toast(d.message || d.error || "That's part of Ledger Pro.", "err"); return; }
+  if (inAndroidApp()) { toast(humanSentence(d.message) || humanSentence(d.error) || "That's part of Ledger Pro.", "err"); return; }
   if (upgradeSheetOpen) return;
   upgradeSheetOpen = true;
   const price = d.required_plan_price || 699;
@@ -385,7 +385,7 @@ async function moveToPlan(plan) {
     // `unchanged` after a retry means the earlier change landed while the
     // screen still showed the old plan — reload so it tells the truth (02-07).
     // `pending` means Stripe's own webhook is applying it within seconds.
-    if (d.unchanged) { toast(d.message); closeStack(); closeSheet(); setTimeout(() => location.reload(), 900); return true; }
+    if (d.unchanged) { toast(humanSentence(d.message) || "Your plan is unchanged."); closeStack(); closeSheet(); setTimeout(() => location.reload(), 900); return true; }
     toast(d.pending ? `${d.message || `You're on ${d.plan_name}.`} Updating…` : (d.message || `You're on ${d.plan_name}.`));
     closeStack(); closeSheet();
     // Every gated screen has to redraw against the new plan, and the copilot's
@@ -397,9 +397,9 @@ async function moveToPlan(plan) {
     const code = e.data?.code || e.data?.error;
     if (code === "no_subscription") {
       try { const c = await startCheckout(plan); location.href = c.url; return true; }
-      catch (err) { if (!err.cancelled) toast(err.message, "err"); return false; }
+      catch (err) { if (!err.cancelled) toast(friendlyError(err, "Couldn't start checkout. Nothing was charged — try again."), "err"); return false; }
     }
-    toast(e.message, "err");
+    toast(friendlyError(e, "Couldn't change your plan. Nothing was charged — try again."), "err");
     return false;
   }
 }
@@ -1097,11 +1097,11 @@ function wireConnect(scope) {
       // QuickBooks is on. Nothing is deleted — say so, then let the owner decide.
       if (err.status === 409 && err.data?.code === "native_documents_exist") {
         if (await askConfirm(friendlyError(err, "Invoices made in Ledger go out of sight while QuickBooks is on. Nothing is deleted."), { title: "Connect QuickBooks anyway?", ok: "Connect" })) {
-          try { await launch("&acknowledge=native_hidden"); return; } catch (e2) { toast(e2.message, "err"); }
+          try { await launch("&acknowledge=native_hidden"); return; } catch (e2) { toast(friendlyError(e2, "Couldn't start the QuickBooks connection. Try again."), "err"); }
         }
         b.disabled = false; return;
       }
-      b.disabled = false; toast(err.message, "err");
+      b.disabled = false; toast(friendlyError(err, "Couldn't start the QuickBooks connection. Try again."), "err");
     }
   }, scope);
 }
@@ -1119,7 +1119,7 @@ function wireDisconnectQuickBooks(scope) {
       await api("/quickbooks-oauth/disconnect", {});
       toast("QuickBooks disconnected — you're on built-in books");
       setTimeout(() => location.reload(), 900);
-    } catch (err) { b.disabled = false; toast(err.message, "err"); }
+    } catch (err) { b.disabled = false; toast(friendlyError(err, "Couldn't disconnect QuickBooks. Nothing changed — try again."), "err"); }
   }, scope);
 }
 
@@ -1142,7 +1142,7 @@ function wireDisconnectConnector(scope, rerender) {
       toast(`${c.name} disconnected`);
       const latest = await connectionStates();
       if (rerender) rerender(latest);
-    } catch (err) { b.disabled = false; toast(err.message, "err"); }
+    } catch (err) { b.disabled = false; toast(friendlyError(err, "Couldn't disconnect that service. Nothing changed — try again."), "err"); }
   }, scope);
 }
 
@@ -1882,7 +1882,7 @@ async function loadHomeSetup() {
         S.booksProvider = "native";
         toast("Built-in books it is — invoices and estimates are ready in Finance");
         loadHomeSetup();
-      } catch (e) { native.disabled = false; toast(e.message, "err"); }
+      } catch (e) { native.disabled = false; toast(friendlyError(e, "Couldn't switch to built-in books. Try again."), "err"); }
     };
     const hide = slot.querySelector("#setuphide");
     if (hide) hide.onclick = () => { accountStorage.setItem(SETUP_HIDE_KEY, "1"); slot.innerHTML = ""; };
@@ -1890,7 +1890,7 @@ async function loadHomeSetup() {
     if (card) card.onclick = async () => {
       card.disabled = true;
       try { const c = await startCheckout(); location.href = c.url; }
-      catch (e) { card.disabled = false; if (!e.cancelled) toast(e.message, "err"); }
+      catch (e) { card.disabled = false; if (!e.cancelled) toast(friendlyError(e, "Couldn't open checkout. Nothing was charged — try again."), "err"); }
     };
   }
 }
@@ -2032,7 +2032,7 @@ async function openCostReview() {
             review = d.review; S.review = d.review; S.profitStale = true;
             toast(`${vendor.vendor} classified — ${d.reclassified} invoice${d.reclassified === 1 ? "" : "s"} updated`);
             render(); loadHomeAttention();
-          } catch (err) { toast(err.message, "err"); group.forEach((b) => b.disabled = false); }
+          } catch (err) { toast(friendlyError(err, "Couldn't save that vendor rule. Try again."), "err"); group.forEach((b) => b.disabled = false); }
         }, sh);
       });
       return;
@@ -2051,7 +2051,7 @@ async function openCostReview() {
         try {
           const d = await api("/profit/dismiss-exception", { id: e.currentTarget.dataset.dis });
           review = d.review; S.review = d.review; render(); loadHomeAttention();
-        } catch (err) { toast(err.message, "err"); e.currentTarget.disabled = false; }
+        } catch (err) { toast(friendlyError(err, "Couldn't dismiss that item. Try again."), "err"); e.currentTarget.disabled = false; }
       }, sh);
     });
   };
@@ -2059,7 +2059,7 @@ async function openCostReview() {
   try {
     if (!review) { review = await get("/profit/review"); S.review = review; }
     render();
-  } catch (e) { toast(e.message, "err"); }
+  } catch (e) { toast(friendlyError(e, "Couldn't load the profit review. Pull down to refresh."), "err"); }
 }
 
 // Mirrors the iOS attention center: the list is built live from phone, books,
@@ -2462,12 +2462,12 @@ async function loadNativeInvoices() {
         const ex = await booksApi(op === "barchive" ? { action: "archive", include_receipt_links: true } : { action: "export" });
         downloadBooksExport(ex);
         toast("Export downloaded");
-      } catch (err) { toast(err.message, "err"); }
+      } catch (err) { toast(friendlyError(err, "Couldn't build the export. Try again."), "err"); }
     } else if (op === "stripe") {
       try {
         const r = await booksApi({ action: "connect-onboard" });
         if (r.url) window.open(r.url, "_blank");
-      } catch (err) { toast(err.message, "err"); }
+      } catch (err) { toast(friendlyError(err, "Couldn't open payouts. Try again."), "err"); }
     }
   }, slot);
 }
@@ -2779,7 +2779,7 @@ function suggestShortcutCode(name, taken) {
 
 async function nativeComposerSheet(kind) {
   try { const setup=await booksApi({action:"settings"}); if(setup.tax?.requires_review) { toast("First, confirm whether you charge sales tax and review your rates."); await booksSettingsSheet(); return; } }
-  catch(e) { toast(e.message,"err"); return; }
+  catch(e) { toast(friendlyError(e, "Couldn't load your books settings. Try again."),"err"); return; }
   // kind "estimate": EST numbering, VALID FOR instead of payment terms, and the
   // create posts nothing to the books — money moves only on convert-to-invoice.
   const isEst = kind === "estimate";
@@ -3146,7 +3146,7 @@ async function booksSettingsSheet() {
         const result=await booksApi({action:"shortcut-delete",id:btn.dataset.scdel});
         if(result.deleted!==true) throw new Error("Deletion could not be confirmed.");
         shortcuts=shortcuts.filter(x=>x.id!==btn.dataset.scdel);paintShortcuts();
-      } catch(e) {btn.disabled=false;toast(e.message,"err");}
+      } catch(e) {btn.disabled=false;toast(friendlyError(e, "Couldn't remove that shortcut. Try again."),"err");}
     });
   };
   body().innerHTML = `
@@ -3720,7 +3720,7 @@ function invoiceSheet(inv, back) {
       try {
         await api("/quickbooks-invoice/mark-paid", { id: inv.id });
         closeSheet(); toast(`Invoice #${inv.doc} marked paid`); S.qboStale = true; loadInvoices();
-      } catch (e) { mp.disabled = false; mp.innerHTML = "&#10003;&nbsp; Mark as paid"; toast(e.message, "err"); }
+      } catch (e) { mp.disabled = false; mp.innerHTML = "&#10003;&nbsp; Mark as paid"; toast(friendlyError(e, "Couldn't mark the invoice paid. Nothing was posted — try again."), "err"); }
     };
     sh.querySelector("#printpdf").onclick = () => withPdf(inv, sh, (url) => {
       const frame = document.createElement("iframe");
@@ -4602,7 +4602,7 @@ async function openCostList(onlyFlagged) {
         if (found) openCostDate(found, onlyFlagged);
       }, sh);
     });
-  } catch (e) { toast(e.message, "err"); closeSheet(); }
+  } catch (e) { toast(friendlyError(e, "Couldn't load your costs. Try again."), "err"); closeSheet(); }
 }
 
 /** Re-date one cost. The arrival date is kept visible the whole time: the
@@ -4785,7 +4785,7 @@ async function loadCalendarHoursLine() {
 
 async function calendarHoursSheet() {
   let d = CAL.hours;
-  if (!d) { try { d = await api("/google-calendar/hours", null, "GET"); CAL.hours = d; } catch (err) { toast(err.message, "err"); return; } }
+  if (!d) { try { d = await api("/google-calendar/hours", null, "GET"); CAL.hours = d; } catch (err) { toast(friendlyError(err, "Couldn't load your hours. Try again."), "err"); return; } }
   const hours = { ...(d.business_hours || {}) };
   const rule = "Bookings outside these hours are refused unless you choose Book anyway. Turn every day off to allow any time.";
   sheet(`<h2>Business hours</h2>
@@ -4865,12 +4865,12 @@ async function loadEventCrew(sh, e) {
       await api("/crew", { action: "assign", employee_id: b.dataset.evassign, event_id: e.id, job_date: evDayKey(e.start),
         job_title: e.title, job_start: e.start, job_location: e.location || "", job_details: e.description || "" });
       rerun();
-    } catch (err) { toast(err.message, "err"); b.disabled = false; }
+    } catch (err) { toast(friendlyError(err, "Couldn't assign that crew member. Try again."), "err"); b.disabled = false; }
   });
   box.querySelectorAll("[data-evunassign]").forEach((b) => b.onclick = async () => {
     b.disabled = true;
     try { await api("/crew", { action: "unassign", employee_id: b.dataset.evunassign, event_id: e.id }); rerun(); }
-    catch (err) { toast(err.message, "err"); b.disabled = false; }
+    catch (err) { toast(friendlyError(err, "Couldn't update that crew assignment. Try again."), "err"); b.disabled = false; }
   });
 }
 
@@ -4903,7 +4903,7 @@ async function ensureMapKit() {
   const mk = await loadMapKit();
   if (!MAPKIT_READY) {
     mk.init({
-      authorizationCallback: (done) => api("/crew", { action: "maps-token" }).then((r) => done(r.token)).catch((err) => { toast(err.message || "The map is unavailable right now. The crew list is still live.", "err"); }),
+      authorizationCallback: (done) => api("/crew", { action: "maps-token" }).then((r) => done(r.token)).catch((err) => { toast(friendlyError(err, "The map is unavailable right now. The crew list is still live."), "err"); }),
       language: "en",
     });
     MAPKIT_READY = true;
@@ -6050,14 +6050,14 @@ async function loadReceipts() {
     if ($("scannow")) $("scannow").onclick = async (e) => {
       e.currentTarget.disabled = true; e.currentTarget.textContent = "Scanning…";
       try { await api("/gmail/scan", {}); toast("Scan complete"); loadReceipts(); }
-      catch (err) { toast(err.message, "err"); loadReceipts(); }
+      catch (err) { toast(friendlyError(err, "Couldn't scan your inbox for receipts. Try again."), "err"); loadReceipts(); }
     };
     if ($("batch")) $("batch").onclick = () => batchPost(ready);
     if ($("batchqueue")) $("batchqueue").onclick = () => batchQueueSheet(ready, queueTotal);
     if ($("scanhour")) $("scanhour").onchange = async (e) => {
       const hour = Number(e.target.value);
       try { await api("/gmail/set-schedule", { hour }); toast("Daily scan set to " + hourLabel(hour)); }
-      catch (err) { toast(err.message, "err"); loadReceipts(); }
+      catch (err) { toast(friendlyError(err, "Couldn't save your receipt schedule. Try again."), "err"); loadReceipts(); }
     };
     const rs = $("rcptsearch");
     rs.addEventListener("input", () => {
@@ -6183,7 +6183,7 @@ async function captureReceipt(file) {
   } catch (err) {
     busy(false);
     if (note) { note.className = "note err"; note.textContent = err.message; }
-    toast(err.message, "err");
+    toast(friendlyError(err, "Couldn't read that receipt photo. Try another photo."), "err");
   }
 }
 
@@ -6195,7 +6195,7 @@ async function receiptPhotoSheet(id) {
         style="width:100%;border-radius:14px;margin-top:10px;display:block">`, (sh) =>
       remintOnExpiry(sh.querySelector("img"), async () =>
         (await get("/gmail/receipt-photo?id=" + encodeURIComponent(id))).url));
-  } catch (err) { toast(err.message, "err"); }
+  } catch (err) { toast(friendlyError(err, "Couldn't open that receipt photo. Try again."), "err"); }
 }
 
 function receiptSheet(r, suggestedCategory) {
@@ -6276,7 +6276,7 @@ function receiptSheet(r, suggestedCategory) {
           try {
             await api("/quickbooks-invoice/expense-post", body);
             closeSheet(); toast("Posted to QuickBooks"); loadReceipts();
-          } catch (err) { e2.currentTarget.disabled = false; toast(err.message, "err"); }
+          } catch (err) { e2.currentTarget.disabled = false; toast(friendlyError(err, "Couldn't post that expense. Nothing was posted — try again."), "err"); }
         };
       } catch (err) { post.disabled = false; note.className = "note err"; note.textContent = err.message; }
     };
@@ -6331,20 +6331,20 @@ async function renderPhone(cachedBoard = null) {
       });
       if ($("thclear")) $("thclear").onclick = async () => {
         if (!(await askConfirm("Threads still waiting on a reply from you are kept. Everything else comes off the tab.", { title: "Clear text threads?", ok: "Clear", danger: true }))) return;
-        try { await api("/phone", { action: "threads-clear" }); renderPhone(); } catch (err) { toast(err.message); }
+        try { await api("/phone", { action: "threads-clear" }); renderPhone(); } catch (err) { toast(friendlyError(err, "Couldn't clear your text threads. Try again.")); }
       };
       on("[data-thdel]", "click", async (e) => {
         e.stopPropagation();
         if (!(await askConfirm("It comes off the tab. Every message stays on file, and if they text again the thread comes right back.", { title: "Delete this thread?", ok: "Delete", danger: true }))) return;
-        try { await api("/phone", { action: "thread-delete", conversation_id: e.currentTarget.dataset.thdel }); renderPhone(); } catch (err) { toast(err.message); }
+        try { await api("/phone", { action: "thread-delete", conversation_id: e.currentTarget.dataset.thdel }); renderPhone(); } catch (err) { toast(friendlyError(err, "Couldn't delete that thread. Try again.")); }
       });
       if ($("evclear")) $("evclear").onclick = async () => {
         if (!(await askConfirm("These come off the tab. Calls still holding an unplayed voicemail are kept, and nothing is removed from your call history.", { title: "Clear the missed-call feed?", ok: "Clear", danger: true }))) return;
-        try { await api("/phone", { action: "events-clear", scope: "calls" }); renderPhone(); } catch (err) { toast(err.message); }
+        try { await api("/phone", { action: "events-clear", scope: "calls" }); renderPhone(); } catch (err) { toast(friendlyError(err, "Couldn't clear the missed-call feed. Try again.")); }
       };
       on("[data-evdel]", "click", async (e) => {
         e.stopPropagation();
-        try { await api("/phone", { action: "event-dismiss", event_id: e.currentTarget.dataset.evdel }); renderPhone(); } catch (err) { toast(err.message); }
+        try { await api("/phone", { action: "event-dismiss", event_id: e.currentTarget.dataset.evdel }); renderPhone(); } catch (err) { toast(friendlyError(err, "Couldn't dismiss that call. Try again.")); }
       });
       if ($("remindall")) $("remindall").onclick = () => apptReminderPreviewSheet();
       on("[data-needs]", "click", (e) => openNeedsYou(d, e.currentTarget.dataset.needs));
@@ -6739,12 +6739,12 @@ async function loadVoicemails(board) {
     }, host);
     on("[data-vmdel]", "click", async (e) => {
       if (!(await askConfirm("It comes off the Phone tab. The call itself stays in your history.", { title: "Delete this voicemail?", ok: "Delete", danger: true }))) return;
-      try { await api("/phone", { action: "event-dismiss", event_id: e.currentTarget.dataset.vmdel }); renderPhone(); } catch (err) { toast(err.message); }
+      try { await api("/phone", { action: "event-dismiss", event_id: e.currentTarget.dataset.vmdel }); renderPhone(); } catch (err) { toast(friendlyError(err, "Couldn't delete that voicemail. Try again.")); }
     }, host);
     const vmclear = host.querySelector("#vmclear");
     if (vmclear) vmclear.onclick = async () => {
       if (!(await askConfirm("Every message here comes off the tab, heard or not. The calls stay in your history.", { title: "Clear all voicemail?", ok: "Clear", danger: true }))) return;
-      try { await api("/phone", { action: "events-clear", scope: "voicemails" }); renderPhone(); } catch (err) { toast(err.message); }
+      try { await api("/phone", { action: "events-clear", scope: "voicemails" }); renderPhone(); } catch (err) { toast(friendlyError(err, "Couldn't clear your voicemail. Try again.")); }
     };
   } catch (e) {
     host.innerHTML = `<div class="panel"><h3>&#9993; Voicemail</h3><p class="sub">${esc(e.message)}</p></div>`;
@@ -6883,7 +6883,7 @@ async function phoneArmLine(d) {
     if (d.autoReplyEnabled === false) await api("/phone", { action: "settings-save", autoReplyEnabled: true });
     if (!(d.frontDesk && d.frontDesk.enabled === true)) await api("/phone", { action: "settings-save", frontDeskEnabled: true });
     toast("Ledger is answering your line");
-  } catch (e) { toast(e.message); }
+  } catch (e) { toast(friendlyError(e, "Couldn't save that phone setting. Try again.")); }
   renderPhone();
 }
 
@@ -6940,7 +6940,7 @@ async function phoneNeedsDelete(d, id) {
     else if (item.kind === "voicemail" || item.kind === "missed") await api("/phone", { action: "event-dismiss", event_id: target });
     else return;
     renderPhone();
-  } catch (e) { toast(e.message); }
+  } catch (e) { toast(friendlyError(e, "Couldn't open the command center. Try again.")); }
 }
 
 // Signpost at the bottom of Needs You. The switches stay in Auto — this says
@@ -7425,8 +7425,8 @@ function reviewRequestSheet(d) {
  <h3 style="margin-top:24px">Recent requests</h3>
  <p class="sub">${r.sentWeek||0} sent this week · ${r.queued||0} waiting</p>
  ${(r.recent||[]).map(x=>`<div class="pcc-history"><strong>${esc(x.customer_name||'Customer')} · ${esc(x.invoice_number||'Invoice')}</strong><span>${esc({sent:'Sent',queued:'Waiting',sending:'Sending',skipped:'Skipped',needs_check:'Check delivery'}[x.status]||x.status)} · ${x.source==='native'?'Ledger invoices':'QuickBooks'}</span>${x.reason?`<small>${esc(x.reason)}</small>`:''}</div>`).join('')||'<p class="sub">Your first request will appear here after a future payment. No old invoices will be texted.</p>'}`,sh=>{
- const save=sh.querySelector('#review-save');save.onclick=async()=>{save.disabled=true;save.textContent='Saving…';try{await api('/phone',{action:'review-settings-save',reviewURL:sh.querySelector('#review-url').value,reviewRequestsEnabled:true});closeSheet();toast('Google Review Request is on');renderPhone();}catch(e){toast(e.message,'err');save.disabled=false;save.textContent=r.enabled?'Save link':'Save & turn on';}};
- const off=sh.querySelector('#review-off');if(off)off.onclick=async()=>{off.disabled=true;try{await api('/phone',{action:'review-settings-save',reviewRequestsEnabled:false});closeSheet();toast('Review requests are off');renderPhone();}catch(e){toast(e.message,'err');off.disabled=false;}};
+ const save=sh.querySelector('#review-save');save.onclick=async()=>{save.disabled=true;save.textContent='Saving…';try{await api('/phone',{action:'review-settings-save',reviewURL:sh.querySelector('#review-url').value,reviewRequestsEnabled:true});closeSheet();toast('Google Review Request is on');renderPhone();}catch(e){toast(friendlyError(e, "Couldn't save your review link. Try again."),'err');save.disabled=false;save.textContent=r.enabled?'Save link':'Save & turn on';}};
+ const off=sh.querySelector('#review-off');if(off)off.onclick=async()=>{off.disabled=true;try{await api('/phone',{action:'review-settings-save',reviewRequestsEnabled:false});closeSheet();toast('Review requests are off');renderPhone();}catch(e){toast(friendlyError(e, "Couldn't turn review requests off. Try again."),'err');off.disabled=false;}};
  });
 }
 
@@ -7438,7 +7438,7 @@ async function dispatchOrderSheet(preloaded) {
     try {
       const roster = await api("/crew", { action: "list" });
       crew = (roster.employees || []).filter((e) => e.active !== false && (e.phone || "").trim());
-    } catch (err) { toast(err.message, "err"); return; }
+    } catch (err) { toast(friendlyError(err, "Couldn't load your crew. Try again."), "err"); return; }
   }
   if (!crew.length) { toast("No crew members with phone numbers yet — add them on the Calendar tab first."); return; }
   crew = crew.slice().sort((a, b) => (a.dispatchRank ?? a.dispatch_rank ?? 9999) - (b.dispatchRank ?? b.dispatch_rank ?? 9999));
@@ -7537,7 +7537,7 @@ async function crewHoursSheet(range = "week") {
   const [from, to] = crewRangeDates(range);
   let d;
   try { d = await api("/crew", { action: "timecards", from, to }); }
-  catch (err) { toast(err.message, "err"); return; }
+  catch (err) { toast(friendlyError(err, "Couldn't load the timecards. Try again."), "err"); return; }
   if (d.timezone) S.businessTimezone = d.timezone;
   const all = d.cards || [];
   const cards = all.filter((c) => c.total_seconds > 0 || c.on_clock || c.needs_review);
@@ -7651,7 +7651,7 @@ function absenceLine(a) {
 async function crewRosterSheet() {
   let roster;
   try { roster = await api("/crew", { action: "list" }); }
-  catch (err) { toast(err.message, "err"); return; }
+  catch (err) { toast(friendlyError(err, "Couldn't load your crew. Try again."), "err"); return; }
   const crew = roster.employees || [];
   sheet(`<h2>Roster &amp; shifts</h2>
     <p class="sh-sub">Regular working hours drive both shift texts — no shift set means no reminders for that person. Anyone marked off is skipped by the reminders and by auto-dispatch.</p>
@@ -8085,7 +8085,7 @@ function apptReminderSheet(d) {
           reminderNote: note === defaultNote ? "" : note,
         });
         toast("Saved"); closeSheet(); renderPhone();
-      } catch (err) { toast(err.message); }
+      } catch (err) { toast(friendlyError(err, "Couldn't save your reminder settings. Try again.")); }
     };
   });
 }
@@ -8803,7 +8803,7 @@ function gpPhotoSheet(id) {
 async function gpPhotoReview(id, action, btn) {
   btn.disabled = true; btn.textContent = action === "approve" ? "Approving…" : "Removing…";
   try { await api("/google-business-profile/photo-review", { photo_id: id, action }); closeSheet(); toast(action === "approve" ? "Photo approved" : "Photo removed"); gpLoad(true); }
-  catch (e) { btn.disabled = false; btn.textContent = action === "approve" ? "Approve for posting" : "Remove from bin"; toast(e.message, "err"); }
+  catch (e) { btn.disabled = false; btn.textContent = action === "approve" ? "Approve for posting" : "Remove from bin"; toast(friendlyError(e, "Couldn't update that photo review. Try again."), "err"); }
 }
 
 function gpSettingsSheet() {
@@ -8895,7 +8895,7 @@ async function gpSaveEdit(id, btn) {
   const ta = document.querySelector(`[data-gpsum="${id}"]`); if (!ta) return;
   btn.disabled = true; btn.textContent = "Saving…";
   try { await api("/google-business-profile/post-update", { post_id: id, summary: ta.value }); toast("Edit saved"); await gpLoad(true); }
-  catch (e) { btn.disabled = false; btn.textContent = "Save edit"; toast(e.message, "err"); }
+  catch (e) { btn.disabled = false; btn.textContent = "Save edit"; toast(friendlyError(e, "Couldn't save your edit. Try again."), "err"); }
 }
 
 async function gpPublish(id, btn) {
@@ -8910,8 +8910,8 @@ async function gpPublish(id, btn) {
   } catch (e) {
     // Sent but unanswered (08-01): the post is on hold under Recent with a
     // Check Google button — there is no Post button to tap again.
-    if (e.data && e.data.post_status === "unknown") { toast(e.message, "err"); GP.showHistory = true; gpLoad(true); return; }
-    btn.disabled = false; btn.textContent = "Post to Google"; toast(e.message, "err"); gpLoad(true);
+    if (e.data && e.data.post_status === "unknown") { toast(friendlyError(e, "Couldn't confirm whether the post went to Google. Check the history."), "err"); GP.showHistory = true; gpLoad(true); return; }
+    btn.disabled = false; btn.textContent = "Post to Google"; toast(friendlyError(e, "Couldn't post to Google. Nothing was published — try again."), "err"); gpLoad(true);
   }
 }
 
@@ -8924,7 +8924,7 @@ async function gpReconcile(id, btn) {
     const r = await api("/google-business-profile/post-reconcile", { post_id: id });
     toast(r.outcome === "posted" ? "Found it — the post is on Google" : r.outcome === "draft" ? "Google never got it — it's back as a draft" : "Still checking — Google hasn't shown it yet. Try again in a few minutes.");
     await gpLoad(true);
-  } catch (e) { btn.disabled = false; btn.textContent = "Check Google"; toast(e.message, "err"); }
+  } catch (e) { btn.disabled = false; btn.textContent = "Check Google"; toast(friendlyError(e, "Couldn't check Google for that post. Try again."), "err"); }
 }
 
 // One-time listing choice for a Google account that manages several (08-08).
@@ -8934,12 +8934,12 @@ async function gpChooseLocation(name, btn) {
     const r = await api("/google-business-profile/posts-location", { location_name: name });
     toast(`Ledger will post to ${r.bound && r.bound.business_name ? r.bound.business_name : "that listing"}`);
     await gpLoad(true);
-  } catch (e) { btn.disabled = false; toast(e.message, "err"); }
+  } catch (e) { btn.disabled = false; toast(friendlyError(e, "Couldn't load your Business Profile locations. Try again."), "err"); }
 }
 
 async function gpCancel(id) {
   try { await api("/google-business-profile/post-cancel", { post_id: id }); toast("Draft discarded"); gpLoad(true); }
-  catch (e) { toast(e.message, "err"); }
+  catch (e) { toast(friendlyError(e, "Couldn't cancel that post. Try again."), "err"); }
 }
 
 function gpDelete(id) {
@@ -8949,7 +8949,7 @@ function gpDelete(id) {
     sh.querySelector("#gpdelyes").onclick = async () => {
       const b = sh.querySelector("#gpdelyes"); b.disabled = true; b.textContent = "Removing…";
       try { await api("/google-business-profile/post-delete", { post_id: id }); closeSheet(); toast("Removed from Google"); gpLoad(true); }
-      catch (e) { b.disabled = false; b.textContent = "Remove from Google"; toast(e.message, "err"); }
+      catch (e) { b.disabled = false; b.textContent = "Remove from Google"; toast(friendlyError(e, "Couldn't remove that post from Google. Try again."), "err"); }
     };
   });
 }
@@ -9907,7 +9907,7 @@ function leadSheet(l) {
         S.board = await api("/leads", { action: "lead-save",
           lead: { id: l.id, status: "won", qbo_customer_id: created.id } });
         drawLeads();
-      } catch (err) { toast(err.message, "err"); }
+      } catch (err) { toast(friendlyError(err, "Couldn't update that lead. Try again."), "err"); }
     });
     sh.querySelector("#lsave").onclick = async (e) => {
       e.currentTarget.disabled = true;
@@ -9933,7 +9933,7 @@ function leadSheet(l) {
     if (del) del.onclick = async () => {
       if (!(await askConfirm("It comes off your leads board.", { title: "Delete this lead?", ok: "Delete", danger: true }))) return;
       try { S.board = await api("/leads", { action: "lead-delete", id: l.id }); closeSheet(); drawLeads(); }
-      catch (err) { toast(err.message, "err"); }
+      catch (err) { toast(friendlyError(err, "Couldn't delete that lead. Try again."), "err"); }
     };
   });
 }
@@ -10041,7 +10041,7 @@ function drawTodos() {
   on("[data-toggle]", "click", async (e) => {
     const t = all.find((x) => x.id === e.currentTarget.dataset.toggle); if (!t) return;
     try { S.board = await api("/leads", { action: "todo-save", todo: { id: t.id, done: t.status === "open" } }); drawTodos(); }
-    catch (err) { toast(err.message, "err"); }
+    catch (err) { toast(friendlyError(err, "Couldn't update that to-do. Try again."), "err"); }
   }, slot);
   on("[data-todo]", "click", (e) => todoSheet(all.find((t) => t.id === e.currentTarget.dataset.todo)), slot);
 }
@@ -10082,7 +10082,7 @@ function todoSheet(t) {
     if (del) del.onclick = async () => {
       if (!(await askConfirm("It comes off your to-do list.", { title: "Delete this to-do?", ok: "Delete", danger: true }))) return;
       try { S.board = await api("/leads", { action: "todo-delete", id: t.id }); closeSheet(); todoAfterSave(); }
-      catch (err) { toast(err.message, "err"); }
+      catch (err) { toast(friendlyError(err, "Couldn't delete that to-do. Try again."), "err"); }
     };
   });
 }
@@ -10164,7 +10164,7 @@ function trialCreditDescription(t) {
   return 'This introductory credit needs an eligibility review. Contact Ledger support; starting a new account does not create a new credit.';
 }
 async function trialCreditSheet() {
-  let t;try{t=await api('/trial-credit',{action:'status'});}catch(e){toast(e.message,'err');return;}
+  let t;try{t=await api('/trial-credit',{action:'status'});}catch(e){toast(friendlyError(e, "Couldn't load your trial credit. Try again."),'err');return;}
   if(!t.trial_credit){await refreshUsage();toast('Your account uses its normal plan allowance.');return;}
   sheet(`<h2>US$20 to make Ledger yours</h2><p class="sh-sub">${esc(trialCreditDescription(t))}</p>
     <p class="note">Set up your agent, save your rules and try real work. Credit expires ${esc(dateShort(t.expires_at))}; it is shared across everyone and every device in your business.</p>
@@ -10210,7 +10210,7 @@ async function powerUpSheet() {
     on(".pu-card", "click", async (e) => {
       const b = e.currentTarget; b.disabled = true;
       try { const c = await api("/stripe-billing/topup", { package: b.dataset.k }); location.href = c.url; }
-      catch (err) { toast(err.message, "err"); b.disabled = false; }
+      catch (err) { toast(friendlyError(err, "Couldn't start the top-up. Nothing was charged — try again."), "err"); b.disabled = false; }
     }, sh);
   });
 }
@@ -10246,7 +10246,7 @@ async function textingSheet() {
     on(".pu-card", "click", async (e) => {
       const b = e.currentTarget; b.disabled = true;
       try { const c = await api("/stripe-billing/sms-topup", {}); location.href = c.url; }
-      catch (err) { toast(err.message, "err"); b.disabled = false; }
+      catch (err) { toast(friendlyError(err, "Couldn't start the texting top-up. Nothing was charged — try again."), "err"); b.disabled = false; }
     }, sh);
   });
 }
@@ -10281,7 +10281,7 @@ function renderAccessBanner(s) {
   const link = (label, path) => {
     if (inAndroidApp()) { a.appendChild(document.createTextNode(label)); return; }
     const b = document.createElement("u"); b.style.cursor = "pointer"; b.textContent = label;
-    b.onclick = async () => { try { const c = path === "/stripe-billing/checkout" ? await startCheckout() : await api(path, {}); location.href = c.url; } catch (e) { if (!e.cancelled) toast(e.message, "err"); } };
+    b.onclick = async () => { try { const c = path === "/stripe-billing/checkout" ? await startCheckout() : await api(path, {}); location.href = c.url; } catch (e) { if (!e.cancelled) toast(friendlyError(e, "Couldn't open billing. Nothing was charged — try again."), "err"); } };
     a.appendChild(b);
   };
   if(s.complimentary_access)return;
@@ -10439,7 +10439,7 @@ function draftCard(d, label, confirmPath, cancelPath) {
   card.querySelector(".cancel").onclick = async () => {
     cardBtns().forEach((b) => b.disabled = true);
     try { await api(cancelPath, { draft_id: d.draft_id }); cardDone(card, "Draft cancelled"); }
-    catch (e) { cardBtns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { cardBtns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't cancel that draft. Try again."), "err"); }
   };
 }
 
@@ -10455,12 +10455,12 @@ function reminderCard(d) {
     try {
       const r = await api("/quickbooks-invoice/reminder-confirm", { draft_id: d.draft_id });
       cardDone(card, "✅ Reminder emailed to " + (r.emailed_to || d.customer_email) + ((r.failed || []).length ? " · couldn't send: " + r.failed.join(", ") : ""));
-    } catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    } catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't send that reminder. Nothing was sent — try again."), "err"); }
   };
   card.querySelector(".cancel").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { await api("/quickbooks-invoice/reminder-cancel", { draft_id: d.draft_id }); cardDone(card, "Cancelled — nothing was sent"); }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't cancel that reminder. Try again."), "err"); }
   };
 }
 
@@ -10475,12 +10475,12 @@ function bookingCard(d) {
   card.querySelector(".confirm").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { await api("/google-calendar/booking-confirm", { draft_id: d.draft_id }); cardDone(card, "✅ Booked"); S.cal = null; }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't create that booking. Nothing was booked — try again."), "err"); }
   };
   card.querySelector(".cancel").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { await api("/google-calendar/booking-cancel", { draft_id: d.draft_id }); cardDone(card, "Draft cancelled"); }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't cancel that booking draft. Try again."), "err"); }
   };
 }
 
@@ -10493,12 +10493,12 @@ function emailDraftCard(d) {
   card.querySelector(".confirm").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { const r = await api("/gmail/email-send", { draft_id: d.draft_id }); cardDone(card, "✅ Sent to " + (r.to || d.to)); }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't send that email. Nothing was sent — try again."), "err"); }
   };
   card.querySelector(".cancel").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { await api("/gmail/email-cancel", { draft_id: d.draft_id }); cardDone(card, "Draft cancelled — nothing was sent"); }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't cancel that email draft. Try again."), "err"); }
   };
 }
 
@@ -10513,12 +10513,12 @@ function smsDraftCard(d) {
     try {
       const r = await api("/phone", { action: "sms-confirm", draft_id: d.draft_id });
       cardDone(card, "✅ Sent to " + (r.sent?.to_number || d.to_number));
-    } catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    } catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't send that text. Nothing was sent — try again."), "err"); }
   };
   card.querySelector(".cancel").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { await api("/phone", { action: "sms-cancel", draft_id: d.draft_id }); cardDone(card, "Draft cancelled — nothing was sent"); }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't cancel that text draft. Try again."), "err"); }
   };
 }
 
@@ -10545,12 +10545,12 @@ function actionCard(d) {
         : "✅ Applied";
       cardDone(card, done);
       if (d.kind === "set_front_desk" || d.kind === "update_phone_autoreply") S.phone = null; // Phone tab refetches its board
-    } catch (e) { btns().forEach((b) => b.disabled = false); if (!smsSendFailed(e)) toast(e.message, "err"); }
+    } catch (e) { btns().forEach((b) => b.disabled = false); if (!smsSendFailed(e)) toast(friendlyError(e, "Couldn't run that action. Nothing was changed — try again."), "err"); }
   };
   card.querySelector(".cancel").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { await api("/ledger-ai", { action: "action-cancel", draft_id: d.draft_id }); cardDone(card, "Cancelled — nothing was changed"); }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't cancel that action. Try again."), "err"); }
   };
 }
 
@@ -10563,7 +10563,7 @@ function printJobCard(j) {
     ev.target.disabled = true;
     printPdfById(j.document_id, j.doc_number, j.type || "invoice")
       .then(() => cardDone(card, "Sent to your printer dialog"))
-      .catch((e) => { ev.target.disabled = false; toast(e.message, "err"); });
+      .catch((e) => { ev.target.disabled = false; toast(friendlyError(e, "Couldn't open the print dialog. Try again."), "err"); });
   };
 }
 
@@ -10707,13 +10707,13 @@ async function renderCatalog(sh, initialImportType = "products") {
       if (!(await askConfirm("Its items stop appearing in catalog search, and History can restore them. Services already added to your service menu remain there until you remove them in Your business.", { title: "Archive this price list?", ok: "Archive", danger: true }))) return;
       btn.disabled = true;
       try { await api("/catalog", { action: "delete-source", source_id: btn.dataset.catdel }); toast("List archived — History can restore it"); renderCatalog(sh); }
-      catch (err) { btn.disabled = false; toast(err.message, "err"); }
+      catch (err) { btn.disabled = false; toast(friendlyError(err, "Couldn't archive that price list. Try again."), "err"); }
     };
   });
   slot.querySelector("#cattpl").onclick = async (e) => {
     e.preventDefault();
     try { const t = await api("/catalog", { action: "template" }); downloadCsv(t.filename || "ledger-price-list-template.csv", t.csv); }
-    catch (err) { toast(err.message, "err"); }
+    catch (err) { toast(friendlyError(err, "Couldn't download the template. Try again."), "err"); }
   };
 
   const stage = slot.querySelector("#catstage");
@@ -10761,7 +10761,7 @@ async function renderCatalog(sh, initialImportType = "products") {
         if (sel.value) C.map[sel.dataset.catf] = sel.value; else delete C.map[sel.dataset.catf];
         stage.querySelector("#catgo").disabled = true;
         try { paint(await api("/catalog", { action: "analyze", filename: file.name, csv, import_type:C.importType, column_map: C.map })); }
-        catch (err) { toast(err.message, "err"); }
+        catch (err) { toast(friendlyError(err, "Couldn't read that file. Check the format and try again."), "err"); }
       });
       stage.querySelector("#catcancel").onclick = () => { stage.innerHTML = ""; };
       stage.querySelector("#catgo").onclick = async (ev) => {
@@ -10771,7 +10771,7 @@ async function renderCatalog(sh, initialImportType = "products") {
           const done = await api("/catalog", { action: "import", filename: file.name, csv, column_map: look.column_map,import_type:C.importType,request_id:C.requestId,keep_existing:!C.sourceId,replace_source_id:C.sourceId || undefined,expected_revision:(board.sources || []).find(s=>s.id===C.sourceId)?.revision });
           toast(`${done.imported} items loaded${done.replaced ? " — old copy replaced" : ""}`);
           renderCatalog(sh);
-        } catch (err) { go.disabled = false; go.textContent = "Try import again"; toast(err.message, "err"); }
+        } catch (err) { go.disabled = false; go.textContent = "Try import again"; toast(friendlyError(err, "Couldn't finish the import. Nothing was changed — try again."), "err"); }
       };
     };
     stage.innerHTML = `<p class="note" style="margin-top:10px">Working out your columns…</p>`;
@@ -10795,7 +10795,7 @@ async function renderCatalog(sh, initialImportType = "products") {
       toast("Key saved");
       if (done.note) alert(done.note);
       renderCatalog(sh);
-    } catch (err) { btn.disabled = false; btn.textContent = "Save key"; toast(err.message, "err"); }
+    } catch (err) { btn.disabled = false; btn.textContent = "Save key"; toast(friendlyError(err, "Couldn't save that key. Try again."), "err"); }
   };
 }
 
@@ -10908,7 +10908,7 @@ async function businessSheet() {
     const cardBtn = sh.querySelector("#bzcard");
     if (cardBtn) cardBtn.onclick = async () => {
       try { const r = await booksApi({ action: "connect-onboard" }); if (r.url) window.open(r.url, "_blank"); }
-      catch (e) { toast(e.message, "err"); }
+      catch (e) { toast(friendlyError(e, "Couldn't open payouts. Try again."), "err"); }
     };
     sh.querySelector("#bzphone").onclick = () => { closeSheet(); setTab("phone"); };
     sh.querySelector("#bzshop").onclick = () => shopProfileSheet(() => businessSheet());
@@ -10929,7 +10929,7 @@ async function businessSheet() {
         const detail = await api("/workspace-profile", { action: "logo", image: { data: dataUrl, media_type: file.type } });
         S.profile.business = { ...S.profile.business, ...detail };
         toast("Logo updated"); closeSheet(); businessSheet();
-      } catch (err) { btn.disabled = false; btn.textContent = "Upload logo"; toast(err.message, "err"); }
+      } catch (err) { btn.disabled = false; btn.textContent = "Upload logo"; toast(friendlyError(err, "Couldn't upload your logo. Try a smaller image."), "err"); }
     };
     connectionStates().then((map) => {
       const slot = sh.querySelector("#connslot"); if (slot?.isConnected) renderConnectionRows(slot, map);
@@ -10970,7 +10970,7 @@ async function businessSheet() {
         if (tog) tog.onclick = async () => {
           tog.disabled = true;
           try { await api("/bookings", { action: "set-enabled", enabled: !s.enabled }); renderBooking(); }
-          catch (e) { tog.disabled = false; toast(e.message, "err"); }
+          catch (e) { tog.disabled = false; toast(friendlyError(e, "Couldn't change your booking page. Try again."), "err"); }
         };
         const cp = slot.querySelector("#bkcopy");
         if (cp) cp.onclick = async () => {
@@ -11014,7 +11014,7 @@ async function businessSheet() {
               rq.querySelectorAll("[data-bkdone]").forEach((btn) => btn.onclick = async () => {
                 btn.disabled = true;
                 try { await api("/bookings", { action: "mark-handled", id: btn.dataset.bkdone }); renderBooking(); }
-                catch (e) { btn.disabled = false; toast(e.message, "err"); }
+                catch (e) { btn.disabled = false; toast(friendlyError(e, "Couldn't mark that booking handled. Try again."), "err"); }
               });
             }
           } catch {}
@@ -11075,7 +11075,7 @@ async function businessSheet() {
     sh.querySelector("#bnew").onclick = () => { newConversation(); closeSheet(); openChat(); };
     sh.querySelector("#bbill").onclick = async () => {
       try { const d = await api("/stripe-billing/portal", {}); location.href = d.url; }
-      catch (e) { toast(e.message, "err"); }
+      catch (e) { toast(friendlyError(e, "Couldn't open billing. Try again."), "err"); }
     };
     sh.querySelector("#bout").onclick = () => supa.auth.signOut().then(() => location.reload());
     sh.querySelector("#bdel").onclick = async (e) => {
@@ -11092,7 +11092,7 @@ async function businessSheet() {
         location.reload();
       } catch (err) {
         btn.disabled = false; btn.textContent = "Delete account";
-        toast(err.message, "err");
+        toast(friendlyError(err, "Couldn't delete your account. Nothing was deleted — try again."), "err");
       }
     };
     const inst = sh.querySelector("#install");
@@ -11106,7 +11106,7 @@ async function businessSheet() {
         const hero = $("heroname");
         if (hero) hero.textContent = S.profile.business.name || "Ledger AI";
         toast("Saved");
-      } catch (err) { toast(err.message, "err"); }
+      } catch (err) { toast(friendlyError(err, "Couldn't save your business details. Try again."), "err"); }
       e.currentTarget.disabled = false;
     };
     try {
@@ -11137,7 +11137,7 @@ async function businessSheet() {
         if (!(await askConfirm(question, { title: action === "remove" ? "Remove this teammate?" : "Revoke this invitation?", ok: action === "remove" ? "Remove" : "Revoke", danger: true }))) return;
         button.disabled = true;
         try { await api("/team", { action, [key]: action === "remove" ? button.dataset.teamRemove : button.dataset.teamRevoke }); closeSheet(); businessSheet(); }
-        catch (error) { button.disabled = false; toast(error.message, "err"); }
+        catch (error) { button.disabled = false; toast(friendlyError(error, "Couldn't change that teammate. Nothing was changed — try again."), "err"); }
       };
       slot.querySelectorAll("[data-team-remove]").forEach(button => button.onclick = () => manage(button, "remove", "user_id", "They lose access and the paid seat is released."));
       slot.querySelectorAll("[data-team-revoke]").forEach(button => button.onclick = () => manage(button, "revoke", "invite_id", "Its join code will stop working."));
@@ -11147,7 +11147,7 @@ async function businessSheet() {
         try {
           const r = await api("/team", { action: "invite", email: slot.querySelector("#invmail").value.trim() });
           slot.innerHTML = `<p class="note ok">Invited. Their join code is <b>${esc(r.code || "")}</b> — send it to them; it expires in 7 days.</p>`;
-        } catch (e) { go.disabled = false; toast(e.message, "err"); }
+        } catch (e) { go.disabled = false; toast(friendlyError(e, "Couldn't send that invitation. Try again."), "err"); }
       };
     } catch { const slot = sh.querySelector("#teamslot"); if (slot) slot.textContent = "Team unavailable."; }
   });
@@ -11345,7 +11345,7 @@ function lockView(seed) {
       const st = await api("/stripe-billing/status", {}).catch(() => ({}));
       const c = expiredTrial || !st.portal_available ? await startCheckout() : await api("/stripe-billing/portal", {});
       location.href = c.url;
-    } catch (err) { if (!err.cancelled) toast(err.message, "err"); btn.disabled = false; }
+    } catch (err) { if (!err.cancelled) toast(friendlyError(err, "Couldn't open billing. Nothing was charged — try again."), "err"); btn.disabled = false; }
   };
   $("lk-export").onclick = async (e) => {
     e.preventDefault();
@@ -11354,7 +11354,7 @@ function lockView(seed) {
       const ex = await api("/books", { action: "archive", include_receipt_links: true });
       downloadBooksExport(ex);
       toast("Export downloaded");
-    } catch (err) { toast(err.message, "err"); }
+    } catch (err) { toast(friendlyError(err, "Couldn't archive your books. Try again."), "err"); }
   };
   // One request at a time: a double tap must not send two deletions.
   let lkDeleting = false;
@@ -11369,7 +11369,7 @@ function lockView(seed) {
       if (done?.notice) alert(done.notice);
       await supa.auth.signOut(); location.reload();
     }
-    catch (err) { toast(err.message, "err"); }
+    catch (err) { toast(friendlyError(err, "Couldn't delete your account. Nothing was deleted — try again."), "err"); }
     finally { lkDeleting = false; }
   };
   $("lk-out").onclick = (e) => { e.preventDefault(); supa.auth.signOut().then(() => location.reload()); };
@@ -11435,7 +11435,7 @@ function offerEntryView(mode='signin',email='') {
   root.querySelector('label.welcome-label[for="offer-code"] + label')?.remove();
   $('offer-kind').onchange=()=>{$('offer-help').textContent=$('offer-kind').value==='promotion'?'Stripe checks subscription promotions at secure checkout. Review the amount, offer duration and renewal terms before paying.':'Sign in with your invited email to check the private terms. No access is granted just by entering a code.';};
   $('offer-back').onclick=e=>{e.preventDefault();loginView(mode,email);};
-  $('go').onclick=()=>{try{if(inAndroidApp()&&$('offer-kind').value==='promotion')throw Error(SUBSCRIPTION_REQUIRED);saveOffer($('offer-kind').value,$('offer-code').value);if(S.email){boot();}else{loginView(mode,email);}}catch(e){toast(e.message,'err');}};
+  $('go').onclick=()=>{try{if(inAndroidApp()&&$('offer-kind').value==='promotion')throw Error(SUBSCRIPTION_REQUIRED);saveOffer($('offer-kind').value,$('offer-code').value);if(S.email){boot();}else{loginView(mode,email);}}catch(e){toast(friendlyError(e, "Couldn't apply that offer. Try again."),'err');}};
 }
 async function offerReviewView(selection,bootstrap) {
   const promotion=selection.kind==='promotion';
@@ -11458,7 +11458,7 @@ async function offerReviewView(selection,bootstrap) {
       const result=await api('/login-offers',{action:'redeem',code:selection.code,name,currency:$('offer-currency')?.value||'CAD',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC'});
       if(!result.redeemed)throw Error('Access was not confirmed. Retry to check the same invitation.');
       clearOffer();toast('Complimentary Solo access is active. No subscription payment is required.');await boot();
-    }catch(e){go.disabled=false;if(!e.cancelled)toast(e.message,'err');}
+    }catch(e){go.disabled=false;if(!e.cancelled)toast(friendlyError(e, "Couldn't redeem that code. Try again."),'err');}
   };
 }
 // A Google callback is accepted only after this tab started a short-lived,
@@ -11628,7 +11628,7 @@ function setupView() {
       await loadProfile(created);
       if(pendingOffer()){await boot();return;}
       onboardInterview(name);
-    } catch (e) { toast(e.message, "err"); }
+    } catch (e) { toast(friendlyError(e, "Couldn't finish setting up your workspace. Try again."), "err"); }
   };
 }
 
@@ -11668,7 +11668,7 @@ function joinView(businessName) {
       await loadProfile(await api("/workspace-profile", { action: "bootstrap" }));
       appView(); openChat();
       sys("🎉 Welcome aboard — you're now part of " + (r.businessName || businessName) + ". Ask me anything about the business.");
-    } catch (e) { toast(e.message, "err"); }
+    } catch (e) { toast(friendlyError(e, "Couldn't join that workspace. Try again."), "err"); }
   };
 }
 
@@ -11801,7 +11801,7 @@ function clientHubCard(slot, c) {
         <button class="btn ghost" id="hubpause">${link.active ? "Pause" : "Resume"}</button>
         <button class="btn ghost" id="hubnew">New link</button>
       </div></div>`;
-    const busy = async (fn) => { try { await fn(); } catch (e) { toast(e.message || "Client Hub failed", "err"); } };
+    const busy = async (fn) => { try { await fn(); } catch (e) { toast(friendlyError(e, "Couldn't update the Client Hub link. Try again."), "err"); } };
     slot.querySelector("#hubcopy").onclick = () => busy(async () => {
       await navigator.clipboard.writeText(link.url); toast("Client Hub link copied");
     });
@@ -12190,13 +12190,13 @@ function pushSettingsCard(slot) {
             await api("/web-push", { action: "register", subscription: sub.toJSON(), user_agent: navigator.userAgent });
             toast("Notifications on");
           }
-        } catch (e) { toast(e.message || "Couldn't change notifications", "err"); }
+        } catch (e) { toast(friendlyError(e, "Couldn't change your notifications. Try again."), "err"); }
         run();
       };
       const t = slot.querySelector("#pushtest");
       if (t) t.onclick = async () => {
         try { const r = await api("/web-push", { action: "test" }); toast(r.delivered > 0 ? `Test sent to ${r.delivered} device${r.delivered === 1 ? "" : "s"}` : "No device received it", r.delivered > 0 ? undefined : "err"); }
-        catch (e) { toast(e.message || "Test failed", "err"); }
+        catch (e) { toast(friendlyError(e, "Couldn't send the test notification. Try again."), "err"); }
       };
     });
   };
@@ -12394,7 +12394,7 @@ function liveSheet() {
   })();
 }
 
-try { await finishGoogleReturn(); } catch(error) { loginView("signin");toast(error.message,"err"); }
+try { await finishGoogleReturn(); } catch(error) { loginView("signin");toast(friendlyError(error, "Couldn't finish signing in with Google. Try again."),"err"); }
 boot();
 supa.auth.onAuthStateChange((event, s) => {
   if (!accountBoundary.accept(s)) return;
@@ -12683,7 +12683,7 @@ function wirePhoneOS(d){
  if($('pos-how'))$('pos-how').onclick=()=>phoneHowSheet(d);
  on('[data-nfilter]','click',e=>{S.phoneNotificationFilter=e.currentTarget.dataset.nfilter;renderPhone(d);});
  on('[data-pnotice]','click',e=>phoneNoticeSheet(d,phoneNoticeRows(d).find(n=>n.id===e.currentTarget.dataset.pnotice)));
- if($('pos-mark-all'))$('pos-mark-all').onclick=async()=>{try{const ids=phoneNoticeRows(d).map(n=>n.id);await api('/phone',{action:'notifications-read',ids});d.notificationReadIds=ids;renderPhone(d);}catch(e){toast(e.message);}};
+ if($('pos-mark-all'))$('pos-mark-all').onclick=async()=>{try{const ids=phoneNoticeRows(d).map(n=>n.id);await api('/phone',{action:'notifications-read',ids});d.notificationReadIds=ids;renderPhone(d);}catch(e){toast(friendlyError(e, "Couldn't mark those notices read. Try again."));}};
 }
 function phoneComposeSheet(d){const wrap=sheet('<h2>New text</h2><p class="sh-sub">Send from your business number.</p><label class="field"><span>To</span><input id="pos-to" type="tel" placeholder="+1 555 555 0123"></label><label class="field"><span>Message</span><textarea id="pos-new-body" rows="4" placeholder="Write a message…"></textarea></label><p class="note err" id="pos-send-error"></p><button class="btn primary" id="pos-send-new">Send text</button>');wrap.querySelector('#pos-send-new').onclick=async e=>{const to=wrap.querySelector('#pos-to').value.trim(),body=wrap.querySelector('#pos-new-body').value.trim();if(!to||!body){wrap.querySelector('#pos-send-error').textContent='Enter a phone number and a message.';return;}e.currentTarget.disabled=true;try{await api('/phone',{action:'reply',to_number:to,body});closeSheet();S.phoneInboxRows=null;await renderPhone();}catch(ex){wrap.querySelector('#pos-send-error').textContent=ex.message;e.target.disabled=false;smsSendFailed(ex);}};}
 
@@ -12703,7 +12703,7 @@ async function schedulingResourcesSheet() {
 }
 async function schedulingResourceEditor(existing=null) {
  const days=['mon','tue','wed','thu','fri','sat','sun'];let services=[];
- try{services=(await booksApi({action:'shortcuts'})).shortcuts||[]}catch(e){toast(e.message,'err');return}
+ try{services=(await booksApi({action:'shortcuts'})).shortcuts||[]}catch(e){toast(friendlyError(e, "Couldn't load your service shortcuts. Try again."),'err');return}
  const r=existing||{name:'',capacity:1,active:true,services:[],working_hours:{},time_off:[]};const off=[...r.time_off];
  const custom=Object.keys(r.working_hours||{}).length>0;
  const sh=sheet(`<h2>${existing?'Edit resource':'New resource'}</h2><label class="emailrow">Name<input id="rs-name" class="cmpinput" value="${esc(r.name)}"></label><label class="emailrow">Capacity<input id="rs-cap" class="cmpinput" type="number" min="1" max="100" value="${r.capacity}"></label><label class="resource-option"><input id="rs-active" type="checkbox"${r.active?' checked':''}> Available for new appointments</label>
@@ -12734,7 +12734,7 @@ function catalogHistorySheet(source) {
  sheet(`<h2>${esc(source.name)} — history</h2><p class="note">Restore a previous version as the current list. The current version remains in history. Service restores also update the linked service menu.</p><div id="chrows">Loading…</div>`,async sh=>{
  const slot=sh.querySelector("#chrows");
  try {const r=await api("/catalog",{action:"history",source_id:source.id});slot.innerHTML=(r.versions||[]).map(v=>`<div class="cmpsect"><b>Version ${v.revision}</b><p class="note">${esc(new Date(v.created_at).toLocaleString())}</p>${v.revision===source.revision ? '<p>Current version</p>' : `<button class="btn" data-restore="${v.revision}">Restore this version</button>`}</div>`).join("")||"No retained versions yet.";
- slot.querySelectorAll("[data-restore]").forEach(btn=>btn.onclick=async()=>{if(!(await askConfirm("The current version stays in history.",{title:"Restore this version?",ok:"Restore",danger:true})))return;btn.disabled=true;try{await api("/catalog",{action:"restore",source_id:source.id,revision:Number(btn.dataset.restore),expected_revision:source.revision,request_id:crypto.randomUUID()});toast("Version restored");catalogImportSheet(source.import_type||"products")}catch(e){toast(e.message);btn.disabled=false}});
+ slot.querySelectorAll("[data-restore]").forEach(btn=>btn.onclick=async()=>{if(!(await askConfirm("The current version stays in history.",{title:"Restore this version?",ok:"Restore",danger:true})))return;btn.disabled=true;try{await api("/catalog",{action:"restore",source_id:source.id,revision:Number(btn.dataset.restore),expected_revision:source.revision,request_id:crypto.randomUUID()});toast("Version restored");catalogImportSheet(source.import_type||"products")}catch(e){toast(friendlyError(e, "Couldn't restore that version. Nothing changed — try again."), "err");btn.disabled=false}});
  }catch(e){slot.textContent=e.message;}
  });
 }
