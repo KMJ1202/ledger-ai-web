@@ -1623,7 +1623,7 @@ async function homeCustomers() {
 const isAuto = () => S.shop?.business_type === "automotive";
 // What a supplier order delivered, in this business's own words. Only an
 // automotive workspace says "tires"; a NULL type is never automotive.
-const unitNoun = (n) => isAuto() ? (Number(n) === 1 ? "tire" : "tires") : (Number(n) === 1 ? "item" : "items");
+const unitNoun = (n) => isAuto() ? (Number(n) === 1 ? "tire" : "tires") : (Number(n) === 1 ? "unit" : "units");
 const BUSINESS_TYPES = [
   ["automotive", "Auto & tire", "e.g. Mobile tire shop in south Calgary — passenger and light truck"],
   ["trades", "Trades", "e.g. Residential HVAC — furnaces, AC and hot water tanks, 24-hour service"],
@@ -1814,27 +1814,28 @@ function shopProfileSheet(onDone, opts = {}) {
 // checklist does. Dismissed for the session only — it is back next time until
 // a type is saved, and it disappears the moment one is. Same wording as the
 // iPhone app.
-const BIZTYPE_BANNER_DISMISSED = "ledger.bizTypeBannerHidden";
+// Dismissed in memory only, exactly like the iPhone app: a reload brings it
+// back until a type is actually saved. Nothing is written to storage.
+let bizTypeBannerDismissed = false;
 function drawBusinessTypeBanner() {
   const slot = $("homebiztype"); if (!slot) return;
   slot.innerHTML = "";
-  if (S.shop?.business_type) return;
-  const role = S.profile?.role || (S.team?.members || []).find((m) => (m.email || "").toLowerCase() === S.email)?.role || "owner";
-  if (role !== "owner") return;
-  let dismissed = false;
-  try { dismissed = sessionStorage.getItem(BIZTYPE_BANNER_DISMISSED) === "1"; } catch {}
-  if (dismissed) return;
+  if (bizTypeBannerDismissed) return;
+  // Never guess before the profile is really here — an empty S.shop during
+  // boot would flash the banner at a workspace that has already answered.
+  if (!S.profile || !S.shop) return;
+  if (S.shop.business_type) return;
+  const role = S.profile.role || (S.team?.members || []).find((m) => (m.email || "").toLowerCase() === S.email)?.role || "owner";
+  if (!["owner", "admin"].includes(role)) return;
   slot.innerHTML = `<div class="hbanner" id="biztypebanner" style="margin-bottom:10px">
       <span class="ic">&#9889;</span>
-      <span class="m"><b>Finish setting up your business — 1 minute</b></span>
+      <span class="m"><b>Finish setting up your business — 1 minute</b>
+        <small style="white-space:normal;line-height:1.35;margin-top:2px">Pick what kind of business you run so Ledger fits your screens and your words.</small></span>
       <button class="retry" id="biztypego">Finish</button>
-      <button class="retry" id="biztypehide" aria-label="Hide this until next time">Later</button>
+      <button class="retry" id="biztypehide" aria-label="Hide this for now">Later</button>
     </div>`;
   slot.querySelector("#biztypego").onclick = () => shopProfileSheet(() => { drawBusinessTypeBanner(); loadHomeSetup(); });
-  slot.querySelector("#biztypehide").onclick = () => {
-    try { sessionStorage.setItem(BIZTYPE_BANNER_DISMISSED, "1"); } catch {}
-    slot.innerHTML = "";
-  };
+  slot.querySelector("#biztypehide").onclick = () => { bizTypeBannerDismissed = true; slot.innerHTML = ""; };
 }
 
 // Three-step setup checklist at the top of Home for a workspace that is not
@@ -5950,7 +5951,7 @@ function bookingSheet(dayISO, editing, prefill) {
         // PRICING blocks from these fields and refuses anything incomplete.
         const booking = {
           customer: { first_name: val("bkFirst"), last_name: val("bkLast"), phone: val("bkPhone"), email: val("bkEmail"), source: val("bkSource") },
-          vehicle: isAuto() ? val("bkVehicle") : "", tire_size: val("bkTire"), job_details: isAuto() ? "" : val("bkVehicle"),
+          vehicle: isAuto() ? val("bkVehicle") : "", tire_size: isAuto() ? val("bkTire") : "", job_details: isAuto() ? "" : val("bkVehicle"),
           service: { summary: val("bkService") }, pricing: { lines }, notes: val("bkNotes"),
         };
         const payload = { title, booking, email: val("bkEmail"), start: start.toISOString(), end: end.toISOString(),resource_id:val("bkResource") || null,service_ids:val("bkMenu") ? [val("bkMenu")] : [] };
@@ -8183,7 +8184,7 @@ function frontDeskSheet(d) {
       <button class="btn ${fd.booking === false ? "em" : ""}" data-fdbook="0" type="button">No, just quote</button>
     </div>
     <label class="fld" style="margin-top:14px">YOUR STANDING INSTRUCTIONS</label>
-    <textarea id="fdinstr" rows="4" placeholder="${isAuto() ? "e.g. Always ask what vehicle. Never book Saturdays before 10. We don&#39;t do alignments." : "e.g. Always ask what the job is. Never book Saturdays before 10. We don&#39;t do rush work."}">${esc(fd.instructions || "")}</textarea>
+    <textarea id="fdinstr" rows="4" placeholder="${isAuto() ? "e.g. Always ask what vehicle. Never book Saturdays before 10. We don&#39;t do alignments." : "e.g. Always ask what the job is. Never book Saturdays before 10. We don&#39;t take same-day work."}">${esc(fd.instructions || "")}</textarea>
     <p class="note" style="margin-top:6px">Written in your words, followed on every reply.</p>
     <label class="fld" style="margin-top:14px">MAX TEXTS TO ONE CALLER PER DAY</label>
     <input id="fdcap" type="number" min="1" max="30" value="${Number(fd.maxRepliesPerCaller || 8)}">
