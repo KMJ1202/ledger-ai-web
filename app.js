@@ -341,7 +341,7 @@ let upgradeSheetOpen = false;
 function upgradeHit(d) {
   // Google Play forbids an app it distributes from pointing anywhere else to
   // pay. Inside the Android wrapper we state the fact and stop there.
-  if (inAndroidApp()) { toast(d.message || d.error || "That's part of Ledger Pro.", "err"); return; }
+  if (inAndroidApp()) { toast(humanSentence(d.message) || humanSentence(d.error) || "That's part of Ledger Pro.", "err"); return; }
   if (upgradeSheetOpen) return;
   upgradeSheetOpen = true;
   const price = d.required_plan_price || 699;
@@ -385,7 +385,7 @@ async function moveToPlan(plan) {
     // `unchanged` after a retry means the earlier change landed while the
     // screen still showed the old plan — reload so it tells the truth (02-07).
     // `pending` means Stripe's own webhook is applying it within seconds.
-    if (d.unchanged) { toast(d.message); closeStack(); closeSheet(); setTimeout(() => location.reload(), 900); return true; }
+    if (d.unchanged) { toast(humanSentence(d.message) || "Your plan is unchanged."); closeStack(); closeSheet(); setTimeout(() => location.reload(), 900); return true; }
     toast(d.pending ? `${d.message || `You're on ${d.plan_name}.`} Updating…` : (d.message || `You're on ${d.plan_name}.`));
     closeStack(); closeSheet();
     // Every gated screen has to redraw against the new plan, and the copilot's
@@ -397,9 +397,9 @@ async function moveToPlan(plan) {
     const code = e.data?.code || e.data?.error;
     if (code === "no_subscription") {
       try { const c = await startCheckout(plan); location.href = c.url; return true; }
-      catch (err) { if (!err.cancelled) toast(err.message, "err"); return false; }
+      catch (err) { if (!err.cancelled) toast(friendlyError(err, "Couldn't start checkout. Nothing was charged — try again."), "err"); return false; }
     }
-    toast(e.message, "err");
+    toast(friendlyError(e, "Couldn't change your plan. Nothing was charged — try again."), "err");
     return false;
   }
 }
@@ -440,7 +440,7 @@ async function startCheckout(plan, promoCode = null) {
     // An App Store subscription ended within Apple's 60-day retry window: the
     // server asks once whether the Apple side is really cancelled (02-05).
     if (e.status === 409 && e.data?.code === "apple_subscription_recent") {
-      if (!confirm(`${e.data.message}\n\nContinue to web checkout?`)) return Promise.reject(Object.assign(new Error("cancelled"), { cancelled: true }));
+      if (!(await askConfirm(friendlyError(e, "Your App Store subscription may still be active."), { title: "Continue to web checkout?", ok: "Continue" }))) return Promise.reject(Object.assign(new Error("cancelled"), { cancelled: true }));
       return api("/stripe-billing/checkout", { ...body, acknowledge_apple: true });
     }
     throw e;
@@ -527,6 +527,91 @@ function askPrompt(message, { title = "", value = "", placeholder = "", ok = "OK
     { label: cancel, value: null },
     { label: ok, value: askDialog.INPUT, primary: true, kind: "primary" },
   ] });
+}
+// Copy fallback (audit 19.1). Some in-app browsers refuse clipboard writes;
+// a native prompt() there shows nothing at all, so the link was simply lost.
+// This is a real sheet: the link sits in a selectable field, Copy tries again
+// in place (clipboard, then the old execCommand path), and says what happened.
+function linkSheet(title, url) {
+  return new Promise((resolve) => {
+    document.getElementById("ledger-ask")?.remove();
+    const dlg = document.createElement("dialog"); dlg.id = "ledger-ask"; dlg.className = "ask";
+    dlg.setAttribute("aria-labelledby", "ledger-ask-title");
+    dlg.setAttribute("aria-describedby", "ledger-ask-body");
+    dlg.innerHTML = `<form><h2 id="ledger-ask-title">${esc(title)}</h2>
+      <p class="ask-body" id="ledger-ask-body">This browser wouldn't copy it for us. Tap Copy, or select the link and copy it by hand.</p>
+      <input class="ask-input" readonly autocomplete="off" aria-labelledby="ledger-ask-title" value="${esc(url || "")}">
+      <div class="ask-row"><button type="button" class="btn ghost" data-ask-close>Done</button><button type="submit" class="btn primary" data-ask-copy>Copy</button></div></form>`;
+    document.body.appendChild(dlg);
+    let done = false;
+    const finish = () => { if (done) return; done = true; try { dlg.close(); } catch {} dlg.remove(); resolve(); };
+    const field = dlg.querySelector(".ask-input");
+    const copy = async () => {
+      try { field.focus(); field.select(); field.setSelectionRange(0, String(url || "").length); } catch {}
+      let ok = false;
+      try { await navigator.clipboard.writeText(url); ok = true; } catch {}
+      if (!ok) { try { ok = document.execCommand("copy"); } catch { ok = false; } }
+      toast(ok ? "Link copied" : "Press and hold the link to copy it.");
+    };
+    dlg.querySelector("[data-ask-close]").onclick = (e) => { e.preventDefault(); finish(); };
+    dlg.querySelector("form").onsubmit = (e) => { e.preventDefault(); void copy(); };
+    dlg.addEventListener("cancel", (e) => { e.preventDefault(); finish(); });
+    dlg.addEventListener("click", (e) => { if (e.target === dlg) finish(); });
+    dlg.addEventListener("close", () => finish());
+    try { dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
+    try { field.focus(); field.select(); } catch {}
+  });
+}
+
+/* ---------------- plain-English failures (audit 19.2) ---------------- */
+// An owner should never read "column phone_messages.sent_by does not exist",
+// "PGRST204" or a bare "Failed to fetch". One funnel for every caught error:
+// keep a sentence a human wrote on the server, map the cases we know, and
+// otherwise show the caller's own short sentence about what just failed. The
+// raw error always goes to the console so a bug report still has it.
+const ERROR_JARGON = /[{}[\]<>]|"[a-z_]+"\s*:|\bcolumn\b|\bconstraint\b|\brelation\b|\bPGRST|\bnull value\b|\bviolates\b|\bsyntax error\b|\bundefined\b|\bNaN\b|\bstack\b|\bHTTP\s*\d{3}\b|\b[45]\d{2}\s+(?:Bad Request|Unauthorized|Forbidden|Not Found|Conflict|Payload Too Large|Too Many Requests|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b|Request failed \(\d+\)/i;
+// A sentence is something an owner could have been handed on paper: real
+// words, a space in it, no code, no punctuation soup, short enough to read.
+function humanSentence(text) {
+  const t = String(text == null ? "" : text).trim();
+  if (t.length < 8 || t.length > 240) return "";
+  if (!/\s/.test(t)) return "";
+  if (!/[a-z]/.test(t)) return "";
+  if (/^[a-z][a-z0-9_]*$/i.test(t)) return "";
+  if (ERROR_JARGON.test(t)) return "";
+  return t;
+}
+function friendlyError(e, fallback) {
+  const safe = fallback || "Something went wrong. Please try again.";
+  try { console.warn("[ledger] " + safe, e); } catch {}
+  if (e == null) return safe;
+  const data = (e && e.data) || {};
+  const status = Number(e && e.status);
+  const raw = typeof e === "string" ? e : String((e && e.message) || "");
+  // Nothing left the device.
+  if (e.offline || status === 0 || /failed to fetch|load failed|network\s*error|networkerror|connection (?:lost|refused)/i.test(raw)) {
+    return offlineMessage();
+  }
+  if (e.name === "AbortError" || /timed? ?out|timeout|took too long/i.test(raw)) {
+    return "That took too long to answer. Check your connection and try again.";
+  }
+  // Signed out / expired token: one instruction, not a JWT dump.
+  if (status === 401 || status === 403 || /^signed out$/i.test(raw) || /\bjwt\b|invalid token|token (?:is )?expired|not authenticated/i.test(raw)) {
+    return "Your session has ended. Sign in again to continue.";
+  }
+  // The AI-health outage sentence (_shared/ai_health) is already plain English.
+  if (data.code === "ai_unavailable" || status === 503) {
+    return humanSentence(data.message || data.error || raw) || "Ledger's AI helper is unavailable right now — try again in a few minutes.";
+  }
+  // The server wrote something for a human: that beats anything we could guess.
+  const written = humanSentence(data.message) || humanSentence(data.error) || humanSentence(raw);
+  if (written) return written;
+  if (status === 402) return "That needs an active plan or more AI allowance — check Billing under Business profile & settings.";
+  if (status === 409) return "That clashed with something already saved. Reopen the screen and try again.";
+  if (status === 413) return "That file is too large. Try a smaller one.";
+  if (status === 429) return "That's a lot at once — wait a few seconds and try again.";
+  if (status >= 500) return "Ledger's server had a problem. Nothing was lost — try again in a moment.";
+  return safe;
 }
 
 /* ---------------- bottom sheet ---------------- */
@@ -1011,12 +1096,12 @@ function wireConnect(scope) {
       // One set of books (2026-09-05): built-in invoices go out of sight while
       // QuickBooks is on. Nothing is deleted — say so, then let the owner decide.
       if (err.status === 409 && err.data?.code === "native_documents_exist") {
-        if (confirm(err.message + "\n\nConnect QuickBooks anyway?")) {
-          try { await launch("&acknowledge=native_hidden"); return; } catch (e2) { toast(e2.message, "err"); }
+        if (await askConfirm(friendlyError(err, "Invoices made in Ledger go out of sight while QuickBooks is on. Nothing is deleted."), { title: "Connect QuickBooks anyway?", ok: "Connect" })) {
+          try { await launch("&acknowledge=native_hidden"); return; } catch (e2) { toast(friendlyError(e2, "Couldn't start the QuickBooks connection. Try again."), "err"); }
         }
         b.disabled = false; return;
       }
-      b.disabled = false; toast(err.message, "err");
+      b.disabled = false; toast(friendlyError(err, "Couldn't start the QuickBooks connection. Try again."), "err");
     }
   }, scope);
 }
@@ -1028,13 +1113,13 @@ function wireConnect(scope) {
 function wireDisconnectQuickBooks(scope) {
   on("[data-qbo-disconnect]", "click", async (e) => {
     const b = e.currentTarget;
-    if (!confirm("Disconnect QuickBooks?\n\nLedger stops reading and writing your QuickBooks company and switches to built-in books. Your QuickBooks data stays in QuickBooks — nothing is deleted. You can reconnect any time.")) return;
+    if (!(await askConfirm("Ledger stops reading and writing your QuickBooks company and switches to built-in books. Your QuickBooks data stays in QuickBooks — nothing is deleted. You can reconnect any time.", { title: "Disconnect QuickBooks?", ok: "Disconnect", danger: true }))) return;
     b.disabled = true;
     try {
       await api("/quickbooks-oauth/disconnect", {});
       toast("QuickBooks disconnected — you're on built-in books");
       setTimeout(() => location.reload(), 900);
-    } catch (err) { b.disabled = false; toast(err.message, "err"); }
+    } catch (err) { b.disabled = false; toast(friendlyError(err, "Couldn't disconnect QuickBooks. Nothing changed — try again."), "err"); }
   }, scope);
 }
 
@@ -1049,14 +1134,15 @@ const DISCONNECT_COPY = {
 function wireDisconnectConnector(scope, rerender) {
   on("[data-disconnect]", "click", async (e) => {
     const b = e.currentTarget, key = b.dataset.disconnect, c = CONNECTORS.find((x) => x.key === key);
-    if (!c || !confirm(DISCONNECT_COPY[key] || `Disconnect ${c.name}?`)) return;
+    if (!c) return;
+    if (!(await askConfirm(DISCONNECT_COPY[key] || `${c.name} stops working here. You can reconnect any time.`, { title: `Disconnect ${c.name}?`, ok: "Disconnect", danger: true }))) return;
     b.disabled = true;
     try {
       await api(c.start.replace(/\/start$/, "/disconnect"), {});
       toast(`${c.name} disconnected`);
       const latest = await connectionStates();
       if (rerender) rerender(latest);
-    } catch (err) { b.disabled = false; toast(err.message, "err"); }
+    } catch (err) { b.disabled = false; toast(friendlyError(err, "Couldn't disconnect that service. Nothing changed — try again."), "err"); }
   }, scope);
 }
 
@@ -1153,7 +1239,7 @@ async function renderHome() {
           <div class="status inline"><i></i>Ready</div></div>
       </div>
 
-      <div id="hometrial"></div><div id="homesetup"></div>
+      <div id="homebiztype"></div><div id="hometrial"></div><div id="homesetup"></div>
 
       <button class="bizrow" id="bizsettings">
         <span class="ic">${segIc("gear")}</span>
@@ -1238,6 +1324,7 @@ async function renderHome() {
     else setTab(k);
   });
   on("[data-ask]", "click", (e) => { openChat(); $("box").value = e.currentTarget.dataset.ask; send(); });
+  drawBusinessTypeBanner();
   loadHomeTrial(), loadHomeSetup();
   loadHomeKpis();
   loadHomeReviewsPulse();
@@ -1534,6 +1621,9 @@ async function homeCustomers() {
 // workspace that has not said yet is a generic service business — never auto.
 // Only the first question is required; everything else saves when given.
 const isAuto = () => S.shop?.business_type === "automotive";
+// What a supplier order delivered, in this business's own words. Only an
+// automotive workspace says "tires"; a NULL type is never automotive.
+const unitNoun = (n) => isAuto() ? (Number(n) === 1 ? "tire" : "tires") : (Number(n) === 1 ? "unit" : "units");
 const BUSINESS_TYPES = [
   ["automotive", "Auto & tire", "e.g. Mobile tire shop in south Calgary — passenger and light truck"],
   ["trades", "Trades", "e.g. Residential HVAC — furnaces, AC and hot water tanks, 24-hour service"],
@@ -1718,6 +1808,36 @@ function shopProfileSheet(onDone, opts = {}) {
   });
 }
 
+// A workspace that never answered "what kind of business?" gets generic
+// screens: no VIN scan, no vehicle on a booking, no tire wording. One line at
+// the top of Home says the setting exists and opens the same screen the
+// checklist does. Dismissed for the session only — it is back next time until
+// a type is saved, and it disappears the moment one is. Same wording as the
+// iPhone app.
+// Dismissed in memory only, exactly like the iPhone app: a reload brings it
+// back until a type is actually saved. Nothing is written to storage.
+let bizTypeBannerDismissed = false;
+function drawBusinessTypeBanner() {
+  const slot = $("homebiztype"); if (!slot) return;
+  slot.innerHTML = "";
+  if (bizTypeBannerDismissed) return;
+  // Never guess before the profile is really here — an empty S.shop during
+  // boot would flash the banner at a workspace that has already answered.
+  if (!S.profile || !S.shop) return;
+  if (S.shop.business_type) return;
+  const role = S.profile.role || (S.team?.members || []).find((m) => (m.email || "").toLowerCase() === S.email)?.role || "owner";
+  if (!["owner", "admin"].includes(role)) return;
+  slot.innerHTML = `<div class="hbanner" id="biztypebanner" style="margin-bottom:10px">
+      <span class="ic">&#9889;</span>
+      <span class="m"><b>Finish setting up your business — 1 minute</b>
+        <small style="white-space:normal;line-height:1.35;margin-top:2px">Pick what kind of business you run so Ledger fits your screens and your words.</small></span>
+      <button class="retry" id="biztypego">Finish</button>
+      <button class="retry" id="biztypehide" aria-label="Hide this for now">Later</button>
+    </div>`;
+  slot.querySelector("#biztypego").onclick = () => shopProfileSheet(() => { drawBusinessTypeBanner(); loadHomeSetup(); });
+  slot.querySelector("#biztypehide").onclick = () => { bizTypeBannerDismissed = true; slot.innerHTML = ""; };
+}
+
 // Three-step setup checklist at the top of Home for a workspace that is not
 // fully set up: books, calendar, card. Every step deep-links to the action.
 // Disappears on its own when all three are done, or when the owner hides it.
@@ -1796,7 +1916,7 @@ async function loadHomeSetup() {
         S.booksProvider = "native";
         toast("Built-in books it is — invoices and estimates are ready in Finance");
         loadHomeSetup();
-      } catch (e) { native.disabled = false; toast(e.message, "err"); }
+      } catch (e) { native.disabled = false; toast(friendlyError(e, "Couldn't switch to built-in books. Try again."), "err"); }
     };
     const hide = slot.querySelector("#setuphide");
     if (hide) hide.onclick = () => { accountStorage.setItem(SETUP_HIDE_KEY, "1"); slot.innerHTML = ""; };
@@ -1804,7 +1924,7 @@ async function loadHomeSetup() {
     if (card) card.onclick = async () => {
       card.disabled = true;
       try { const c = await startCheckout(); location.href = c.url; }
-      catch (e) { card.disabled = false; if (!e.cancelled) toast(e.message, "err"); }
+      catch (e) { card.disabled = false; if (!e.cancelled) toast(friendlyError(e, "Couldn't open checkout. Nothing was charged — try again."), "err"); }
     };
   }
 }
@@ -1946,7 +2066,7 @@ async function openCostReview() {
             review = d.review; S.review = d.review; S.profitStale = true;
             toast(`${vendor.vendor} classified — ${d.reclassified} invoice${d.reclassified === 1 ? "" : "s"} updated`);
             render(); loadHomeAttention();
-          } catch (err) { toast(err.message, "err"); group.forEach((b) => b.disabled = false); }
+          } catch (err) { toast(friendlyError(err, "Couldn't save that vendor rule. Try again."), "err"); group.forEach((b) => b.disabled = false); }
         }, sh);
       });
       return;
@@ -1965,7 +2085,7 @@ async function openCostReview() {
         try {
           const d = await api("/profit/dismiss-exception", { id: e.currentTarget.dataset.dis });
           review = d.review; S.review = d.review; render(); loadHomeAttention();
-        } catch (err) { toast(err.message, "err"); e.currentTarget.disabled = false; }
+        } catch (err) { toast(friendlyError(err, "Couldn't dismiss that item. Try again."), "err"); e.currentTarget.disabled = false; }
       }, sh);
     });
   };
@@ -1973,7 +2093,7 @@ async function openCostReview() {
   try {
     if (!review) { review = await get("/profit/review"); S.review = review; }
     render();
-  } catch (e) { toast(e.message, "err"); }
+  } catch (e) { toast(friendlyError(e, "Couldn't load the profit review. Pull down to refresh."), "err"); }
 }
 
 // Mirrors the iOS attention center: the list is built live from phone, books,
@@ -2376,12 +2496,12 @@ async function loadNativeInvoices() {
         const ex = await booksApi(op === "barchive" ? { action: "archive", include_receipt_links: true } : { action: "export" });
         downloadBooksExport(ex);
         toast("Export downloaded");
-      } catch (err) { toast(err.message, "err"); }
+      } catch (err) { toast(friendlyError(err, "Couldn't build the export. Try again."), "err"); }
     } else if (op === "stripe") {
       try {
         const r = await booksApi({ action: "connect-onboard" });
         if (r.url) window.open(r.url, "_blank");
-      } catch (err) { toast(err.message, "err"); }
+      } catch (err) { toast(friendlyError(err, "Couldn't open payouts. Try again."), "err"); }
     }
   }, slot);
 }
@@ -2418,7 +2538,7 @@ function booksLinkStatusMarkup(doc,id) {
   return `<p class="note err" id="${id}">This link no longer works${doc.link_expires_at&&Date.parse(doc.link_expires_at)<=Date.now()?" (expired)":" (revoked)"} — emailing the document sends a new one.</p><button class="pillbtn" id="${id}replace">Replace link</button>`;
 }
 async function replaceDocumentLink(kind,id) {
-  if(!confirm("Replace this link? The old link stops working immediately; the new one is not sent automatically."))return null;
+  if(!(await askConfirm("The old link stops working immediately; the new one is not sent automatically.", { title: "Replace this link?", ok: "Replace", danger: true })))return null;
   const r=await api("/client-hub",{action:"private-links/renew",kind,id});
   if(!r||!r.url)throw new Error(r?.error||"The link could not be replaced.");
   return r;
@@ -2485,7 +2605,7 @@ async function nativeInvoiceSheet(id) {
     on("[data-reverse]", "click", async (e) => {
       const btn = e.currentTarget, payment = (inv.payments || []).find((p) => p.id === btn.dataset.reverse);
       if (!payment) return;
-      const reason = (prompt(`Reverse the ${money(payment.amount)} ${payment.method} payment on ${inv.number}? Say why (kept in the audit history):`) || "").trim();
+      const reason = (await askPrompt(`Reverse the ${money(payment.amount)} ${payment.method} payment on ${inv.number}? Say why — it is kept in the audit history.`, { title: "Reverse this payment?", ok: "Reverse", placeholder: "Reason" }) || "").trim();
       if (!reason) return;
       btn.disabled = true;
       try {
@@ -2499,7 +2619,7 @@ async function nativeInvoiceSheet(id) {
     const link = inv.link || "";
     wrap.querySelector("#blink").onclick = async () => {
       try { await navigator.clipboard.writeText(link); toast("Payment link copied"); }
-      catch { prompt("Payment link:", link); }
+      catch { await linkSheet("Payment link", link); }
     };
     wrap.querySelector("#bopen").onclick = () => window.open(link, "_blank");
     const replaceLink = wrap.querySelector("#blinkstatusreplace");
@@ -2510,7 +2630,7 @@ async function nativeInvoiceSheet(id) {
     };
     const emailBtn = wrap.querySelector("#bemail");
     if (emailBtn) emailBtn.onclick = async () => {
-      const to = (prompt("Email this invoice to:", inv.customer?.email || "") || "").trim();
+      const to = (await askPrompt("Email this invoice to:", { title: "Email this invoice", value: inv.customer?.email || "", placeholder: "name@business.com", ok: "Send" }) || "").trim();
       if (!to) return;
       emailBtn.disabled = true;
       const send = async (force) => {
@@ -2522,7 +2642,7 @@ async function nativeInvoiceSheet(id) {
       try { await send(false); }
       catch (e) {
         if (/already emailed/i.test(e.message)) {
-          if (confirm(`${inv.number} was already emailed to ${to}. Send it again?`)) {
+          if (await askConfirm(`${inv.number} was already emailed to ${to}.`, { title: "Send it again?", ok: "Send again" })) {
             try { await send(true); return; } catch (e2) { wrap.querySelector("#berr").textContent = e2.message; }
           }
         } else wrap.querySelector("#berr").textContent = e.message;
@@ -2611,7 +2731,7 @@ async function nativeEstimateSheet(id) {
     const lb = wrap.querySelector("#estlink");
     if (lb) lb.onclick = async () => {
       try { await navigator.clipboard.writeText(link); toast("Share link copied"); }
-      catch { prompt("Estimate link:", link); }
+      catch { await linkSheet("Estimate link", link); }
     };
     const ob = wrap.querySelector("#estopen");
     if (ob) ob.onclick = () => window.open(link, "_blank");
@@ -2623,7 +2743,7 @@ async function nativeEstimateSheet(id) {
     };
     const emailBtn = wrap.querySelector("#estemail");
     if (emailBtn) emailBtn.onclick = async () => {
-      const to = (prompt("Email this estimate to:", est.customer?.email || "") || "").trim();
+      const to = (await askPrompt("Email this estimate to:", { title: "Email this estimate", value: est.customer?.email || "", placeholder: "name@business.com", ok: "Send" }) || "").trim();
       if (!to) return;
       emailBtn.disabled = true;
       const doSend = async (force) => {
@@ -2635,7 +2755,7 @@ async function nativeEstimateSheet(id) {
       try { await doSend(false); }
       catch (e) {
         if (/already emailed/i.test(e.message)) {
-          if (confirm(`${est.number} was already emailed to ${to}. Send it again?`)) {
+          if (await askConfirm(`${est.number} was already emailed to ${to}.`, { title: "Send it again?", ok: "Send again" })) {
             try { await doSend(true); return; } catch (e2) { err(e2.message); }
           }
         } else err(e.message);
@@ -2664,7 +2784,7 @@ async function nativeEstimateSheet(id) {
         // A quote past its "prices honoured until" date converts only once the
         // owner says the quoted prices still stand (server requires force).
         const expiredNote = preview.expired ? `THIS ESTIMATE EXPIRED ON ${preview.expiry_date}. Converting bills the customer at the quoted prices anyway.\n` : "";
-        if(!confirm(`Review invoice from ${est.number}\n${expiredNote}Subtotal: ${money(v.subtotal)}\n${taxes}\nTotal: ${money(v.total)}\nTerms: ${v.terms} · Due ${v.due_date}\n${preview.tax_settings_changed ? "Tax settings changed. This invoice keeps the quoted taxes.\n" : ""}Create this invoice?`)) { conv.disabled=false;return; }
+        if(!(await askConfirm(`${expiredNote}Subtotal: ${money(v.subtotal)}\n${taxes}\nTotal: ${money(v.total)}\nTerms: ${v.terms} · Due ${v.due_date}\n${preview.tax_settings_changed ? "Tax settings changed. This invoice keeps the quoted taxes.\n" : ""}`, { title: `Review invoice from ${est.number}`, ok: "Create invoice" }))) { conv.disabled=false;return; }
         const r = await booksApi({ action: "estimate-convert", id: est.id, expected_review:v, ...(preview.expired ? { force: true } : {}) });
         toast(`Invoice ${r.invoice.number} created from ${est.number}`);
         closeSheet(); loadNativeInvoices(); nativeInvoiceSheet(r.invoice.id);
@@ -2693,7 +2813,7 @@ function suggestShortcutCode(name, taken) {
 
 async function nativeComposerSheet(kind) {
   try { const setup=await booksApi({action:"settings"}); if(setup.tax?.requires_review) { toast("First, confirm whether you charge sales tax and review your rates."); await booksSettingsSheet(); return; } }
-  catch(e) { toast(e.message,"err"); return; }
+  catch(e) { toast(friendlyError(e, "Couldn't load your books settings. Try again."),"err"); return; }
   // kind "estimate": EST numbering, VALID FOR instead of payment terms, and the
   // create posts nothing to the books — money moves only on convert-to-invoice.
   const isEst = kind === "estimate";
@@ -2977,7 +3097,7 @@ async function nativeComposerSheet(kind) {
         if(err.data?.review_changed) C.setupError="Refresh setup and review the updated date and total.";
         paint();
         if (err.status === 409 && err.data?.duplicate_of) {
-          if (await askConfirm(err.message, { title: "Possible duplicate", ok: "Create anyway" })) return create.onclick(null, true, allowZero);
+          if (await askConfirm(friendlyError(err, "This looks like one you already made."), { title: "Possible duplicate", ok: "Create anyway" })) return create.onclick(null, true, allowZero);
         } else if (err.status === 409 && err.data?.zero_total) {
           if (await askConfirm(`This ${isEst ? "estimate" : "invoice"} is for $0.00. Create it anyway?`, { title: "$0.00 total", ok: "Create anyway" })) return create.onclick(null, force, true);
         } else wrap.querySelector("#bcerr").textContent = err.message;
@@ -3060,7 +3180,7 @@ async function booksSettingsSheet() {
         const result=await booksApi({action:"shortcut-delete",id:btn.dataset.scdel});
         if(result.deleted!==true) throw new Error("Deletion could not be confirmed.");
         shortcuts=shortcuts.filter(x=>x.id!==btn.dataset.scdel);paintShortcuts();
-      } catch(e) {btn.disabled=false;toast(e.message,"err");}
+      } catch(e) {btn.disabled=false;toast(friendlyError(e, "Couldn't remove that shortcut. Try again."),"err");}
     });
   };
   body().innerHTML = `
@@ -3524,7 +3644,10 @@ async function composerSheet(kind) {
     };
     body().querySelector("#cmpcancel").onclick = async () => {
       draftBtns().forEach((b) => b.disabled = true);
-      try { await api(isEst ? "/quickbooks-invoice/estimate-cancel" : "/quickbooks-invoice/cancel", { draft_id: d.draft_id }); } catch {}
+      // The draft always goes off this screen; if the server refused, say so
+      // rather than leaving a cancelled draft alive where the owner can't see it.
+      try { await api(isEst ? "/quickbooks-invoice/estimate-cancel" : "/quickbooks-invoice/cancel", { draft_id: d.draft_id }); }
+      catch (e) { toast(friendlyError(e, "Cleared here, but the draft may still be on the server. Check Finance."), "err"); }
       C.draft = null; draw();
     };
   }
@@ -3629,12 +3752,12 @@ function invoiceSheet(inv, back) {
     if (back) sh.querySelector("#invback").onclick = () => back();
     const mp = sh.querySelector("#markpaid");
     if (mp) mp.onclick = async () => {
-      if (!confirm(`Mark paid — ${money(inv.balance)}? This posts a real payment to your books. Reversing it later is a QuickBooks-side action.`)) return;
+      if (!(await askConfirm(`This posts a real ${money(inv.balance)} payment to your books. Reversing it later is a QuickBooks-side action.`, { title: "Mark this invoice paid?", ok: "Mark paid" }))) return;
       mp.disabled = true; mp.textContent = "Recording payment…";
       try {
         await api("/quickbooks-invoice/mark-paid", { id: inv.id });
         closeSheet(); toast(`Invoice #${inv.doc} marked paid`); S.qboStale = true; loadInvoices();
-      } catch (e) { mp.disabled = false; mp.innerHTML = "&#10003;&nbsp; Mark as paid"; toast(e.message, "err"); }
+      } catch (e) { mp.disabled = false; mp.innerHTML = "&#10003;&nbsp; Mark as paid"; toast(friendlyError(e, "Couldn't mark the invoice paid. Nothing was posted — try again."), "err"); }
     };
     sh.querySelector("#printpdf").onclick = () => withPdf(inv, sh, (url) => {
       const frame = document.createElement("iframe");
@@ -3886,7 +4009,7 @@ function msSpareLine(detail) {
   const spare = detail && Number(detail.spare_qty) > 0 ? Number(detail.spare_qty) : 0;
   if (!spare) return "";
   const bought = Number(detail.receipt_tires), sold = Number(detail.sale_tires);
-  return `<div class="ms-spare">${bought} tires on this order, ${sold} on this invoice — the other ${spare} went to another job or are still in stock. Only ${sold} tire${sold === 1 ? "'s" : "s'"} cost lands here.</div>`;
+  return `<div class="ms-spare">${bought} ${unitNoun(bought)} on this order, ${sold} on this invoice — the other ${spare} went to another job or are still in stock. Only ${sold} tire${sold === 1 ? "'s" : "s'"} cost lands here.</div>`;
 }
 // Tires on the order: the card's per-tire share says it outright; otherwise
 // count the product lines' quantities (a levy line has no size/code words).
@@ -4006,7 +4129,7 @@ function psMatchScreen(review, tally, after) {
       ${s && c.count_split ? `<button class="btn em wide" data-mscountone="${c.id}" data-sale="${s.id}" data-qty="${c.count_split.sale_qty}">&#10003;&nbsp; Yes — ${c.count_split.sale_qty} of ${c.count_split.order_qty} went here</button>`
         : s ? `<button class="btn em wide" data-msconfirm="${c.id}" data-sale="${s.id}">&#10003;&nbsp; That's the one</button>` : ""}
       <button class="btn ghost wide" data-mspick="${c.id}" data-rej="${s ? s.id : ""}">${s ? "Wrong invoice" : "Pick the invoice"}</button>
-      ${msUnits(c) > 1 ? `<button class="btn ghost wide" data-mscount="${c.id}">&#9776;&nbsp; Split by count — ${msUnits(c)} tires, several invoices</button>` : ""}
+      ${msUnits(c) > 1 ? `<button class="btn ghost wide" data-mscount="${c.id}">&#9776;&nbsp; Split by count — ${msUnits(c)} ${unitNoun(msUnits(c))}, several invoices</button>` : ""}
       <button class="btn ghost wide" data-mswait="${c.id}" data-rej="${s ? s.id : ""}">Not sold yet</button>
       <button class="btn ghost wide" data-msreturned="${c.id}">&#8630;&nbsp; Returned to supplier</button>
       <button class="btn ghost wide" data-msdrop="${c.id}">&#10005;&nbsp; Not a business cost</button>
@@ -4195,7 +4318,7 @@ function psMatchScreen(review, tally, after) {
       box.hidden = false; box.dataset.mode = "count";
       const item = proposed.find((c) => c.id === id);
       const units = msUnits(item);
-      box.innerHTML = `<p class="note" style="margin:8px 0 4px">${units} tires came in. How many went to each invoice?</p><div class="note">Loading recent invoices…</div>`;
+      box.innerHTML = `<p class="note" style="margin:8px 0 4px">${units} ${unitNoun(units)} came in. How many went to each invoice?</p><div class="note">Loading recent invoices…</div>`;
       const seen = new Set();
       const rows = [];
       if (item?.sale && !seen.has(item.sale.id)) { seen.add(item.sale.id); rows.push(item.sale); }
@@ -4210,7 +4333,7 @@ function psMatchScreen(review, tally, after) {
       const render = () => {
         const placed = Object.values(counts).reduce((a, b) => a + b, 0);
         const left = units - placed;
-        box.innerHTML = `<p class="note" style="margin:8px 0 4px">${units} tires came in. How many went to each invoice?</p>` + rows.map((s) =>
+        box.innerHTML = `<p class="note" style="margin:8px 0 4px">${units} ${unitNoun(units)} came in. How many went to each invoice?</p>` + rows.map((s) =>
           `<div class="opt ms-count-row"><b>${s.number ? "#" + esc(s.number) : "—"}</b><span>${esc(s.customer || "")} · ${msDate(s.date)}${s.lines?.length ? "<br>" + esc(s.lines[0].text) : ""}</span>
             <span class="ms-step"><button class="stepbtn" data-msdec="${s.id}" ${!(counts[s.id] > 0) ? "disabled" : ""}>−</button><i>${counts[s.id] || 0}</i><button class="stepbtn" data-msinc="${s.id}" ${left <= 0 ? "disabled" : ""}>+</button></span></div>`).join("")
           + `<div class="ms-count-sum">${placed} of ${units} placed${left > 0 ? ` · <b>${left} still in stock</b> — the sweep asks about ${left === 1 ? "it" : "them"} when ${left === 1 ? "it" : "they"} sell${left === 1 ? "s" : ""}` : ""}</div>
@@ -4516,7 +4639,7 @@ async function openCostList(onlyFlagged) {
         if (found) openCostDate(found, onlyFlagged);
       }, sh);
     });
-  } catch (e) { toast(e.message, "err"); closeSheet(); }
+  } catch (e) { toast(friendlyError(e, "Couldn't load your costs. Try again."), "err"); closeSheet(); }
 }
 
 /** Re-date one cost. The arrival date is kept visible the whole time: the
@@ -4623,8 +4746,8 @@ function openCostDate(x, cameFromList) {
     sh.querySelector("#cdReset")?.addEventListener("click", (e) =>
       send(e.currentTarget, { path: "/profit/set-cost-date", payload: { id: x.id, service_date: null } },
         `Back on ${x.received_date}`));
-    sh.querySelector("#cdDel")?.addEventListener("click", (e) => {
-      if (!confirm(`Delete the ${money(x.amount)} cost from ${x.vendor}?`)) return;
+    sh.querySelector("#cdDel")?.addEventListener("click", async (e) => {
+      if (!(await askConfirm(`The ${money(x.amount)} cost from ${x.vendor} comes off your profit numbers.`, { title: "Delete this cost?", ok: "Delete", danger: true }))) return;
       send(e.currentTarget, { path: "/profit/delete-cost", payload: { id: x.id } }, "Cost deleted");
     });
   });
@@ -4699,7 +4822,7 @@ async function loadCalendarHoursLine() {
 
 async function calendarHoursSheet() {
   let d = CAL.hours;
-  if (!d) { try { d = await api("/google-calendar/hours", null, "GET"); CAL.hours = d; } catch (err) { toast(err.message, "err"); return; } }
+  if (!d) { try { d = await api("/google-calendar/hours", null, "GET"); CAL.hours = d; } catch (err) { toast(friendlyError(err, "Couldn't load your hours. Try again."), "err"); return; } }
   const hours = { ...(d.business_hours || {}) };
   const rule = "Bookings outside these hours are refused unless you choose Book anyway. Turn every day off to allow any time.";
   sheet(`<h2>Business hours</h2>
@@ -4779,12 +4902,12 @@ async function loadEventCrew(sh, e) {
       await api("/crew", { action: "assign", employee_id: b.dataset.evassign, event_id: e.id, job_date: evDayKey(e.start),
         job_title: e.title, job_start: e.start, job_location: e.location || "", job_details: e.description || "" });
       rerun();
-    } catch (err) { toast(err.message, "err"); b.disabled = false; }
+    } catch (err) { toast(friendlyError(err, "Couldn't assign that crew member. Try again."), "err"); b.disabled = false; }
   });
   box.querySelectorAll("[data-evunassign]").forEach((b) => b.onclick = async () => {
     b.disabled = true;
     try { await api("/crew", { action: "unassign", employee_id: b.dataset.evunassign, event_id: e.id }); rerun(); }
-    catch (err) { toast(err.message, "err"); b.disabled = false; }
+    catch (err) { toast(friendlyError(err, "Couldn't update that crew assignment. Try again."), "err"); b.disabled = false; }
   });
 }
 
@@ -4817,7 +4940,7 @@ async function ensureMapKit() {
   const mk = await loadMapKit();
   if (!MAPKIT_READY) {
     mk.init({
-      authorizationCallback: (done) => api("/crew", { action: "maps-token" }).then((r) => done(r.token)).catch((err) => { toast(err.message || "The map is unavailable right now. The crew list is still live.", "err"); }),
+      authorizationCallback: (done) => api("/crew", { action: "maps-token" }).then((r) => done(r.token)).catch((err) => { toast(friendlyError(err, "The map is unavailable right now. The crew list is still live."), "err"); }),
       language: "en",
     });
     MAPKIT_READY = true;
@@ -5586,7 +5709,7 @@ function eventSheet(e, back) {
     loadEventCrew(sh, e);
     sh.querySelector("#evedit").onclick = () => bookingSheet(evDayKey(e.start), e);
     sh.querySelector("#evdel").onclick = async (ev) => {
-      if (!confirm(`Delete "${e.title}" from the calendar? This can't be undone.`)) return;
+      if (!(await askConfirm(`"${e.title}" comes off the calendar. This can't be undone.`, { title: "Delete this appointment?", ok: "Delete", danger: true }))) return;
       ev.currentTarget.disabled = true;
       try {
         await api("/google-calendar/event-delete", { event_id: e.id });
@@ -5828,7 +5951,7 @@ function bookingSheet(dayISO, editing, prefill) {
         // PRICING blocks from these fields and refuses anything incomplete.
         const booking = {
           customer: { first_name: val("bkFirst"), last_name: val("bkLast"), phone: val("bkPhone"), email: val("bkEmail"), source: val("bkSource") },
-          vehicle: isAuto() ? val("bkVehicle") : "", tire_size: val("bkTire"), job_details: isAuto() ? "" : val("bkVehicle"),
+          vehicle: isAuto() ? val("bkVehicle") : "", tire_size: isAuto() ? val("bkTire") : "", job_details: isAuto() ? "" : val("bkVehicle"),
           service: { summary: val("bkService") }, pricing: { lines }, notes: val("bkNotes"),
         };
         const payload = { title, booking, email: val("bkEmail"), start: start.toISOString(), end: end.toISOString(),resource_id:val("bkResource") || null,service_ids:val("bkMenu") ? [val("bkMenu")] : [] };
@@ -5964,14 +6087,14 @@ async function loadReceipts() {
     if ($("scannow")) $("scannow").onclick = async (e) => {
       e.currentTarget.disabled = true; e.currentTarget.textContent = "Scanning…";
       try { await api("/gmail/scan", {}); toast("Scan complete"); loadReceipts(); }
-      catch (err) { toast(err.message, "err"); loadReceipts(); }
+      catch (err) { toast(friendlyError(err, "Couldn't scan your inbox for receipts. Try again."), "err"); loadReceipts(); }
     };
     if ($("batch")) $("batch").onclick = () => batchPost(ready);
     if ($("batchqueue")) $("batchqueue").onclick = () => batchQueueSheet(ready, queueTotal);
     if ($("scanhour")) $("scanhour").onchange = async (e) => {
       const hour = Number(e.target.value);
       try { await api("/gmail/set-schedule", { hour }); toast("Daily scan set to " + hourLabel(hour)); }
-      catch (err) { toast(err.message, "err"); loadReceipts(); }
+      catch (err) { toast(friendlyError(err, "Couldn't save your receipt schedule. Try again."), "err"); loadReceipts(); }
     };
     const rs = $("rcptsearch");
     rs.addEventListener("input", () => {
@@ -6097,7 +6220,7 @@ async function captureReceipt(file) {
   } catch (err) {
     busy(false);
     if (note) { note.className = "note err"; note.textContent = err.message; }
-    toast(err.message, "err");
+    toast(friendlyError(err, "Couldn't read that receipt photo. Try another photo."), "err");
   }
 }
 
@@ -6109,7 +6232,7 @@ async function receiptPhotoSheet(id) {
         style="width:100%;border-radius:14px;margin-top:10px;display:block">`, (sh) =>
       remintOnExpiry(sh.querySelector("img"), async () =>
         (await get("/gmail/receipt-photo?id=" + encodeURIComponent(id))).url));
-  } catch (err) { toast(err.message, "err"); }
+  } catch (err) { toast(friendlyError(err, "Couldn't open that receipt photo. Try again."), "err"); }
 }
 
 function receiptSheet(r, suggestedCategory) {
@@ -6157,7 +6280,7 @@ function receiptSheet(r, suggestedCategory) {
       catch (err) { e.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
     };
     sh.querySelector("#rdismiss").onclick = async (e) => {
-      if (!confirm("Dismiss this receipt? There's no undo for this in the app.")) return;
+      if (!(await askConfirm("There's no undo for this in the app.", { title: "Dismiss this receipt?", ok: "Dismiss", danger: true }))) return;
       e.currentTarget.disabled = true;
       try { await api("/gmail/dismiss", { id: r.id }); closeSheet(); loadReceipts(); }
       catch (err) { e.currentTarget.disabled = false; note.className = "note err"; note.textContent = err.message; }
@@ -6165,7 +6288,7 @@ function receiptSheet(r, suggestedCategory) {
     const post = sh.querySelector("#rpost");
     if (post) post.onclick = async () => {
       const dup = duplicateOf(r);
-      if (dup && !confirm(`Another receipt from ${dup.vendor || dup.from_name || "the same vendor"} for ${money(dup.total)} on the same day is already logged. Post this one too?`)) return;
+      if (dup && !(await askConfirm(`Another receipt from ${dup.vendor || dup.from_name || "the same vendor"} for ${money(dup.total)} on the same day is already logged.`, { title: "Post this one too?", ok: "Post it" }))) return;
       post.disabled = true; note.className = "note"; note.textContent = "Looking up vendors…";
       try {
         await save();
@@ -6190,7 +6313,7 @@ function receiptSheet(r, suggestedCategory) {
           try {
             await api("/quickbooks-invoice/expense-post", body);
             closeSheet(); toast("Posted to QuickBooks"); loadReceipts();
-          } catch (err) { e2.currentTarget.disabled = false; toast(err.message, "err"); }
+          } catch (err) { e2.currentTarget.disabled = false; toast(friendlyError(err, "Couldn't post that expense. Nothing was posted — try again."), "err"); }
         };
       } catch (err) { post.disabled = false; note.className = "note err"; note.textContent = err.message; }
     };
@@ -6244,21 +6367,21 @@ async function renderPhone(cachedBoard = null) {
         if (a) vehicleScanSheet({ id: a.id, start: a.at, title: a.name }, () => renderPhone());
       });
       if ($("thclear")) $("thclear").onclick = async () => {
-        if (!confirm("Clear text threads?\n\nThreads still waiting on a reply from you are kept. Everything else comes off the tab.")) return;
-        try { await api("/phone", { action: "threads-clear" }); renderPhone(); } catch (err) { toast(err.message); }
+        if (!(await askConfirm("Threads still waiting on a reply from you are kept. Everything else comes off the tab.", { title: "Clear text threads?", ok: "Clear", danger: true }))) return;
+        try { await api("/phone", { action: "threads-clear" }); renderPhone(); } catch (err) { toast(friendlyError(err, "Couldn't clear your text threads. Try again.")); }
       };
       on("[data-thdel]", "click", async (e) => {
         e.stopPropagation();
-        if (!confirm("Delete this thread?\n\nIt comes off the tab. Every message stays on file, and if they text again the thread comes right back.")) return;
-        try { await api("/phone", { action: "thread-delete", conversation_id: e.currentTarget.dataset.thdel }); renderPhone(); } catch (err) { toast(err.message); }
+        if (!(await askConfirm("It comes off the tab. Every message stays on file, and if they text again the thread comes right back.", { title: "Delete this thread?", ok: "Delete", danger: true }))) return;
+        try { await api("/phone", { action: "thread-delete", conversation_id: e.currentTarget.dataset.thdel }); renderPhone(); } catch (err) { toast(friendlyError(err, "Couldn't delete that thread. Try again.")); }
       });
       if ($("evclear")) $("evclear").onclick = async () => {
-        if (!confirm("Clear the missed-call feed?\n\nThese come off the tab. Calls still holding an unplayed voicemail are kept, and nothing is removed from your call history.")) return;
-        try { await api("/phone", { action: "events-clear", scope: "calls" }); renderPhone(); } catch (err) { toast(err.message); }
+        if (!(await askConfirm("These come off the tab. Calls still holding an unplayed voicemail are kept, and nothing is removed from your call history.", { title: "Clear the missed-call feed?", ok: "Clear", danger: true }))) return;
+        try { await api("/phone", { action: "events-clear", scope: "calls" }); renderPhone(); } catch (err) { toast(friendlyError(err, "Couldn't clear the missed-call feed. Try again.")); }
       };
       on("[data-evdel]", "click", async (e) => {
         e.stopPropagation();
-        try { await api("/phone", { action: "event-dismiss", event_id: e.currentTarget.dataset.evdel }); renderPhone(); } catch (err) { toast(err.message); }
+        try { await api("/phone", { action: "event-dismiss", event_id: e.currentTarget.dataset.evdel }); renderPhone(); } catch (err) { toast(friendlyError(err, "Couldn't dismiss that call. Try again.")); }
       });
       if ($("remindall")) $("remindall").onclick = () => apptReminderPreviewSheet();
       on("[data-needs]", "click", (e) => openNeedsYou(d, e.currentTarget.dataset.needs));
@@ -6397,7 +6520,7 @@ function phoneSetupSheet(d) {
     </div>
     <p class="note" style="margin-top:6px">Works on Bell, Rogers, Telus, Fido, Koodo, AT&amp;T and T-Mobile. On Verizon, use your carrier's call forwarding settings instead of these codes.</p>
     <h3 style="margin-top:18px">2 &middot; Or advertise your new number</h3>
-    <p class="sub">Put ${esc(formatE164(d.number.e164))} on your website, Google Business Profile, invoices and vehicles as your primary line going forward. No forwarding needed — it just works.</p>
+    <p class="sub">Put ${esc(formatE164(d.number.e164))} on your website, Google Business Profile, invoices${isAuto() ? " and vehicles" : ""} as your primary line going forward. No forwarding needed — it just works.</p>
     <h3 style="margin-top:18px">Voicemail greeting script</h3>
     <p class="sub">Read this into your carrier's greeting recorder (recording the audio itself is still a manual step — this just gives you the words).</p>
     <p class="note" id="vmscript" style="margin-top:8px;white-space:pre-wrap">${esc(script)}</p>
@@ -6652,13 +6775,13 @@ async function loadVoicemails(board) {
       if (box) box.hidden = !box.hidden;
     }, host);
     on("[data-vmdel]", "click", async (e) => {
-      if (!confirm("Delete this voicemail?\n\nIt comes off the Phone tab. The call itself stays in your history.")) return;
-      try { await api("/phone", { action: "event-dismiss", event_id: e.currentTarget.dataset.vmdel }); renderPhone(); } catch (err) { toast(err.message); }
+      if (!(await askConfirm("It comes off the Phone tab. The call itself stays in your history.", { title: "Delete this voicemail?", ok: "Delete", danger: true }))) return;
+      try { await api("/phone", { action: "event-dismiss", event_id: e.currentTarget.dataset.vmdel }); renderPhone(); } catch (err) { toast(friendlyError(err, "Couldn't delete that voicemail. Try again.")); }
     }, host);
     const vmclear = host.querySelector("#vmclear");
     if (vmclear) vmclear.onclick = async () => {
-      if (!confirm("Clear all voicemail?\n\nEvery message here comes off the tab, heard or not. The calls stay in your history.")) return;
-      try { await api("/phone", { action: "events-clear", scope: "voicemails" }); renderPhone(); } catch (err) { toast(err.message); }
+      if (!(await askConfirm("Every message here comes off the tab, heard or not. The calls stay in your history.", { title: "Clear all voicemail?", ok: "Clear", danger: true }))) return;
+      try { await api("/phone", { action: "events-clear", scope: "voicemails" }); renderPhone(); } catch (err) { toast(friendlyError(err, "Couldn't clear your voicemail. Try again.")); }
     };
   } catch (e) {
     host.innerHTML = `<div class="panel"><h3>&#9993; Voicemail</h3><p class="sub">${esc(e.message)}</p></div>`;
@@ -6797,7 +6920,7 @@ async function phoneArmLine(d) {
     if (d.autoReplyEnabled === false) await api("/phone", { action: "settings-save", autoReplyEnabled: true });
     if (!(d.frontDesk && d.frontDesk.enabled === true)) await api("/phone", { action: "settings-save", frontDeskEnabled: true });
     toast("Ledger is answering your line");
-  } catch (e) { toast(e.message); }
+  } catch (e) { toast(friendlyError(e, "Couldn't save that phone setting. Try again.")); }
   renderPhone();
 }
 
@@ -6854,7 +6977,7 @@ async function phoneNeedsDelete(d, id) {
     else if (item.kind === "voicemail" || item.kind === "missed") await api("/phone", { action: "event-dismiss", event_id: target });
     else return;
     renderPhone();
-  } catch (e) { toast(e.message); }
+  } catch (e) { toast(friendlyError(e, "Couldn't open the command center. Try again.")); }
 }
 
 // Signpost at the bottom of Needs You. The switches stay in Auto — this says
@@ -7339,8 +7462,8 @@ function reviewRequestSheet(d) {
  <h3 style="margin-top:24px">Recent requests</h3>
  <p class="sub">${r.sentWeek||0} sent this week · ${r.queued||0} waiting</p>
  ${(r.recent||[]).map(x=>`<div class="pcc-history"><strong>${esc(x.customer_name||'Customer')} · ${esc(x.invoice_number||'Invoice')}</strong><span>${esc({sent:'Sent',queued:'Waiting',sending:'Sending',skipped:'Skipped',needs_check:'Check delivery'}[x.status]||x.status)} · ${x.source==='native'?'Ledger invoices':'QuickBooks'}</span>${x.reason?`<small>${esc(x.reason)}</small>`:''}</div>`).join('')||'<p class="sub">Your first request will appear here after a future payment. No old invoices will be texted.</p>'}`,sh=>{
- const save=sh.querySelector('#review-save');save.onclick=async()=>{save.disabled=true;save.textContent='Saving…';try{await api('/phone',{action:'review-settings-save',reviewURL:sh.querySelector('#review-url').value,reviewRequestsEnabled:true});closeSheet();toast('Google Review Request is on');renderPhone();}catch(e){toast(e.message,'err');save.disabled=false;save.textContent=r.enabled?'Save link':'Save & turn on';}};
- const off=sh.querySelector('#review-off');if(off)off.onclick=async()=>{off.disabled=true;try{await api('/phone',{action:'review-settings-save',reviewRequestsEnabled:false});closeSheet();toast('Review requests are off');renderPhone();}catch(e){toast(e.message,'err');off.disabled=false;}};
+ const save=sh.querySelector('#review-save');save.onclick=async()=>{save.disabled=true;save.textContent='Saving…';try{await api('/phone',{action:'review-settings-save',reviewURL:sh.querySelector('#review-url').value,reviewRequestsEnabled:true});closeSheet();toast('Google Review Request is on');renderPhone();}catch(e){toast(friendlyError(e, "Couldn't save your review link. Try again."),'err');save.disabled=false;save.textContent=r.enabled?'Save link':'Save & turn on';}};
+ const off=sh.querySelector('#review-off');if(off)off.onclick=async()=>{off.disabled=true;try{await api('/phone',{action:'review-settings-save',reviewRequestsEnabled:false});closeSheet();toast('Review requests are off');renderPhone();}catch(e){toast(friendlyError(e, "Couldn't turn review requests off. Try again."),'err');off.disabled=false;}};
  });
 }
 
@@ -7352,7 +7475,7 @@ async function dispatchOrderSheet(preloaded) {
     try {
       const roster = await api("/crew", { action: "list" });
       crew = (roster.employees || []).filter((e) => e.active !== false && (e.phone || "").trim());
-    } catch (err) { toast(err.message, "err"); return; }
+    } catch (err) { toast(friendlyError(err, "Couldn't load your crew. Try again."), "err"); return; }
   }
   if (!crew.length) { toast("No crew members with phone numbers yet — add them on the Calendar tab first."); return; }
   crew = crew.slice().sort((a, b) => (a.dispatchRank ?? a.dispatch_rank ?? 9999) - (b.dispatchRank ?? b.dispatch_rank ?? 9999));
@@ -7451,7 +7574,7 @@ async function crewHoursSheet(range = "week") {
   const [from, to] = crewRangeDates(range);
   let d;
   try { d = await api("/crew", { action: "timecards", from, to }); }
-  catch (err) { toast(err.message, "err"); return; }
+  catch (err) { toast(friendlyError(err, "Couldn't load the timecards. Try again."), "err"); return; }
   if (d.timezone) S.businessTimezone = d.timezone;
   const all = d.cards || [];
   const cards = all.filter((c) => c.total_seconds > 0 || c.on_clock || c.needs_review);
@@ -7565,7 +7688,7 @@ function absenceLine(a) {
 async function crewRosterSheet() {
   let roster;
   try { roster = await api("/crew", { action: "list" }); }
-  catch (err) { toast(err.message, "err"); return; }
+  catch (err) { toast(friendlyError(err, "Couldn't load your crew. Try again."), "err"); return; }
   const crew = roster.employees || [];
   sheet(`<h2>Roster &amp; shifts</h2>
     <p class="sh-sub">Regular working hours drive both shift texts — no shift set means no reminders for that person. Anyone marked off is skipped by the reminders and by auto-dispatch.</p>
@@ -7896,7 +8019,7 @@ function crewReminderEditSheet(rem, crewCache) {
     };
     const del = sh.querySelector("#crDelete");
     if (del) del.onclick = async (e) => {
-      if (!confirm("Delete this reminder? Your crew stops getting it.")) return;
+      if (!(await askConfirm("Your crew stops getting it.", { title: "Delete this reminder?", ok: "Delete", danger: true }))) return;
       e.currentTarget.disabled = true;
       try {
         await api("/phone", { action: "crew-reminder-delete", id: rem.id });
@@ -7941,7 +8064,7 @@ function apptPrettyTime(hhmm) {
 async function toggleApptReminders(d) {
   const r = d.reminders || {};
   if (r.enabled !== true) {
-    const ok = confirm(`Turn on appointment reminders?\n\nEvery day at ${apptPrettyTime(r.time || "18:00")}, Ledger will text everyone booked in for the next day from your business number, asking them to reply Y to confirm or C to change it.\n\nEach customer is texted once per appointment, ever. Nobody is texted twice.\n\nIf you haven't already, check "See tonight's list" first — it shows you exactly who would get a text and exactly what it says, and sends nothing.\n\nYou can turn this off any time.`);
+    const ok = await askConfirm(`Every day at ${apptPrettyTime(r.time || "18:00")}, Ledger will text everyone booked in for the next day from your business number, asking them to reply Y to confirm or C to change it.\n\nEach customer is texted once per appointment, ever. Nobody is texted twice.\n\nIf you haven't already, check "See tonight's list" first — it shows you exactly who would get a text and exactly what it says, and sends nothing.\n\nYou can turn this off any time.`, { title: "Turn on appointment reminders?", ok: "Turn on" });
     if (!ok) return;
   }
   if (await savePhoneSwitch(d, 'reminders', r.enabled !== true, {action:'settings-save', reminderEnabled:r.enabled !== true}))
@@ -7999,7 +8122,7 @@ function apptReminderSheet(d) {
           reminderNote: note === defaultNote ? "" : note,
         });
         toast("Saved"); closeSheet(); renderPhone();
-      } catch (err) { toast(err.message); }
+      } catch (err) { toast(friendlyError(err, "Couldn't save your reminder settings. Try again.")); }
     };
   });
 }
@@ -8044,7 +8167,7 @@ function frontDeskCard(d) {
 async function toggleFrontDesk(d) {
   const fd = d.frontDesk || {};
   if (fd.enabled !== true) {
-    const ok = confirm("Turn on Front Desk?\n\nFrom now on, when someone calls, misses you, and texts back, Ledger will reply to them on its own — quoting your real QuickBooks prices and booking real times on your calendar. No one has to approve each message.\n\nIt can never invoice, take payment, or discuss a bill, and anything it's unsure about it hands straight to you.\n\nYou can turn this off any time.");
+    const ok = await askConfirm("From now on, when someone calls, misses you, and texts back, Ledger will reply to them on its own — quoting your real QuickBooks prices and booking real times on your calendar. No one has to approve each message.\n\nIt can never invoice, take payment, or discuss a bill, and anything it's unsure about it hands straight to you.\n\nYou can turn this off any time.", { title: "Turn on Front Desk?", ok: "Turn on" });
     if (!ok) return;
   }
   if (await savePhoneSwitch(d, 'frontdesk', fd.enabled !== true, {action:'settings-save', frontDeskEnabled:fd.enabled !== true}))
@@ -8061,7 +8184,7 @@ function frontDeskSheet(d) {
       <button class="btn ${fd.booking === false ? "em" : ""}" data-fdbook="0" type="button">No, just quote</button>
     </div>
     <label class="fld" style="margin-top:14px">YOUR STANDING INSTRUCTIONS</label>
-    <textarea id="fdinstr" rows="4" placeholder="e.g. Always ask what vehicle. Never book Saturdays before 10. We don't do alignments.">${esc(fd.instructions || "")}</textarea>
+    <textarea id="fdinstr" rows="4" placeholder="${isAuto() ? "e.g. Always ask what vehicle. Never book Saturdays before 10. We don&#39;t do alignments." : "e.g. Always ask what the job is. Never book Saturdays before 10. We don&#39;t take same-day work."}">${esc(fd.instructions || "")}</textarea>
     <p class="note" style="margin-top:6px">Written in your words, followed on every reply.</p>
     <label class="fld" style="margin-top:14px">MAX TEXTS TO ONE CALLER PER DAY</label>
     <input id="fdcap" type="number" min="1" max="30" value="${Number(fd.maxRepliesPerCaller || 8)}">
@@ -8717,7 +8840,7 @@ function gpPhotoSheet(id) {
 async function gpPhotoReview(id, action, btn) {
   btn.disabled = true; btn.textContent = action === "approve" ? "Approving…" : "Removing…";
   try { await api("/google-business-profile/photo-review", { photo_id: id, action }); closeSheet(); toast(action === "approve" ? "Photo approved" : "Photo removed"); gpLoad(true); }
-  catch (e) { btn.disabled = false; btn.textContent = action === "approve" ? "Approve for posting" : "Remove from bin"; toast(e.message, "err"); }
+  catch (e) { btn.disabled = false; btn.textContent = action === "approve" ? "Approve for posting" : "Remove from bin"; toast(friendlyError(e, "Couldn't update that photo review. Try again."), "err"); }
 }
 
 function gpSettingsSheet() {
@@ -8809,7 +8932,7 @@ async function gpSaveEdit(id, btn) {
   const ta = document.querySelector(`[data-gpsum="${id}"]`); if (!ta) return;
   btn.disabled = true; btn.textContent = "Saving…";
   try { await api("/google-business-profile/post-update", { post_id: id, summary: ta.value }); toast("Edit saved"); await gpLoad(true); }
-  catch (e) { btn.disabled = false; btn.textContent = "Save edit"; toast(e.message, "err"); }
+  catch (e) { btn.disabled = false; btn.textContent = "Save edit"; toast(friendlyError(e, "Couldn't save your edit. Try again."), "err"); }
 }
 
 async function gpPublish(id, btn) {
@@ -8824,8 +8947,8 @@ async function gpPublish(id, btn) {
   } catch (e) {
     // Sent but unanswered (08-01): the post is on hold under Recent with a
     // Check Google button — there is no Post button to tap again.
-    if (e.data && e.data.post_status === "unknown") { toast(e.message, "err"); GP.showHistory = true; gpLoad(true); return; }
-    btn.disabled = false; btn.textContent = "Post to Google"; toast(e.message, "err"); gpLoad(true);
+    if (e.data && e.data.post_status === "unknown") { toast(friendlyError(e, "Couldn't confirm whether the post went to Google. Check the history."), "err"); GP.showHistory = true; gpLoad(true); return; }
+    btn.disabled = false; btn.textContent = "Post to Google"; toast(friendlyError(e, "Couldn't post to Google. Nothing was published — try again."), "err"); gpLoad(true);
   }
 }
 
@@ -8838,7 +8961,7 @@ async function gpReconcile(id, btn) {
     const r = await api("/google-business-profile/post-reconcile", { post_id: id });
     toast(r.outcome === "posted" ? "Found it — the post is on Google" : r.outcome === "draft" ? "Google never got it — it's back as a draft" : "Still checking — Google hasn't shown it yet. Try again in a few minutes.");
     await gpLoad(true);
-  } catch (e) { btn.disabled = false; btn.textContent = "Check Google"; toast(e.message, "err"); }
+  } catch (e) { btn.disabled = false; btn.textContent = "Check Google"; toast(friendlyError(e, "Couldn't check Google for that post. Try again."), "err"); }
 }
 
 // One-time listing choice for a Google account that manages several (08-08).
@@ -8848,12 +8971,12 @@ async function gpChooseLocation(name, btn) {
     const r = await api("/google-business-profile/posts-location", { location_name: name });
     toast(`Ledger will post to ${r.bound && r.bound.business_name ? r.bound.business_name : "that listing"}`);
     await gpLoad(true);
-  } catch (e) { btn.disabled = false; toast(e.message, "err"); }
+  } catch (e) { btn.disabled = false; toast(friendlyError(e, "Couldn't load your Business Profile locations. Try again."), "err"); }
 }
 
 async function gpCancel(id) {
   try { await api("/google-business-profile/post-cancel", { post_id: id }); toast("Draft discarded"); gpLoad(true); }
-  catch (e) { toast(e.message, "err"); }
+  catch (e) { toast(friendlyError(e, "Couldn't cancel that post. Try again."), "err"); }
 }
 
 function gpDelete(id) {
@@ -8863,7 +8986,7 @@ function gpDelete(id) {
     sh.querySelector("#gpdelyes").onclick = async () => {
       const b = sh.querySelector("#gpdelyes"); b.disabled = true; b.textContent = "Removing…";
       try { await api("/google-business-profile/post-delete", { post_id: id }); closeSheet(); toast("Removed from Google"); gpLoad(true); }
-      catch (e) { b.disabled = false; b.textContent = "Remove from Google"; toast(e.message, "err"); }
+      catch (e) { b.disabled = false; b.textContent = "Remove from Google"; toast(friendlyError(e, "Couldn't remove that post from Google. Try again."), "err"); }
     };
   });
 }
@@ -9297,7 +9420,7 @@ function nativeProfileSheet(c) {
       : `<div class="note">No invoices yet.</div>`}
 
     <div class="lanehead" style="margin-top:16px">
-      <span class="eyebrow" style="color:var(--dim)">Vehicles, services &amp; appointments</span>
+      <span class="eyebrow" style="color:var(--dim)">${isAuto() ? "Vehicles, services &amp; appointments" : "Services &amp; appointments"}</span>
       <span class="note">${events.length}</span></div>
     ${events.length ? `<div class="list" style="margin-top:8px">${events.slice(0, 40).map((e) => `
       <button class="item" data-cev="${esc(e.id)}">
@@ -9639,7 +9762,7 @@ function customerSheet(c) {
       : `<div class="note">No invoices in the loaded QuickBooks history.</div>`}
 
     <div class="lanehead" style="margin-top:16px">
-      <span class="eyebrow" style="color:var(--dim)">Vehicles, services &amp; appointments</span>
+      <span class="eyebrow" style="color:var(--dim)">${isAuto() ? "Vehicles, services &amp; appointments" : "Services &amp; appointments"}</span>
       <span class="note">${events.length}</span></div>
     ${events.length ? `<div class="list" style="margin-top:8px">${events.slice(0, 40).map((e) => `
       <button class="item" data-cev="${esc(e.id)}">
@@ -9821,7 +9944,7 @@ function leadSheet(l) {
         S.board = await api("/leads", { action: "lead-save",
           lead: { id: l.id, status: "won", qbo_customer_id: created.id } });
         drawLeads();
-      } catch (err) { toast(err.message, "err"); }
+      } catch (err) { toast(friendlyError(err, "Couldn't update that lead. Try again."), "err"); }
     });
     sh.querySelector("#lsave").onclick = async (e) => {
       e.currentTarget.disabled = true;
@@ -9845,9 +9968,9 @@ function leadSheet(l) {
     };
     const del = sh.querySelector("#ldel");
     if (del) del.onclick = async () => {
-      if (!confirm("Delete this lead?")) return;
+      if (!(await askConfirm("It comes off your leads board.", { title: "Delete this lead?", ok: "Delete", danger: true }))) return;
       try { S.board = await api("/leads", { action: "lead-delete", id: l.id }); closeSheet(); drawLeads(); }
-      catch (err) { toast(err.message, "err"); }
+      catch (err) { toast(friendlyError(err, "Couldn't delete that lead. Try again."), "err"); }
     };
   });
 }
@@ -9955,7 +10078,7 @@ function drawTodos() {
   on("[data-toggle]", "click", async (e) => {
     const t = all.find((x) => x.id === e.currentTarget.dataset.toggle); if (!t) return;
     try { S.board = await api("/leads", { action: "todo-save", todo: { id: t.id, done: t.status === "open" } }); drawTodos(); }
-    catch (err) { toast(err.message, "err"); }
+    catch (err) { toast(friendlyError(err, "Couldn't update that to-do. Try again."), "err"); }
   }, slot);
   on("[data-todo]", "click", (e) => todoSheet(all.find((t) => t.id === e.currentTarget.dataset.todo)), slot);
 }
@@ -9994,9 +10117,9 @@ function todoSheet(t) {
     };
     const del = sh.querySelector("#tdel");
     if (del) del.onclick = async () => {
-      if (!confirm("Delete this to-do?")) return;
+      if (!(await askConfirm("It comes off your to-do list.", { title: "Delete this to-do?", ok: "Delete", danger: true }))) return;
       try { S.board = await api("/leads", { action: "todo-delete", id: t.id }); closeSheet(); todoAfterSave(); }
-      catch (err) { toast(err.message, "err"); }
+      catch (err) { toast(friendlyError(err, "Couldn't delete that to-do. Try again."), "err"); }
     };
   });
 }
@@ -10054,10 +10177,10 @@ function banner() {
   const b = $("banner"); if (b) b.style.display = S.advisor ? "block" : "none";
   const p = $("advisor"); if (p) { p.className = "pill" + (S.advisor ? " on" : ""); p.setAttribute("aria-pressed", S.advisor ? "true" : "false"); }
 }
-function toggleAdvisor() {
+async function toggleAdvisor() {
   if (!S.advisor && accountStorage.getItem("ledger.advisorNotice") !== "1") {
     const meter = S.usage ? ` (${money(S.usage.spent_usd)} of ${money(S.usage.budget_usd)} used ${S.usage.trial_credit?"during your trial":"this month"})` : "";
-    if (!window.confirm("Advisor Mode opens up business guidance beyond your books — marketing, pricing, hiring, growth — grounded in your real numbers. It uses your available AI allowance" + meter + ".")) return;
+    if (!(await askConfirm("Advisor Mode opens up business guidance beyond your books — marketing, pricing, hiring, growth — grounded in your real numbers. It uses your available AI allowance" + meter + ".", { title: "Turn on Advisor Mode?", ok: "Turn it on" }))) return;
     accountStorage.setItem("ledger.advisorNotice", "1");
   }
   S.advisor = !S.advisor; accountStorage.setItem("ledger.advisor", S.advisor ? "1" : "0"); banner();
@@ -10078,7 +10201,7 @@ function trialCreditDescription(t) {
   return 'This introductory credit needs an eligibility review. Contact Ledger support; starting a new account does not create a new credit.';
 }
 async function trialCreditSheet() {
-  let t;try{t=await api('/trial-credit',{action:'status'});}catch(e){toast(e.message,'err');return;}
+  let t;try{t=await api('/trial-credit',{action:'status'});}catch(e){toast(friendlyError(e, "Couldn't load your trial credit. Try again."),'err');return;}
   if(!t.trial_credit){await refreshUsage();toast('Your account uses its normal plan allowance.');return;}
   sheet(`<h2>US$20 to make Ledger yours</h2><p class="sh-sub">${esc(trialCreditDescription(t))}</p>
     <p class="note">Set up your agent, save your rules and try real work. Credit expires ${esc(dateShort(t.expires_at))}; it is shared across everyone and every device in your business.</p>
@@ -10124,7 +10247,7 @@ async function powerUpSheet() {
     on(".pu-card", "click", async (e) => {
       const b = e.currentTarget; b.disabled = true;
       try { const c = await api("/stripe-billing/topup", { package: b.dataset.k }); location.href = c.url; }
-      catch (err) { toast(err.message, "err"); b.disabled = false; }
+      catch (err) { toast(friendlyError(err, "Couldn't start the top-up. Nothing was charged — try again."), "err"); b.disabled = false; }
     }, sh);
   });
 }
@@ -10160,7 +10283,7 @@ async function textingSheet() {
     on(".pu-card", "click", async (e) => {
       const b = e.currentTarget; b.disabled = true;
       try { const c = await api("/stripe-billing/sms-topup", {}); location.href = c.url; }
-      catch (err) { toast(err.message, "err"); b.disabled = false; }
+      catch (err) { toast(friendlyError(err, "Couldn't start the texting top-up. Nothing was charged — try again."), "err"); b.disabled = false; }
     }, sh);
   });
 }
@@ -10195,7 +10318,7 @@ function renderAccessBanner(s) {
   const link = (label, path) => {
     if (inAndroidApp()) { a.appendChild(document.createTextNode(label)); return; }
     const b = document.createElement("u"); b.style.cursor = "pointer"; b.textContent = label;
-    b.onclick = async () => { try { const c = path === "/stripe-billing/checkout" ? await startCheckout() : await api(path, {}); location.href = c.url; } catch (e) { if (!e.cancelled) toast(e.message, "err"); } };
+    b.onclick = async () => { try { const c = path === "/stripe-billing/checkout" ? await startCheckout() : await api(path, {}); location.href = c.url; } catch (e) { if (!e.cancelled) toast(friendlyError(e, "Couldn't open billing. Nothing was charged — try again."), "err"); } };
     a.appendChild(b);
   };
   if(s.complimentary_access)return;
@@ -10344,16 +10467,16 @@ function draftCard(d, label, confirmPath, cancelPath) {
     } catch (e) {
       cardBtns().forEach((b) => b.disabled = false);
       if (e.status === 409 && e.data?.zero_total) {
-        if (confirm("This invoice is for $0.00. Create it anyway?")) { acknowledged.allow_zero = true; return card.querySelector(".confirm").onclick(); }
+        if (await askConfirm("This invoice is for $0.00.", { title: "Create it anyway?", ok: "Create anyway" })) { acknowledged.allow_zero = true; return card.querySelector(".confirm").onclick(); }
       } else if (e.status === 409 && e.data?.duplicate_of) {
-        if (confirm(e.message + "\n\nCreate anyway?")) { acknowledged.force = true; return card.querySelector(".confirm").onclick(); }
+        if (await askConfirm(friendlyError(e, "This looks like one you already made."), { title: "Create it anyway?", ok: "Create anyway" })) { acknowledged.force = true; return card.querySelector(".confirm").onclick(); }
       } else toast(postedMessage(e), "err");
     }
   };
   card.querySelector(".cancel").onclick = async () => {
     cardBtns().forEach((b) => b.disabled = true);
     try { await api(cancelPath, { draft_id: d.draft_id }); cardDone(card, "Draft cancelled"); }
-    catch (e) { cardBtns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { cardBtns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't cancel that draft. Try again."), "err"); }
   };
 }
 
@@ -10369,12 +10492,12 @@ function reminderCard(d) {
     try {
       const r = await api("/quickbooks-invoice/reminder-confirm", { draft_id: d.draft_id });
       cardDone(card, "✅ Reminder emailed to " + (r.emailed_to || d.customer_email) + ((r.failed || []).length ? " · couldn't send: " + r.failed.join(", ") : ""));
-    } catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    } catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't send that reminder. Nothing was sent — try again."), "err"); }
   };
   card.querySelector(".cancel").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { await api("/quickbooks-invoice/reminder-cancel", { draft_id: d.draft_id }); cardDone(card, "Cancelled — nothing was sent"); }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't cancel that reminder. Try again."), "err"); }
   };
 }
 
@@ -10389,12 +10512,12 @@ function bookingCard(d) {
   card.querySelector(".confirm").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { await api("/google-calendar/booking-confirm", { draft_id: d.draft_id }); cardDone(card, "✅ Booked"); S.cal = null; }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't create that booking. Nothing was booked — try again."), "err"); }
   };
   card.querySelector(".cancel").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { await api("/google-calendar/booking-cancel", { draft_id: d.draft_id }); cardDone(card, "Draft cancelled"); }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't cancel that booking draft. Try again."), "err"); }
   };
 }
 
@@ -10407,12 +10530,12 @@ function emailDraftCard(d) {
   card.querySelector(".confirm").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { const r = await api("/gmail/email-send", { draft_id: d.draft_id }); cardDone(card, "✅ Sent to " + (r.to || d.to)); }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't send that email. Nothing was sent — try again."), "err"); }
   };
   card.querySelector(".cancel").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { await api("/gmail/email-cancel", { draft_id: d.draft_id }); cardDone(card, "Draft cancelled — nothing was sent"); }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't cancel that email draft. Try again."), "err"); }
   };
 }
 
@@ -10427,12 +10550,12 @@ function smsDraftCard(d) {
     try {
       const r = await api("/phone", { action: "sms-confirm", draft_id: d.draft_id });
       cardDone(card, "✅ Sent to " + (r.sent?.to_number || d.to_number));
-    } catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    } catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't send that text. Nothing was sent — try again."), "err"); }
   };
   card.querySelector(".cancel").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { await api("/phone", { action: "sms-cancel", draft_id: d.draft_id }); cardDone(card, "Draft cancelled — nothing was sent"); }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't cancel that text draft. Try again."), "err"); }
   };
 }
 
@@ -10459,12 +10582,12 @@ function actionCard(d) {
         : "✅ Applied";
       cardDone(card, done);
       if (d.kind === "set_front_desk" || d.kind === "update_phone_autoreply") S.phone = null; // Phone tab refetches its board
-    } catch (e) { btns().forEach((b) => b.disabled = false); if (!smsSendFailed(e)) toast(e.message, "err"); }
+    } catch (e) { btns().forEach((b) => b.disabled = false); if (!smsSendFailed(e)) toast(friendlyError(e, "Couldn't run that action. Nothing was changed — try again."), "err"); }
   };
   card.querySelector(".cancel").onclick = async () => {
     btns().forEach((b) => b.disabled = true);
     try { await api("/ledger-ai", { action: "action-cancel", draft_id: d.draft_id }); cardDone(card, "Cancelled — nothing was changed"); }
-    catch (e) { btns().forEach((b) => b.disabled = false); toast(e.message, "err"); }
+    catch (e) { btns().forEach((b) => b.disabled = false); toast(friendlyError(e, "Couldn't cancel that action. Try again."), "err"); }
   };
 }
 
@@ -10477,7 +10600,7 @@ function printJobCard(j) {
     ev.target.disabled = true;
     printPdfById(j.document_id, j.doc_number, j.type || "invoice")
       .then(() => cardDone(card, "Sent to your printer dialog"))
-      .catch((e) => { ev.target.disabled = false; toast(e.message, "err"); });
+      .catch((e) => { ev.target.disabled = false; toast(friendlyError(e, "Couldn't open the print dialog. Try again."), "err"); });
   };
 }
 
@@ -10618,16 +10741,16 @@ async function renderCatalog(sh, initialImportType = "products") {
   slot.querySelectorAll("[data-cathistory]").forEach(btn=>btn.onclick=()=>catalogHistorySheet(sources.find(s=>s.id===btn.dataset.cathistory)));
   slot.querySelectorAll("[data-catdel]").forEach((btn) => {
     btn.onclick = async () => {
-      if (!confirm("Archive this uploaded price list? Its items stop appearing in catalog search, and History can restore them. Services already added to your service menu remain there until you remove them in Your business.")) return;
+      if (!(await askConfirm("Its items stop appearing in catalog search, and History can restore them. Services already added to your service menu remain there until you remove them in Your business.", { title: "Archive this price list?", ok: "Archive", danger: true }))) return;
       btn.disabled = true;
       try { await api("/catalog", { action: "delete-source", source_id: btn.dataset.catdel }); toast("List archived — History can restore it"); renderCatalog(sh); }
-      catch (err) { btn.disabled = false; toast(err.message, "err"); }
+      catch (err) { btn.disabled = false; toast(friendlyError(err, "Couldn't archive that price list. Try again."), "err"); }
     };
   });
   slot.querySelector("#cattpl").onclick = async (e) => {
     e.preventDefault();
     try { const t = await api("/catalog", { action: "template" }); downloadCsv(t.filename || "ledger-price-list-template.csv", t.csv); }
-    catch (err) { toast(err.message, "err"); }
+    catch (err) { toast(friendlyError(err, "Couldn't download the template. Try again."), "err"); }
   };
 
   const stage = slot.querySelector("#catstage");
@@ -10675,7 +10798,7 @@ async function renderCatalog(sh, initialImportType = "products") {
         if (sel.value) C.map[sel.dataset.catf] = sel.value; else delete C.map[sel.dataset.catf];
         stage.querySelector("#catgo").disabled = true;
         try { paint(await api("/catalog", { action: "analyze", filename: file.name, csv, import_type:C.importType, column_map: C.map })); }
-        catch (err) { toast(err.message, "err"); }
+        catch (err) { toast(friendlyError(err, "Couldn't read that file. Check the format and try again."), "err"); }
       });
       stage.querySelector("#catcancel").onclick = () => { stage.innerHTML = ""; };
       stage.querySelector("#catgo").onclick = async (ev) => {
@@ -10685,7 +10808,7 @@ async function renderCatalog(sh, initialImportType = "products") {
           const done = await api("/catalog", { action: "import", filename: file.name, csv, column_map: look.column_map,import_type:C.importType,request_id:C.requestId,keep_existing:!C.sourceId,replace_source_id:C.sourceId || undefined,expected_revision:(board.sources || []).find(s=>s.id===C.sourceId)?.revision });
           toast(`${done.imported} items loaded${done.replaced ? " — old copy replaced" : ""}`);
           renderCatalog(sh);
-        } catch (err) { go.disabled = false; go.textContent = "Try import again"; toast(err.message, "err"); }
+        } catch (err) { go.disabled = false; go.textContent = "Try import again"; toast(friendlyError(err, "Couldn't finish the import. Nothing was changed — try again."), "err"); }
       };
     };
     stage.innerHTML = `<p class="note" style="margin-top:10px">Working out your columns…</p>`;
@@ -10709,7 +10832,7 @@ async function renderCatalog(sh, initialImportType = "products") {
       toast("Key saved");
       if (done.note) alert(done.note);
       renderCatalog(sh);
-    } catch (err) { btn.disabled = false; btn.textContent = "Save key"; toast(err.message, "err"); }
+    } catch (err) { btn.disabled = false; btn.textContent = "Save key"; toast(friendlyError(err, "Couldn't save that key. Try again."), "err"); }
   };
 }
 
@@ -10822,7 +10945,7 @@ async function businessSheet() {
     const cardBtn = sh.querySelector("#bzcard");
     if (cardBtn) cardBtn.onclick = async () => {
       try { const r = await booksApi({ action: "connect-onboard" }); if (r.url) window.open(r.url, "_blank"); }
-      catch (e) { toast(e.message, "err"); }
+      catch (e) { toast(friendlyError(e, "Couldn't open payouts. Try again."), "err"); }
     };
     sh.querySelector("#bzphone").onclick = () => { closeSheet(); setTab("phone"); };
     sh.querySelector("#bzshop").onclick = () => shopProfileSheet(() => businessSheet());
@@ -10843,7 +10966,7 @@ async function businessSheet() {
         const detail = await api("/workspace-profile", { action: "logo", image: { data: dataUrl, media_type: file.type } });
         S.profile.business = { ...S.profile.business, ...detail };
         toast("Logo updated"); closeSheet(); businessSheet();
-      } catch (err) { btn.disabled = false; btn.textContent = "Upload logo"; toast(err.message, "err"); }
+      } catch (err) { btn.disabled = false; btn.textContent = "Upload logo"; toast(friendlyError(err, "Couldn't upload your logo. Try a smaller image."), "err"); }
     };
     connectionStates().then((map) => {
       const slot = sh.querySelector("#connslot"); if (slot?.isConnected) renderConnectionRows(slot, map);
@@ -10884,17 +11007,21 @@ async function businessSheet() {
         if (tog) tog.onclick = async () => {
           tog.disabled = true;
           try { await api("/bookings", { action: "set-enabled", enabled: !s.enabled }); renderBooking(); }
-          catch (e) { tog.disabled = false; toast(e.message, "err"); }
+          catch (e) { tog.disabled = false; toast(friendlyError(e, "Couldn't change your booking page. Try again."), "err"); }
         };
         const cp = slot.querySelector("#bkcopy");
         if (cp) cp.onclick = async () => {
           try { await navigator.clipboard.writeText(s.link); toast("Link copied"); }
-          catch { prompt("Copy your booking link:", s.link); }
+          catch { await linkSheet("Your booking link", s.link); }
         };
         const sh2 = slot.querySelector("#bkshare");
         if (sh2) sh2.onclick = async () => {
           try { await navigator.share({ title: "Book with " + (S.profile?.business?.name || "us"), url: s.link }); }
-          catch { try { await navigator.clipboard.writeText(s.link); toast("Link copied"); } catch {} }
+          catch (shareErr) {
+            if (shareErr?.name === "AbortError") return; // the owner closed the share sheet
+            try { await navigator.clipboard.writeText(s.link); toast("Link copied"); }
+            catch { await linkSheet("Your booking link", s.link); }
+          }
         };
         const qrBox = slot.querySelector("#bkqr");
         if (qrBox && s.link) {
@@ -10928,10 +11055,13 @@ async function businessSheet() {
               rq.querySelectorAll("[data-bkdone]").forEach((btn) => btn.onclick = async () => {
                 btn.disabled = true;
                 try { await api("/bookings", { action: "mark-handled", id: btn.dataset.bkdone }); renderBooking(); }
-                catch (e) { btn.disabled = false; toast(e.message, "err"); }
+                catch (e) { btn.disabled = false; toast(friendlyError(e, "Couldn't mark that booking handled. Try again."), "err"); }
               });
             }
-          } catch {}
+          } catch (reqErr) {
+            const rq = slot.querySelector("#bkreqs");
+            if (rq) rq.innerHTML = `<p class="note err" style="margin-top:12px">${esc(friendlyError(reqErr, "Couldn't load new booking requests. Reopen this screen to try again."))}</p>`;
+          }
         }
       } catch { slot.textContent = "Booking unavailable right now."; }
     };
@@ -10989,7 +11119,7 @@ async function businessSheet() {
     sh.querySelector("#bnew").onclick = () => { newConversation(); closeSheet(); openChat(); };
     sh.querySelector("#bbill").onclick = async () => {
       try { const d = await api("/stripe-billing/portal", {}); location.href = d.url; }
-      catch (e) { toast(e.message, "err"); }
+      catch (e) { toast(friendlyError(e, "Couldn't open billing. Try again."), "err"); }
     };
     sh.querySelector("#bout").onclick = () => supa.auth.signOut().then(() => location.reload());
     sh.querySelector("#bdel").onclick = async (e) => {
@@ -11006,7 +11136,7 @@ async function businessSheet() {
         location.reload();
       } catch (err) {
         btn.disabled = false; btn.textContent = "Delete account";
-        toast(err.message, "err");
+        toast(friendlyError(err, "Couldn't delete your account. Nothing was deleted — try again."), "err");
       }
     };
     const inst = sh.querySelector("#install");
@@ -11020,7 +11150,7 @@ async function businessSheet() {
         const hero = $("heroname");
         if (hero) hero.textContent = S.profile.business.name || "Ledger AI";
         toast("Saved");
-      } catch (err) { toast(err.message, "err"); }
+      } catch (err) { toast(friendlyError(err, "Couldn't save your business details. Try again."), "err"); }
       e.currentTarget.disabled = false;
     };
     try {
@@ -11047,21 +11177,21 @@ async function businessSheet() {
             : `<div style="margin-top:10px"><input id="invmail" type="email" placeholder="teammate@business.com">
           ${inAndroidApp() ? "" : `<button class="btn ghost wide" style="margin-top:8px" id="invgo">Invite — $${Number(t.seats?.price_usd) || 299}/mo per seat</button>`}</div>`)
           : ""}`;
-      const manage = async (button, action, key, prompt) => {
-        if (!confirm(prompt)) return;
+      const manage = async (button, action, key, question) => {
+        if (!(await askConfirm(question, { title: action === "remove" ? "Remove this teammate?" : "Revoke this invitation?", ok: action === "remove" ? "Remove" : "Revoke", danger: true }))) return;
         button.disabled = true;
         try { await api("/team", { action, [key]: action === "remove" ? button.dataset.teamRemove : button.dataset.teamRevoke }); closeSheet(); businessSheet(); }
-        catch (error) { button.disabled = false; toast(error.message, "err"); }
+        catch (error) { button.disabled = false; toast(friendlyError(error, "Couldn't change that teammate. Nothing was changed — try again."), "err"); }
       };
-      slot.querySelectorAll("[data-team-remove]").forEach(button => button.onclick = () => manage(button, "remove", "user_id", "Remove this teammate's access and paid seat?"));
-      slot.querySelectorAll("[data-team-revoke]").forEach(button => button.onclick = () => manage(button, "revoke", "invite_id", "Revoke this invitation? Its join code will stop working."));
+      slot.querySelectorAll("[data-team-remove]").forEach(button => button.onclick = () => manage(button, "remove", "user_id", "They lose access and the paid seat is released."));
+      slot.querySelectorAll("[data-team-revoke]").forEach(button => button.onclick = () => manage(button, "revoke", "invite_id", "Its join code will stop working."));
       const go = slot.querySelector("#invgo");
       if (go) go.onclick = async () => {
         go.disabled = true;
         try {
           const r = await api("/team", { action: "invite", email: slot.querySelector("#invmail").value.trim() });
           slot.innerHTML = `<p class="note ok">Invited. Their join code is <b>${esc(r.code || "")}</b> — send it to them; it expires in 7 days.</p>`;
-        } catch (e) { go.disabled = false; toast(e.message, "err"); }
+        } catch (e) { go.disabled = false; toast(friendlyError(e, "Couldn't send that invitation. Try again."), "err"); }
       };
     } catch { const slot = sh.querySelector("#teamslot"); if (slot) slot.textContent = "Team unavailable."; }
   });
@@ -11259,7 +11389,7 @@ function lockView(seed) {
       const st = await api("/stripe-billing/status", {}).catch(() => ({}));
       const c = expiredTrial || !st.portal_available ? await startCheckout() : await api("/stripe-billing/portal", {});
       location.href = c.url;
-    } catch (err) { if (!err.cancelled) toast(err.message, "err"); btn.disabled = false; }
+    } catch (err) { if (!err.cancelled) toast(friendlyError(err, "Couldn't open billing. Nothing was charged — try again."), "err"); btn.disabled = false; }
   };
   $("lk-export").onclick = async (e) => {
     e.preventDefault();
@@ -11268,7 +11398,7 @@ function lockView(seed) {
       const ex = await api("/books", { action: "archive", include_receipt_links: true });
       downloadBooksExport(ex);
       toast("Export downloaded");
-    } catch (err) { toast(err.message, "err"); }
+    } catch (err) { toast(friendlyError(err, "Couldn't archive your books. Try again."), "err"); }
   };
   // One request at a time: a double tap must not send two deletions.
   let lkDeleting = false;
@@ -11283,7 +11413,7 @@ function lockView(seed) {
       if (done?.notice) alert(done.notice);
       await supa.auth.signOut(); location.reload();
     }
-    catch (err) { toast(err.message, "err"); }
+    catch (err) { toast(friendlyError(err, "Couldn't delete your account. Nothing was deleted — try again."), "err"); }
     finally { lkDeleting = false; }
   };
   $("lk-out").onclick = (e) => { e.preventDefault(); supa.auth.signOut().then(() => location.reload()); };
@@ -11349,7 +11479,7 @@ function offerEntryView(mode='signin',email='') {
   root.querySelector('label.welcome-label[for="offer-code"] + label')?.remove();
   $('offer-kind').onchange=()=>{$('offer-help').textContent=$('offer-kind').value==='promotion'?'Stripe checks subscription promotions at secure checkout. Review the amount, offer duration and renewal terms before paying.':'Sign in with your invited email to check the private terms. No access is granted just by entering a code.';};
   $('offer-back').onclick=e=>{e.preventDefault();loginView(mode,email);};
-  $('go').onclick=()=>{try{if(inAndroidApp()&&$('offer-kind').value==='promotion')throw Error(SUBSCRIPTION_REQUIRED);saveOffer($('offer-kind').value,$('offer-code').value);if(S.email){boot();}else{loginView(mode,email);}}catch(e){toast(e.message,'err');}};
+  $('go').onclick=()=>{try{if(inAndroidApp()&&$('offer-kind').value==='promotion')throw Error(SUBSCRIPTION_REQUIRED);saveOffer($('offer-kind').value,$('offer-code').value);if(S.email){boot();}else{loginView(mode,email);}}catch(e){toast(friendlyError(e, "Couldn't apply that offer. Try again."),'err');}};
 }
 async function offerReviewView(selection,bootstrap) {
   const promotion=selection.kind==='promotion';
@@ -11372,7 +11502,7 @@ async function offerReviewView(selection,bootstrap) {
       const result=await api('/login-offers',{action:'redeem',code:selection.code,name,currency:$('offer-currency')?.value||'CAD',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC'});
       if(!result.redeemed)throw Error('Access was not confirmed. Retry to check the same invitation.');
       clearOffer();toast('Complimentary Solo access is active. No subscription payment is required.');await boot();
-    }catch(e){go.disabled=false;if(!e.cancelled)toast(e.message,'err');}
+    }catch(e){go.disabled=false;if(!e.cancelled)toast(friendlyError(e, "Couldn't redeem that code. Try again."),'err');}
   };
 }
 // A Google callback is accepted only after this tab started a short-lived,
@@ -11542,7 +11672,7 @@ function setupView() {
       await loadProfile(created);
       if(pendingOffer()){await boot();return;}
       onboardInterview(name);
-    } catch (e) { toast(e.message, "err"); }
+    } catch (e) { toast(friendlyError(e, "Couldn't finish setting up your workspace. Try again."), "err"); }
   };
 }
 
@@ -11582,7 +11712,7 @@ function joinView(businessName) {
       await loadProfile(await api("/workspace-profile", { action: "bootstrap" }));
       appView(); openChat();
       sys("🎉 Welcome aboard — you're now part of " + (r.businessName || businessName) + ". Ask me anything about the business.");
-    } catch (e) { toast(e.message, "err"); }
+    } catch (e) { toast(friendlyError(e, "Couldn't join that workspace. Try again."), "err"); }
   };
 }
 
@@ -11682,7 +11812,11 @@ async function boot() {
     return;
   }
   // app.html#vin opens the scanner straight away (Home Screen shortcut / QR on the shop wall).
-  if (location.hash === "#vin") { history.replaceState(null, "", location.pathname); vinScannerSheet(); }
+  if (location.hash === "#vin") {
+    history.replaceState(null, "", location.pathname);
+    if (isAuto()) vinScannerSheet();
+    else toast("VIN scanning is for auto and tire businesses. Change your business type under Business profile & settings.");
+  }
 }
 // The boot catch-all used to offer Retry and nothing else (audit 11.9): a
 // sign-in that can no longer load ("Signed out", a revoked session) had no way
@@ -11715,7 +11849,7 @@ function clientHubCard(slot, c) {
         <button class="btn ghost" id="hubpause">${link.active ? "Pause" : "Resume"}</button>
         <button class="btn ghost" id="hubnew">New link</button>
       </div></div>`;
-    const busy = async (fn) => { try { await fn(); } catch (e) { toast(e.message || "Client Hub failed", "err"); } };
+    const busy = async (fn) => { try { await fn(); } catch (e) { toast(friendlyError(e, "Couldn't update the Client Hub link. Try again."), "err"); } };
     slot.querySelector("#hubcopy").onclick = () => busy(async () => {
       await navigator.clipboard.writeText(link.url); toast("Client Hub link copied");
     });
@@ -11729,7 +11863,7 @@ function clientHubCard(slot, c) {
       paint(r.link); toast(r.link.active ? "Client Hub link resumed" : "Client Hub link paused");
     });
     slot.querySelector("#hubnew").onclick = () => busy(async () => {
-      if (!confirm("Make a new link? The old one stops working immediately.")) return;
+      if (!(await askConfirm("The old one stops working immediately.", { title: "Make a new link?", ok: "Make a new link", danger: true }))) return;
       const r = await api("/client-hub", { action: "regenerate", id: link.id });
       paint(r.link); toast("New Client Hub link ready");
     });
@@ -12104,13 +12238,13 @@ function pushSettingsCard(slot) {
             await api("/web-push", { action: "register", subscription: sub.toJSON(), user_agent: navigator.userAgent });
             toast("Notifications on");
           }
-        } catch (e) { toast(e.message || "Couldn't change notifications", "err"); }
+        } catch (e) { toast(friendlyError(e, "Couldn't change your notifications. Try again."), "err"); }
         run();
       };
       const t = slot.querySelector("#pushtest");
       if (t) t.onclick = async () => {
         try { const r = await api("/web-push", { action: "test" }); toast(r.delivered > 0 ? `Test sent to ${r.delivered} device${r.delivered === 1 ? "" : "s"}` : "No device received it", r.delivered > 0 ? undefined : "err"); }
-        catch (e) { toast(e.message || "Test failed", "err"); }
+        catch (e) { toast(friendlyError(e, "Couldn't send the test notification. Try again."), "err"); }
       };
     });
   };
@@ -12308,7 +12442,7 @@ function liveSheet() {
   })();
 }
 
-try { await finishGoogleReturn(); } catch(error) { loginView("signin");toast(error.message,"err"); }
+try { await finishGoogleReturn(); } catch(error) { loginView("signin");toast(friendlyError(error, "Couldn't finish signing in with Google. Try again."),"err"); }
 boot();
 supa.auth.onAuthStateChange((event, s) => {
   if (!accountBoundary.accept(s)) return;
@@ -12500,7 +12634,7 @@ function exportDataSheet() {
     <p class="sh-sub">Choose a spreadsheet for everyday use or an exact-data archive. CSV text is made safe to open in spreadsheets; archives retain the original values. Archives are for portability, not a one-click whole-business restore.</p>
     <div class="cmpsect">
       <button class="btn primary wide" id="mgxc">Customers</button><button class="btn wide" id="mgxbusiness">Business records archive (ZIP)</button><button class="btn wide" id="mgxcat">Catalog &amp; import history archive</button><button class="btn wide" id="mgxhistory">Customer import originals &amp; recovery</button>
-      <button class="btn wide" id="mgxv" style="margin-top:8px">Vehicles (with their customers)</button>
+      ${isAuto() ? `<button class="btn wide" id="mgxv" style="margin-top:8px">Vehicles (with their customers)</button>` : ""}
       <button class="btn wide" id="mgxi" style="margin-top:8px">Invoices &amp; payments</button>
     </div>
     <p class="note" id="mgxnote"></p>`, (sh) => {
@@ -12514,7 +12648,8 @@ function exportDataSheet() {
     sh.querySelector("#mgxcat").onclick=async()=>{note.textContent="Preparing…";try{const r=await api("/catalog",{action:"export"});downloadJson("ledger-catalog-archive.json",r.archive);note.textContent="Catalog, original values and retained versions exported."}catch(e){note.textContent=e.message}};
     sh.querySelector("#mgxhistory").onclick=importHistorySheet;
     sh.querySelector("#mgxc").onclick = () => run("customers", "ledger-customers.csv");
-    sh.querySelector("#mgxv").onclick = () => run("vehicles", "ledger-vehicles.csv");
+    const xv = sh.querySelector("#mgxv");
+    if (xv) xv.onclick = () => run("vehicles", "ledger-vehicles.csv");
     sh.querySelector("#mgxi").onclick = async () => {
       note.textContent = "Preparing…";
       try {
@@ -12597,7 +12732,7 @@ function wirePhoneOS(d){
  if($('pos-how'))$('pos-how').onclick=()=>phoneHowSheet(d);
  on('[data-nfilter]','click',e=>{S.phoneNotificationFilter=e.currentTarget.dataset.nfilter;renderPhone(d);});
  on('[data-pnotice]','click',e=>phoneNoticeSheet(d,phoneNoticeRows(d).find(n=>n.id===e.currentTarget.dataset.pnotice)));
- if($('pos-mark-all'))$('pos-mark-all').onclick=async()=>{try{const ids=phoneNoticeRows(d).map(n=>n.id);await api('/phone',{action:'notifications-read',ids});d.notificationReadIds=ids;renderPhone(d);}catch(e){toast(e.message);}};
+ if($('pos-mark-all'))$('pos-mark-all').onclick=async()=>{try{const ids=phoneNoticeRows(d).map(n=>n.id);await api('/phone',{action:'notifications-read',ids});d.notificationReadIds=ids;renderPhone(d);}catch(e){toast(friendlyError(e, "Couldn't mark those notices read. Try again."));}};
 }
 function phoneComposeSheet(d){const wrap=sheet('<h2>New text</h2><p class="sh-sub">Send from your business number.</p><label class="field"><span>To</span><input id="pos-to" type="tel" placeholder="+1 555 555 0123"></label><label class="field"><span>Message</span><textarea id="pos-new-body" rows="4" placeholder="Write a message…"></textarea></label><p class="note err" id="pos-send-error"></p><button class="btn primary" id="pos-send-new">Send text</button>');wrap.querySelector('#pos-send-new').onclick=async e=>{const to=wrap.querySelector('#pos-to').value.trim(),body=wrap.querySelector('#pos-new-body').value.trim();if(!to||!body){wrap.querySelector('#pos-send-error').textContent='Enter a phone number and a message.';return;}e.currentTarget.disabled=true;try{await api('/phone',{action:'reply',to_number:to,body});closeSheet();S.phoneInboxRows=null;await renderPhone();}catch(ex){wrap.querySelector('#pos-send-error').textContent=ex.message;e.target.disabled=false;smsSendFailed(ex);}};}
 
@@ -12617,7 +12752,7 @@ async function schedulingResourcesSheet() {
 }
 async function schedulingResourceEditor(existing=null) {
  const days=['mon','tue','wed','thu','fri','sat','sun'];let services=[];
- try{services=(await booksApi({action:'shortcuts'})).shortcuts||[]}catch(e){toast(e.message,'err');return}
+ try{services=(await booksApi({action:'shortcuts'})).shortcuts||[]}catch(e){toast(friendlyError(e, "Couldn't load your service shortcuts. Try again."),'err');return}
  const r=existing||{name:'',capacity:1,active:true,services:[],working_hours:{},time_off:[]};const off=[...r.time_off];
  const custom=Object.keys(r.working_hours||{}).length>0;
  const sh=sheet(`<h2>${existing?'Edit resource':'New resource'}</h2><label class="emailrow">Name<input id="rs-name" class="cmpinput" value="${esc(r.name)}"></label><label class="emailrow">Capacity<input id="rs-cap" class="cmpinput" type="number" min="1" max="100" value="${r.capacity}"></label><label class="resource-option"><input id="rs-active" type="checkbox"${r.active?' checked':''}> Available for new appointments</label>
@@ -12640,7 +12775,7 @@ function importHistorySheet() {
  const slot=sh.querySelector("#ihrows");
  try {const r=await api("/migrate/history",{});slot.innerHTML=(r.imports||[]).map(i=>`<div class="cmpsect"><b>${esc(i.file_name||"Import")}</b><p class="note">${esc(new Date(i.created_at).toLocaleString())} · ${i.row_count} rows${i.undone_at ? " · Undone" : ""}</p>${i.vehicles_error ? `<p class="note err">Customers were saved but vehicles were not: ${esc(i.vehicles_error)} Import the same file again to finish.</p>` : ""}<button class="btn" data-original="${i.id}">Download original &amp; exceptions</button>${i.can_undo ? `<button class="btn ghost" data-undo="${i.id}">Undo this import</button>` : ""}<p class="note" data-result="${i.id}"></p></div>`).join("") || '<p class="note">No imports yet.</p>';
  slot.querySelectorAll("[data-original]").forEach(btn=>btn.onclick=async()=>{btn.disabled=true;try{const data=await api("/migrate/original",{import_id:btn.dataset.original});downloadJson("ledger-import-original.json",data.archive)}catch(e){slot.querySelector(`[data-result="${btn.dataset.original}"]`).textContent=e.message}finally{btn.disabled=false}});
- slot.querySelectorAll("[data-undo]").forEach(btn=>btn.onclick=async()=>{if(!confirm("Undo the customer changes from this import? Ledger will refuse if later changes or linked records would be lost."))return;btn.disabled=true;try{await api("/migrate/undo",{import_id:btn.dataset.undo});toast("Import undone");importHistorySheet()}catch(e){slot.querySelector(`[data-result="${btn.dataset.undo}"]`).textContent=e.message;btn.disabled=false}});
+ slot.querySelectorAll("[data-undo]").forEach(btn=>btn.onclick=async()=>{if(!(await askConfirm("Ledger will refuse if later changes or linked records would be lost.",{title:"Undo the customer changes from this import?",ok:"Undo import",danger:true})))return;btn.disabled=true;try{await api("/migrate/undo",{import_id:btn.dataset.undo});toast("Import undone");importHistorySheet()}catch(e){slot.querySelector(`[data-result="${btn.dataset.undo}"]`).textContent=e.message;btn.disabled=false}});
  }catch(e){slot.textContent=e.message;}
  });
 }
@@ -12648,7 +12783,7 @@ function catalogHistorySheet(source) {
  sheet(`<h2>${esc(source.name)} — history</h2><p class="note">Restore a previous version as the current list. The current version remains in history. Service restores also update the linked service menu.</p><div id="chrows">Loading…</div>`,async sh=>{
  const slot=sh.querySelector("#chrows");
  try {const r=await api("/catalog",{action:"history",source_id:source.id});slot.innerHTML=(r.versions||[]).map(v=>`<div class="cmpsect"><b>Version ${v.revision}</b><p class="note">${esc(new Date(v.created_at).toLocaleString())}</p>${v.revision===source.revision ? '<p>Current version</p>' : `<button class="btn" data-restore="${v.revision}">Restore this version</button>`}</div>`).join("")||"No retained versions yet.";
- slot.querySelectorAll("[data-restore]").forEach(btn=>btn.onclick=async()=>{if(!confirm("Replace the current list with this retained version? The current version stays in history."))return;btn.disabled=true;try{await api("/catalog",{action:"restore",source_id:source.id,revision:Number(btn.dataset.restore),expected_revision:source.revision,request_id:crypto.randomUUID()});toast("Version restored");catalogImportSheet(source.import_type||"products")}catch(e){toast(e.message);btn.disabled=false}});
+ slot.querySelectorAll("[data-restore]").forEach(btn=>btn.onclick=async()=>{if(!(await askConfirm("The current version stays in history.",{title:"Restore this version?",ok:"Restore",danger:true})))return;btn.disabled=true;try{await api("/catalog",{action:"restore",source_id:source.id,revision:Number(btn.dataset.restore),expected_revision:source.revision,request_id:crypto.randomUUID()});toast("Version restored");catalogImportSheet(source.import_type||"products")}catch(e){toast(friendlyError(e, "Couldn't restore that version. Nothing changed — try again."), "err");btn.disabled=false}});
  }catch(e){slot.textContent=e.message;}
  });
 }
