@@ -537,6 +537,10 @@ function askPrompt(message, { title = "", value = "", placeholder = "", ok = "OK
 // a native prompt() there shows nothing at all, so the link was simply lost.
 // This is a real sheet: the link sits in a selectable field, Copy tries again
 // in place (clipboard, then the old execCommand path), and says what happened.
+// WP10 2026-09-19: the field was a one-line <input>, so a booking link ran off
+// the right edge and an owner reading it off the screen never saw the end of
+// it. It is a read-only textarea now — the link wraps, the box grows to however
+// many lines that takes, and Copy, Done and the pre-selection are unchanged.
 function linkSheet(title, url) {
   return new Promise((resolve) => {
     document.getElementById("ledger-ask")?.remove();
@@ -545,12 +549,21 @@ function linkSheet(title, url) {
     dlg.setAttribute("aria-describedby", "ledger-ask-body");
     dlg.innerHTML = `<form><h2 id="ledger-ask-title">${esc(title)}</h2>
       <p class="ask-body" id="ledger-ask-body">This browser wouldn't copy it for us. Tap Copy, or select the link and copy it by hand.</p>
-      <input class="ask-input" readonly autocomplete="off" aria-labelledby="ledger-ask-title" value="${esc(url || "")}">
+      <textarea class="ask-input" readonly rows="2" autocomplete="off" spellcheck="false" aria-labelledby="ledger-ask-title" style="display:block;resize:none;overflow:hidden;overflow-wrap:anywhere;white-space:pre-wrap;font-size:14px;line-height:1.45">${esc(url || "")}</textarea>
       <div class="ask-row"><button type="button" class="btn ghost" data-ask-close>Done</button><button type="submit" class="btn primary" data-ask-copy>Copy</button></div></form>`;
     document.body.appendChild(dlg);
     let done = false;
     const finish = () => { if (done) return; done = true; try { dlg.close(); } catch {} dlg.remove(); resolve(); };
     const field = dlg.querySelector(".ask-input");
+    // Grow to the whole link — however many lines it wraps to — so nothing is
+    // cut off. Called once the dialog is in the document, so scrollHeight is
+    // real. box-sizing is border-box here, so the height has to carry the two
+    // 1px borders on top of scrollHeight or the last line stays a hair clipped.
+    const fitField = () => { try {
+      field.style.height = "auto";
+      const border = field.offsetHeight - field.clientHeight;
+      field.style.height = `${Math.min(field.scrollHeight + border, 240)}px`;
+    } catch {} };
     const copy = async () => {
       try { field.focus(); field.select(); field.setSelectionRange(0, String(url || "").length); } catch {}
       let ok = false;
@@ -564,6 +577,7 @@ function linkSheet(title, url) {
     dlg.addEventListener("click", (e) => { if (e.target === dlg) finish(); });
     dlg.addEventListener("close", () => finish());
     try { dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
+    fitField();
     try { field.focus(); field.select(); } catch {}
   });
 }
@@ -1832,12 +1846,20 @@ function drawBusinessTypeBanner() {
   if (S.shop.business_type) return;
   const role = S.profile.role || (S.team?.members || []).find((m) => (m.email || "").toLowerCase() === S.email)?.role || "owner";
   if (!["owner", "admin"].includes(role)) return;
-  slot.innerHTML = `<div class="hbanner" id="biztypebanner" style="margin-bottom:10px">
+  // Layout (WP10 2026-09-19): Finish and Later used to sit on the same row as
+  // the words, which on a 390px phone left the text column about 152px wide —
+  // the title broke over two lines and the sentence under it over three. The
+  // row wraps now: the text keeps a 200px floor, and the two buttons travel
+  // together (one span, so they never split across two lines) down under the
+  // text the moment they stop fitting beside it. Wide screens are unchanged.
+  slot.innerHTML = `<div class="hbanner" id="biztypebanner" style="margin-bottom:10px;flex-wrap:wrap">
       <span class="ic">&#9889;</span>
-      <span class="m"><b>Finish setting up your business — 1 minute</b>
+      <span class="m" style="flex:1 1 200px;min-width:min(100%,200px)"><b>Finish setting up your business — 1 minute</b>
         <small style="white-space:normal;line-height:1.35;margin-top:2px">Pick what kind of business you run so Ledger fits your screens and your words.</small></span>
-      <button class="retry" id="biztypego">Finish</button>
-      <button class="retry" id="biztypehide" aria-label="Hide this for now">Later</button>
+      <span style="display:flex;gap:8px;flex:0 0 auto;margin-left:auto">
+        <button class="retry" id="biztypego">Finish</button>
+        <button class="retry" id="biztypehide" aria-label="Hide this for now">Later</button>
+      </span>
     </div>`;
   slot.querySelector("#biztypego").onclick = () => shopProfileSheet(() => { drawBusinessTypeBanner(); loadHomeSetup(); });
   slot.querySelector("#biztypehide").onclick = () => { bizTypeBannerDismissed = true; slot.innerHTML = ""; };
@@ -11731,7 +11753,11 @@ async function loadProfile(boot) {
   if (!accountBoundary.bindWorkspace(session, boot.workspace_id)) throw new Error("Business verification is unavailable. Please retry.");
   const profile = { ...boot, business: { name: boot.name || "", address: "", logo_url: null } };
   // Business profile rides on bootstrap. A payload without it (older function)
-  // is treated as a completed generic business — never a nag, never automotive.
+  // stands in as a completed generic business: never automotive, and — because
+  // the Home banner keys on a missing `business_type`, not on `completed` — the
+  // stand-in leaves `business_type` unset, so the finish-setup line does show.
+  // That is the wanted behaviour: a workspace we cannot confirm a type for is
+  // asked once, per session, instead of being silently left on generic screens.
   S.shop = boot.shop_profile || { completed: true };
   try {
     const detail = await api("/workspace-profile", { action: "get" });
