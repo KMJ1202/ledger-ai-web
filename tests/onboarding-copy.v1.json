@@ -1,0 +1,695 @@
+{
+  "version": 1,
+  "sections": [
+    {
+      "id": "about",
+      "title": "About your business",
+      "step": "Step 1 of 7",
+      "questions": [
+        {
+          "key": "business_type",
+          "kind": "chips",
+          "question": "What kind of business do you run?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "automotive",
+              "label": "Auto & tire"
+            },
+            {
+              "value": "trades",
+              "label": "Trades"
+            },
+            {
+              "value": "beauty",
+              "label": "Beauty & personal care"
+            },
+            {
+              "value": "health",
+              "label": "Health & wellness"
+            },
+            {
+              "value": "home",
+              "label": "Home & property"
+            },
+            {
+              "value": "professional",
+              "label": "Professional services"
+            },
+            {
+              "value": "fitness",
+              "label": "Fitness & coaching"
+            },
+            {
+              "value": "pets",
+              "label": "Pet care"
+            },
+            {
+              "value": "other",
+              "label": "Something else"
+            }
+          ]
+        },
+        {
+          "key": "business_description",
+          "kind": "text",
+          "question": "What do you do, in one line?",
+          "help": null,
+          "placeholder": null
+        },
+        {
+          "key": "business_stage",
+          "kind": "chips",
+          "question": "How long have you been at it?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "starting",
+              "label": "Just starting"
+            },
+            {
+              "value": "growing",
+              "label": "Growing"
+            },
+            {
+              "value": "established",
+              "label": "Established"
+            }
+          ]
+        },
+        {
+          "key": "team_size",
+          "kind": "chips",
+          "question": "How big is the team?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "solo",
+              "label": "Just me"
+            },
+            {
+              "value": "small",
+              "label": "2–5"
+            },
+            {
+              "value": "large",
+              "label": "6+"
+            }
+          ]
+        },
+        {
+          "key": "region_code",
+          "kind": "region",
+          "question": "Where are you based?",
+          "help": "Sets your default tax until you change it.",
+          "placeholder": null
+        },
+        {
+          "key": "timezone",
+          "kind": "timezone",
+          "question": "Your time zone",
+          "help": null,
+          "placeholder": null
+        }
+      ]
+    },
+    {
+      "id": "offer",
+      "title": "What you offer",
+      "step": "Step 2 of 7",
+      "questions": [
+        {
+          "key": "services",
+          "kind": "services",
+          "question": "What do you sell or do?",
+          "help": "Name, price before tax, minutes it takes.",
+          "placeholder": null,
+          "examples": "Tap to add · example — change it"
+        },
+        {
+          "key": "pricing_model",
+          "kind": "chips",
+          "question": "How do you charge?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "flat",
+              "label": "Flat price per job"
+            },
+            {
+              "value": "hourly",
+              "label": "Hourly + parts"
+            },
+            {
+              "value": "mix",
+              "label": "A mix"
+            }
+          ]
+        },
+        {
+          "key": "hourly_rate",
+          "kind": "number",
+          "question": "Your hourly rate?",
+          "help": "{currency} per hour, before tax.",
+          "placeholder": "0"
+        },
+        {
+          "key": "quotes_first",
+          "kind": "chips",
+          "question": "Do you quote before starting work?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "true",
+              "label": "Usually"
+            },
+            {
+              "value": "false",
+              "label": "Rarely"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "customers",
+      "title": "Your customers and how work comes in",
+      "step": "Step 3 of 7",
+      "questions": [
+        {
+          "key": "customer_mix",
+          "kind": "chips",
+          "question": "Who do you serve?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "individuals",
+              "label": "Mostly individuals"
+            },
+            {
+              "value": "businesses",
+              "label": "Mostly businesses"
+            },
+            {
+              "value": "both",
+              "label": "Both"
+            }
+          ]
+        },
+        {
+          "key": "intake_channels",
+          "kind": "chips",
+          "question": "How does work come in?",
+          "help": "Pick all that apply.",
+          "placeholder": null,
+          "options": [
+            {
+              "value": "phone",
+              "label": "Phone"
+            },
+            {
+              "value": "text",
+              "label": "Text"
+            },
+            {
+              "value": "online",
+              "label": "Online"
+            },
+            {
+              "value": "walkin",
+              "label": "Walk-in"
+            },
+            {
+              "value": "email",
+              "label": "Email"
+            },
+            {
+              "value": "social",
+              "label": "Social media"
+            },
+            {
+              "value": "referral",
+              "label": "Referrals"
+            }
+          ]
+        },
+        {
+          "key": "job_location",
+          "kind": "chips",
+          "question": "Where does the work happen?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "my_place",
+              "label": "At my place"
+            },
+            {
+              "value": "customer_place",
+              "label": "At the customer's place"
+            },
+            {
+              "value": "both",
+              "label": "Both"
+            },
+            {
+              "value": "remote",
+              "label": "Remote"
+            }
+          ]
+        },
+        {
+          "key": "service_area",
+          "kind": "text",
+          "question": "How far do you travel?",
+          "help": null,
+          "placeholder": "Towns or how far you go"
+        },
+        {
+          "key": "typical_job_length",
+          "kind": "chips",
+          "question": "How long is a typical job?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "under_1h",
+              "label": "Under an hour"
+            },
+            {
+              "value": "1_3h",
+              "label": "1–3 hours"
+            },
+            {
+              "value": "half_day",
+              "label": "Half a day"
+            },
+            {
+              "value": "full_day",
+              "label": "A full day"
+            },
+            {
+              "value": "multi_day",
+              "label": "More than a day"
+            }
+          ]
+        },
+        {
+          "key": "repeat_business",
+          "kind": "chips",
+          "question": "Do customers come back?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "one_off",
+              "label": "Mostly one-off"
+            },
+            {
+              "value": "recurring",
+              "label": "Mostly recurring"
+            },
+            {
+              "value": "both",
+              "label": "Both"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "week",
+      "title": "Your week",
+      "step": "Step 4 of 7",
+      "questions": [
+        {
+          "key": "business_hours",
+          "kind": "hours",
+          "question": "When are you open?",
+          "help": null,
+          "placeholder": null
+        },
+        {
+          "key": "after_hours",
+          "kind": "chips",
+          "question": "What happens after hours?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "voicemail",
+              "label": "Voicemail"
+            },
+            {
+              "value": "text_back",
+              "label": "Ledger texts back"
+            },
+            {
+              "value": "emergency",
+              "label": "Emergencies get through"
+            },
+            {
+              "value": "closed",
+              "label": "Closed until morning"
+            }
+          ]
+        },
+        {
+          "key": "booking_lead",
+          "kind": "chips",
+          "question": "How soon can you take a job?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "same_day",
+              "label": "Same day"
+            },
+            {
+              "value": "next_day",
+              "label": "Next day"
+            },
+            {
+              "value": "two_plus_days",
+              "label": "Two or more days out"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "money",
+      "title": "Getting paid",
+      "step": "Step 5 of 7",
+      "questions": [
+        {
+          "key": "payment_methods",
+          "kind": "chips",
+          "question": "How do customers pay?",
+          "help": "Pick all that apply.",
+          "placeholder": null,
+          "options": [
+            {
+              "value": "cash",
+              "label": "Cash"
+            },
+            {
+              "value": "card",
+              "label": "Card"
+            },
+            {
+              "value": "etransfer",
+              "label": "E-transfer"
+            },
+            {
+              "value": "cheque",
+              "label": "Cheque"
+            },
+            {
+              "value": "financing",
+              "label": "Financing"
+            },
+            {
+              "value": "online",
+              "label": "Online"
+            }
+          ]
+        },
+        {
+          "key": "payment_terms_days",
+          "kind": "chips",
+          "question": "When is payment due?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "0",
+              "label": "On the day"
+            },
+            {
+              "value": "7",
+              "label": "Within 7 days"
+            },
+            {
+              "value": "15",
+              "label": "Within 15 days"
+            },
+            {
+              "value": "30",
+              "label": "Within 30 days"
+            }
+          ]
+        },
+        {
+          "key": "deposit",
+          "kind": "deposit",
+          "question": "Do you take a deposit?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "none",
+              "label": "No deposit"
+            },
+            {
+              "value": "percent",
+              "label": "A percentage"
+            },
+            {
+              "value": "fixed",
+              "label": "A fixed amount"
+            }
+          ],
+          "sub": {
+            "question": "How much?",
+            "help_percent": "Percent of the job.",
+            "help_fixed": "{currency} up front.",
+            "placeholder": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "team",
+      "title": "Your team and tools",
+      "step": "Step 6 of 7",
+      "questions": [
+        {
+          "key": "team_roles",
+          "kind": "chips",
+          "question": "Who is on the team?",
+          "help": "Pick all that apply.",
+          "placeholder": null,
+          "options": [
+            {
+              "value": "field_crew",
+              "label": "Field crew"
+            },
+            {
+              "value": "front_desk",
+              "label": "Front desk"
+            },
+            {
+              "value": "admin",
+              "label": "Admin"
+            },
+            {
+              "value": "other_owners",
+              "label": "Other owners"
+            }
+          ]
+        },
+        {
+          "key": "wants_front_desk",
+          "kind": "chips",
+          "question": "Want Ledger to answer the texts and calls you miss?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "true",
+              "label": "Yes"
+            },
+            {
+              "value": "false",
+              "label": "Not now"
+            }
+          ]
+        },
+        {
+          "key": "uses_quickbooks",
+          "kind": "chips",
+          "question": "Do you use QuickBooks?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "true",
+              "label": "Yes"
+            },
+            {
+              "value": "false",
+              "label": "No"
+            }
+          ]
+        },
+        {
+          "key": "uses_google_calendar",
+          "kind": "chips",
+          "question": "Do you use Google Calendar?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "true",
+              "label": "Yes"
+            },
+            {
+              "value": "false",
+              "label": "No"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ledger",
+      "title": "How Ledger should work for you",
+      "step": "Step 7 of 7",
+      "questions": [
+        {
+          "key": "ai_tone",
+          "kind": "chips",
+          "question": "How should Ledger sound?",
+          "help": null,
+          "placeholder": null,
+          "options": [
+            {
+              "value": "friendly",
+              "label": "Friendly"
+            },
+            {
+              "value": "professional",
+              "label": "Professional"
+            },
+            {
+              "value": "brief",
+              "label": "Brief"
+            }
+          ]
+        },
+        {
+          "key": "goals",
+          "kind": "chips",
+          "question": "What matters most this year?",
+          "help": "Pick up to three.",
+          "placeholder": null,
+          "options": [
+            {
+              "value": "more_bookings",
+              "label": "More bookings"
+            },
+            {
+              "value": "get_paid_faster",
+              "label": "Get paid faster"
+            },
+            {
+              "value": "fewer_missed_calls",
+              "label": "Fewer missed calls"
+            },
+            {
+              "value": "less_admin",
+              "label": "Less admin"
+            },
+            {
+              "value": "better_reviews",
+              "label": "Better reviews"
+            },
+            {
+              "value": "grow_team",
+              "label": "Grow the team"
+            }
+          ]
+        },
+        {
+          "key": "rules",
+          "kind": "rules",
+          "question": "Anything Ledger must always follow?",
+          "help": "Your words, up to five. Ledger keeps them word for word.",
+          "placeholder": "Something Ledger should always do or say",
+          "examples": "Examples — tap to use one, then change it.",
+          "add": "+ Add another"
+        },
+        {
+          "key": "autonomy",
+          "kind": "chips",
+          "question": "What can Ledger do on its own?",
+          "help": "Preferences only — nothing switches on today.",
+          "placeholder": null,
+          "options": [
+            {
+              "value": "reminders",
+              "label": "Send appointment reminders"
+            },
+            {
+              "value": "review_replies",
+              "label": "Reply to reviews"
+            },
+            {
+              "value": "after_hours_texts",
+              "label": "Text back after hours"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "confirm",
+      "title": "Here's what Ledger understands",
+      "step": "One last look",
+      "questions": []
+    }
+  ],
+  "shared": {
+    "skip": "Skip for now",
+    "back": "Back",
+    "continue": "Continue",
+    "saving": "Saving…",
+    "later": "Finish later",
+    "finish": "Looks right — finish",
+    "confirm_step": "One last look",
+    "confirm_title": "Here's what Ledger understands",
+    "note_type_first": "Pick what kind of business you run — the rest can wait.",
+    "note_409": "Pick what kind of business you run first.",
+    "go_about": "Go to About",
+    "note_retry": "That didn't save. Your answers are still here — try again.",
+    "retry": "Retry",
+    "loading": "Loading…",
+    "summary_loading": "Putting it together…",
+    "summary_empty": "Nothing answered yet — tap Change on a section below.",
+    "row_done": "Answered",
+    "row_skipped": "Skipped for now",
+    "row_todo": "Not answered yet",
+    "change": "Change",
+    "banner_title": "Finish telling Ledger about your business — {done} of {total} done",
+    "banner_sub": "Pick up where you left off — your answers are saved.",
+    "resume": "Resume",
+    "banner_later": "Later",
+    "knows_title": "What Ledger knows",
+    "knows_empty": "Ledger doesn't know your business yet. A few short questions fix that.",
+    "update": "Update answers",
+    "finish_setup": "Finish setup",
+    "set_up": "Set up Ledger",
+    "plan_title": "Your first working day",
+    "plan_intro": "Picked from what you told Ledger. Tap a step to do it now — anything that needs a number, a card or a plan says so.",
+    "applied_title": "Already set up from your answers",
+    "needs": "Needs: ",
+    "example": "example — change it"
+  }
+}

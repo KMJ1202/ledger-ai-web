@@ -3,6 +3,7 @@
 // "Onboarding flow (start)" and "(pure end)" markers), same vm harness as
 // first-working-day.mjs: the real source, stubbed globals, no browser.
 import fs from "node:fs"; import vm from "node:vm"; import assert from "node:assert/strict";
+import { buildOnboardingCopy, OUT as COPY_FILE } from "./export-onboarding-copy.mjs";
 const source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const slice = (from, to) => { const a = source.indexOf(from); assert(a > 0, `missing ${from}`); const b = source.indexOf(to, a); assert(b > a, `missing ${to}`); return source.slice(a, b); };
 const pure = slice("// ---- Onboarding flow (start)", "// ---- Onboarding flow (pure end)");
@@ -214,6 +215,29 @@ test("what onboarding-complete applied shows once, in the first-day sheet (round
   const dom = slice("// ---- Onboarding flow (pure end)", "// ---- Onboarding flow (end)");
   assert.match(dom, /firstWorkingDaySheet\(\{ applied: r\.applied \}\);/);
   assert.doesNotMatch(slice("async function loadHomeSetup()", "\n}\n"), /applied/, "never on Home");
+});
+
+test("the copy export equals the committed tests/onboarding-copy.v1.json (round 2)", () => {
+  const built = buildOnboardingCopy();
+  assert.deepEqual(JSON.parse(fs.readFileSync(COPY_FILE, "utf8")), built, "run: node tests/export-onboarding-copy.mjs");
+  assert.equal(built.version, 1);
+  assert.deepEqual(built.sections.map((s) => [s.id, s.title]), CONTRACT_SECTIONS);
+  assert.equal(built.sections.at(-1).step, "One last look");
+  const q = Object.fromEntries(built.sections.flatMap((s) => s.questions).map((x) => [x.key, x]));
+  assert.equal(q.services.question, "What do you sell or do?");
+  assert.equal(q.services.help, "Name, price before tax, minutes it takes.");
+  assert.deepEqual(q.wants_front_desk.options, [{ value: "true", label: "Yes" }, { value: "false", label: "Not now" }]);
+  assert.deepEqual(q.uses_quickbooks.options, [{ value: "true", label: "Yes" }, { value: "false", label: "No" }]);
+  assert.deepEqual(q.deposit.options.map((o) => o.value), ["none", "percent", "fixed"]);
+  assert.equal(q.business_type.options.length, 9);
+  for (const s of built.sections) for (const x of s.questions) { assert.ok("help" in x && "placeholder" in x, x.key); if (x.options) for (const o of x.options) assert.ok(o.value && o.label, x.key); }
+  for (const k of ["skip", "back", "continue", "saving", "later", "finish", "confirm_step", "confirm_title", "note_409", "note_retry", "banner_title", "banner_sub", "resume", "banner_later", "knows_title", "update", "finish_setup", "set_up", "plan_title", "plan_intro", "applied_title", "needs", "example"]) assert.equal(typeof built.shared[k], "string", k);
+  assert.equal(built.shared.banner_title, "Finish telling Ledger about your business — {done} of {total} done");
+  assert.equal(g('obFill(OB_COPY.banner_title, { done: 3, total: 7 })'), "Finish telling Ledger about your business — 3 of 7 done");
+  assert.equal(built.shared.confirm_title, "Here's what Ledger understands");
+  // Nothing in the flow's DOM half still spells these out by hand (comments aside).
+  const dom = slice("// ---- Onboarding flow (pure end)", "// ---- Onboarding flow (end)").replace(/^\s*\/\/.*$/gm, "");
+  for (const lit of ["Skip for now", "Finish later", "Looks right — finish", "Saving…", "Update answers", "Finish setup", "Tell Ledger about your business", "Pick up where you left off", ">Resume<", ">Later<"]) assert.ok(!dom.includes(lit), `literal ${lit}`);
 });
 
 console.log(`${passed} passed`);
