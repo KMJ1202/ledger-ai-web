@@ -9,10 +9,14 @@
 // localhost, no horizontal overflow, the phone menu shows "Getting started", every section's
 // title / step / questions / chip labels equal tests/onboarding-copy.v1.json, Skip / Back /
 // Continue / required type / Finish later → banner → Resume / confirm rows + Change / finish
-// panel / Start over, one step keyboard-only, focus on the step title after each change.
+// panel / Start over, one step keyboard-only, focus on the step title after each change; the
+// confirm recap and the "What Ledger knows" card equal the owner brief that
+// tests/onboarding-mock.mjs brief() renders for the same fixed answers; #obunder holds one
+// understanding line after Continue and is cleared by Back and Change (app.js show()).
 // Env: SHOTS_DIR (default ./tests/getting-started-shots), PORT (default 4182), HEADED=1.
 import fs from "node:fs"; import os from "node:os"; import path from "node:path"; import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process"; import net from "node:net";
+import { brief as ownerBrief } from "./onboarding-mock.mjs";
 
 async function loadPlaywright() {
   try { return await import("playwright"); } catch {}
@@ -38,6 +42,22 @@ const SH = W.shared;
 const ORDER = ["about", "offer", "customers", "week", "money", "team", "ledger", "confirm"];
 const MEDIA_404 = /\/assets\/video\/app-onboarding-(about|offer|confirm|firstday)\.(mp4|jpg)$/;
 const VIEWPORTS = [["phone", { width: 390, height: 844 }], ["desktop", { width: 1280, height: 800 }]];
+// The fixed Northside Auto-style answers the walk gives, per section, as the server stores them
+// (chip values, not labels). The recap must equal the mock's brief() for exactly these.
+const HOURS = { mon: { open: "08:00", close: "17:00" }, tue: { open: "08:00", close: "17:00" }, wed: { open: "08:00", close: "17:00" }, thu: { open: "08:00", close: "17:00" }, fri: { open: "08:00", close: "17:00" }, sat: null, sun: null };
+const ANSWERS = {
+  about: { business_type: "automotive", business_description: "Tire shop with two bays", business_stage: "growing", team_size: "small", region_code: "AB", timezone: "America/Edmonton" },
+  offer: { services: [{ name: "Oil change" }, { name: "Mount and balance (4 tires)" }], pricing_model: "hourly", hourly_rate: 120, quotes_first: true },
+  customers: { job_location: "my_place", customer_mix: "individuals", intake_channels: ["phone", "text"], typical_job_length: "under_1h", repeat_business: "recurring" },
+  week: { business_hours: HOURS, after_hours: "text_back", booking_lead: "next_day" },
+  money: { payment_methods: ["card", "etransfer"], payment_terms_days: 7, deposit: { type: "percent", value: 25 } },
+  team: { wants_front_desk: true, team_roles: ["field_crew"] },
+  ledger: { rules: ["Tire installs need the vehicle here for at least an hour"], ai_tone: "friendly", goals: ["more_bookings", "get_paid_faster"] },
+};
+const expectBrief = (...sections) => ownerBrief({ answers: Object.assign({}, ...sections.map((id) => ANSWERS[id])), currency_symbol: "$", name: "" });
+// The schema's understanding line for the About answers above (UNDERSTANDING.business_type.automotive;
+// the next line in priority order would push it past UNDERSTANDING_MAX = 140, so it stands alone).
+const UNDER_ABOUT = "Got it — an automotive business. Vehicles are the unit of work, so bookings will ask which one.";
 
 let checks = 0, failures = 0;
 const check = (ok, name, detail) => { checks++; if (ok) console.log("PASS", name); else { failures++; console.log("FAIL", name, detail !== undefined ? `— ${typeof detail === "string" ? detail : JSON.stringify(detail)}` : ""); } };
@@ -88,6 +108,16 @@ for (const [name, vp] of VIEWPORTS) {
   };
   const noOverflow = async (label) => check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${name}: ${label} has no horizontal overflow`, await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]));
   const T = (sel) => page.locator(sel).first().textContent().then(norm);
+  const pick = async (key, ...values) => { for (const v of values) await page.click(`[data-q="${key}"] .chip[data-v="${v}"]`); };
+  // The brief as painted: obBriefHtml() makes one <p> per paragraph with <br> between lines.
+  const briefText = (scope) => page.locator(`${scope} .obbrief p`).evaluateAll((ps) => ps.map((p) => p.innerText.replace(/\u00a0/g, " ")).join("\n\n"));
+  const underLine = async (label) => {
+    const u = page.locator("#obunder");
+    const raw = await u.evaluate((el) => el.hidden ? null : el.textContent);
+    check(raw !== null && raw.trim().length > 0 && !raw.includes("\n") && raw.length <= 140 && await u.locator("br, p, div").count() === 0, `${name}: ${label}: #obunder holds exactly one understanding line`, raw);
+    return raw;
+  };
+  const underCleared = async (label) => check(await page.locator("#obunder").evaluate((el) => el.hidden && el.textContent === ""), `${name}: ${label}: #obunder is cleared and hidden`);
   const focused = () => page.evaluate(() => { const a = document.activeElement; return a ? `${a.tagName.toLowerCase()}${a.id ? "#" + a.id : ""}` : "none"; });
 
   // ---- The page ----
@@ -173,17 +203,18 @@ for (const [name, vp] of VIEWPORTS) {
   await page.click(`[data-q="business_type"] .chip:has-text("${auto.label}")`);
   check(await page.getAttribute(`[data-q="business_type"] .chip[data-v="${auto.value}"]`, "aria-pressed") === "true" && await page.locator('[data-q="business_type"] .chip[aria-pressed="true"]').count() === 1, `${name}: business type is single-select with aria-pressed`);
   check((await page.getAttribute("#ob-business_description", "placeholder") || "").length > 0, `${name}: description placeholder follows the type`, await page.getAttribute("#ob-business_description", "placeholder"));
-  await page.fill("#ob-business_description", "Tire shop with two bays");
-  await page.click('[data-q="business_stage"] .chip >> nth=1');
-  await page.click('[data-q="team_size"] .chip >> nth=1');
+  await page.fill("#ob-business_description", ANSWERS.about.business_description);
+  await pick("business_stage", ANSWERS.about.business_stage);
+  await pick("team_size", ANSWERS.about.team_size);
+  await page.selectOption("#ob-region_code", ANSWERS.about.region_code);
   check(await page.inputValue("#ob-timezone") === "America/Edmonton", `${name}: time zone defaults to the browser zone`, await page.inputValue("#ob-timezone"));
   await shotFrame("about-filled");
   await page.click("#obnext"); await page.waitForTimeout(250);
   await expectSection("offer", "What you offer");
   await shotFrame("offer");
   check(await focused() === "h1#obtitle", `${name}: focus moves to the step title after Continue`, await focused());
-  const under = await T("#obunder");
-  check(under.length > 0 && under.length <= 140, `${name}: understanding line shown after Continue`, under);
+  const under = await underLine("after Continue from About");
+  check(under === UNDER_ABOUT, `${name}: the line is the schema's understanding for the type (one string, capped at 140)`, under);
   check(await page.evaluate(() => document.querySelector(".obprog i").style.width) === `${Math.round(100 / 7)}%`, `${name}: progress bar ${Math.round(100 / 7)}% wide on step 2`);
 
   // ---- Offer: services editor with per-type examples ----
@@ -192,14 +223,15 @@ for (const [name, vp] of VIEWPORTS) {
   await page.click("[data-ex] >> nth=0"); await page.click("[data-ex] >> nth=2");
   const rows = await page.locator("[data-svced] .svcrow").count();
   check(rows >= 2, `${name}: picked examples become service rows`, rows);
-  await page.click('[data-q="pricing_model"] .chip[data-v="hourly"]');
+  await pick("pricing_model", ANSWERS.offer.pricing_model);
   check(await page.locator('[data-q="hourly_rate"]').isVisible(), `${name}: hourly rate reveals for hourly pricing`);
   check(norm(await page.locator('[data-q="hourly_rate"] label.fld').textContent()) === SEC.offer.questions.find((q) => q.key === "hourly_rate").question, `${name}: hourly rate question text`);
-  await page.fill("#ob-hourly_rate", "120");
-  await page.click('[data-q="quotes_first"] .chip >> nth=0');
+  await page.fill("#ob-hourly_rate", String(ANSWERS.offer.hourly_rate));
+  await pick("quotes_first", String(ANSWERS.offer.quotes_first));
   await shotFrame("offer-filled");
   await page.click("#obnext"); await page.waitForTimeout(250);
   await expectSection("customers", "Customers");
+  await underLine("after Continue from What you offer");
   await shotFrame("customers");
 
   // ---- Skip / Back ----
@@ -210,17 +242,25 @@ for (const [name, vp] of VIEWPORTS) {
   await shotFrame("week-after-skip");
   await page.click("#obback"); await page.waitForTimeout(250);
   await expectSection("customers", "Back to Customers");
-  await page.click('[data-q="job_location"] .chip >> nth=0');
+  await underCleared("after Back");
+  const C = ANSWERS.customers;
+  await pick("job_location", C.job_location); await pick("customer_mix", C.customer_mix); await pick("intake_channels", ...C.intake_channels);
+  await pick("typical_job_length", C.typical_job_length); await pick("repeat_business", C.repeat_business);
   await page.click("#obnext"); await page.waitForTimeout(250);
   await expectSection("week", "Your week");
+  await underLine("after Continue from Customers");
+  await pick("after_hours", ANSWERS.week.after_hours); await pick("booking_lead", ANSWERS.week.booking_lead);
   await page.click("#obnext"); await page.waitForTimeout(250);
   await expectSection("money", "Getting paid");
-  await page.click('[data-q="deposit_type"] .chip[data-v="percent"]');
+  await underLine("after Continue from Your week");
+  await pick("payment_methods", ...ANSWERS.money.payment_methods); await pick("payment_terms_days", String(ANSWERS.money.payment_terms_days));
+  await pick("deposit_type", ANSWERS.money.deposit.type);
   check(await page.locator('[data-q="deposit_value"]').isVisible(), `${name}: deposit value reveals for a percent deposit`);
-  await page.fill("#ob-deposit_value", "25");
+  await page.fill("#ob-deposit_value", String(ANSWERS.money.deposit.value));
   await shotFrame("money-deposit");
   await page.click("#obnext"); await page.waitForTimeout(250);
   await expectSection("team", "Your team and tools");
+  await underLine("after Continue from Getting paid");
 
   // ---- Finish later → banner with real counts → hide → Finish setup resumes ----
   await page.click("#oblater"); await page.waitForTimeout(300);
@@ -232,8 +272,9 @@ for (const [name, vp] of VIEWPORTS) {
   await page.click("#biztypehide"); await page.waitForTimeout(250);
   const knows = await page.locator(".gs-home").innerText().then(norm);
   check(knows.startsWith(SH.knows_title.toUpperCase()) && await page.locator(".gs-home .panel.obknows").count() === 1, `${name}: Later shows the "${SH.knows_title}" card`, knows);
-  const briefLines = await page.locator(".gs-home .obbrief p").allTextContents();
-  check(briefLines.length >= 3 && !knows.includes(SH.knows_empty) && briefLines.some((l) => l.includes("$120")), `${name}: the card carries the brief of what was answered so far (not knows_empty)`, briefLines);
+  const knowsBrief = await briefText(".gs-home");
+  const knowsWant = expectBrief("about", "offer", "customers", "week", "money");
+  check(knowsBrief === knowsWant && !knows.includes(SH.knows_empty), `${name}: the card shows the owner brief of what was answered so far (= mock brief() for those answers)`, { got: knowsBrief, want: knowsWant });
   check(await T("#knowfinish") === SH.finish_setup && await T("#knowupdate") === SH.update, `${name}: card buttons "${SH.finish_setup}" + "${SH.update}"`);
   await shotFrame("knows");
   await page.click("#knowupdate"); await page.waitForTimeout(250);
@@ -247,23 +288,26 @@ for (const [name, vp] of VIEWPORTS) {
   await page.click("#oblater"); await page.waitForTimeout(250);
   await page.click("#biztypego"); await page.waitForTimeout(250);
   await expectSection("team", "Resume from the banner");
-  await page.click('[data-q="wants_front_desk"] .chip >> nth=0');
+  await underCleared("after Resume");
+  await pick("wants_front_desk", String(ANSWERS.team.wants_front_desk));
 
   // ---- Keyboard only: pick a chip and continue with Tab / Space / Enter ----
-  await page.focus('[data-q="team_roles"] .chip >> nth=0');
+  await page.focus(`[data-q="team_roles"] .chip[data-v="${ANSWERS.team.team_roles[0]}"]`);
   await page.keyboard.press("Space");
-  check(await page.getAttribute('[data-q="team_roles"] .chip >> nth=0', "aria-pressed") === "true", `${name}: keyboard Space toggles a chip`);
+  check(await page.getAttribute(`[data-q="team_roles"] .chip[data-v="${ANSWERS.team.team_roles[0]}"]`, "aria-pressed") === "true", `${name}: keyboard Space toggles a chip`);
   let hops = 0;
   while ((await focused()) !== "button#obnext" && hops < 40) { await page.keyboard.press("Tab"); hops++; }
   check(await focused() === "button#obnext", `${name}: Tab reaches Continue`, hops);
   await page.keyboard.press("Enter"); await page.waitForTimeout(250);
   await expectSection("ledger", "How Ledger should work for you (keyboard)");
   check(await focused() === "h1#obtitle", `${name}: focus on the title after keyboard Continue`, await focused());
+  await underLine("after keyboard Continue from Your team and tools");
   const rex = await page.locator("[data-rex]").allTextContents();
   check(rex.length === 3, `${name}: three rule examples for the type`, rex);
   await page.click("[data-rex] >> nth=0");
   check((await page.locator("[data-rulesbox] input").evaluateAll((els) => els.map((e) => e.value))).includes(norm(rex[0])), `${name}: picked rule example becomes a rule row`, await page.locator("[data-rulesbox] input").evaluateAll((els) => els.map((e) => e.value)));
-  await page.click('[data-q="ai_tone"] .chip >> nth=0');
+  check(norm(rex[0]) === ANSWERS.ledger.rules[0], `${name}: the first rule example is the fixed answer set's rule`, rex[0]);
+  await pick("ai_tone", ANSWERS.ledger.ai_tone); await pick("goals", ...ANSWERS.ledger.goals);
   await shotFrame("ledger-rule");
   await page.keyboard.press("Tab");
   await page.click("#obnext"); await page.waitForTimeout(300);
@@ -273,18 +317,23 @@ for (const [name, vp] of VIEWPORTS) {
   const rowsText = (await page.locator(".obrow").allInnerTexts()).map(norm);
   const expectRows = { about: SH.row_done, offer: SH.row_done, customers: SH.row_done, week: SH.row_done, money: SH.row_done, team: SH.row_done, ledger: SH.row_done };
   check(rowsText.length === 7 && ORDER.slice(0, 7).every((id, i) => rowsText[i].startsWith(SEC[id].title) && rowsText[i].includes(expectRows[id]) && rowsText[i].endsWith(SH.change)), `${name}: confirm lists seven rows with status + Change`, rowsText);
-  const brief = await page.locator("#obqs").innerText().then(norm);
-  check(brief.includes(SEC.about.questions[0].options[0].label) || /automotive|tire/i.test(brief), `${name}: confirm brief reflects the picked type`, brief.slice(0, 200));
-  check(!/Northside|KMJ/.test(brief), `${name}: confirm brief contains only what was answered`);
+  await underLine("after Continue from How Ledger should work for you (confirm screen)");
+  const recap = await briefText("#obqs");
+  const recapWant = expectBrief(...ORDER.slice(0, 7));
+  check(recap === recapWant, `${name}: confirm recap equals the owner brief the mock's brief() renders for the fixed answers`, { got: recap, want: recapWant });
+  check(await page.locator("#obqs .obbrief p").count() === 6 && recap.split("\n\n").length === 6, `${name}: recap is six paragraphs, one per group, rendered like obBriefHtml()`, await page.locator("#obqs .obbrief p").count());
+  check(!/Northside|KMJ|Got it|I'll/.test(recap), `${name}: recap holds only answered facts in the owner voice (no name, no understanding lines)`);
   await shotFrame("confirm");
   await page.click('[data-change="week"]'); await page.waitForTimeout(250);
   await expectSection("week", "Change → Your week");
+  await underCleared("after Change");
   await page.click("#obskip"); await page.waitForTimeout(250);
   await expectSection("money", "after skipping week again");
   for (let i = 0; i < 3; i++) { await page.click("#obnext"); await page.waitForTimeout(200); }
   await expectSection("confirm", "Confirm again");
   const rows2 = (await page.locator(".obrow").allInnerTexts()).map(norm);
   check(rows2[3].includes(SH.row_skipped), `${name}: skipped section shows "${SH.row_skipped}"`, rows2[3]);
+  check(await briefText("#obqs") === recapWant, `${name}: skipping a section again leaves its saved answers in the recap (as the server keeps them)`);
   await shotFrame("confirm-skipped");
 
   // ---- Finish → panel → Start over ----

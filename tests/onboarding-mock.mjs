@@ -143,7 +143,7 @@ function describeHours(h) {
   return groups.map((g) => `${g.days.length > 2 ? `${DAYL[g.days[0]]}–${DAYL[g.days[g.days.length - 1]]}` : g.days.map((d) => DAYL[d]).join("/")} ${g.text}`).join(" · ");
 }
 const list = (arr, map) => (arr || []).map((v) => map[v] || v).join(", ").replace(/, ([^,]*)$/, " and $1");
-function brief(st) {
+export function brief(st) {
   const a = st.answers, cur = st.currency_symbol, out = [];
   const g1 = [];
   if (a.business_type) g1.push(`You run ${st.name ? `${st.name}, ` : ""}${a.team_size === "solo" ? "a one-person " : ""}${LABEL.business_type[a.business_type].replace(/^(a|an|your) /, "")}${a.region_code ? ` in ${a.region_code}` : ""}.`);
