@@ -1,6 +1,6 @@
 import { pendingOffer, saveOffer, clearOffer, bindOffer } from "./login-offers.js?v=1";
 import { createAccountBoundary } from "./account-boundary.js?v=3";
-import { openSecurity, needsMfa } from "./security.js?v=5";
+import { openSecurity, needsMfa } from "./security.js?v=6";
 // Ledger AI — web/PWA client.
 // audit-20260914 web: calendar guard, outage bubble, CSV screens, copy sweep (build 170)
 // One file, no build step: GitHub Pages serves it straight. Every screen talks to the
@@ -11778,7 +11778,7 @@ async function businessSheet() {
       ${native ? row("bzbooks", "&#9881;", "Books settings", "Tax, invoice numbering, branding, payment info")
         : row("bzbooks", "&#9881;", "Books", "This workspace runs on QuickBooks Online")}
       ${native ? row("bzcard", "&#128179;", "Card payments", "Stripe setup — get paid online") : ""}
-      ${row("bzsecurity", "&#128737;", "Account security", "Two-step verification and backup authenticators")}
+      ${row("bzsecurity", "&#128737;", "Account security", "Two-step verification by text or authenticator app · recommended")}
       ${row("bzphone", "&#128222;", "Phone & Front Desk", "Number, reminders, auto-replies")}
       ${row("bzshop", "&#127968;", "Your business", shopSummary(S.shop))}
       ${row("bzimport", "&#128229;", "Bring your data", isAuto() ? "Preview supported customer and vehicle tables before importing" : "Preview supported customer tables before importing")}
@@ -12699,7 +12699,7 @@ async function boot() {
     const mfaNeeded = await needsMfa(supa);
     accountBoundary.assertCurrent(expected);
     if (mfaNeeded) {
-      root.innerHTML = '<div class="panel"><h2>Secure your account</h2><p>Two-step verification is required before you can use Ledger. Add an authenticator or enter its code to continue.</p><button class="btn primary" id="mfa-signin">Continue securely</button><button class="btn ghost" id="mfa-signout">Sign out</button></div>';
+      root.innerHTML = '<div class="panel"><h2>Confirm it\'s you</h2><p>This account has two-step verification on. Enter the code from your text message or authenticator app to continue.</p><button class="btn primary" id="mfa-signin">Continue securely</button><button class="btn ghost" id="mfa-signout">Sign out</button></div>';
       const verify=()=>openSecurity(supa,{required:true,onVerified:()=>void boot()});
       $("mfa-signin").onclick=verify;$("mfa-signout").onclick=()=>supa.auth.signOut().then(()=>location.reload());await verify();return;
     }

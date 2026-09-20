@@ -1,5 +1,5 @@
 // Account security — two-step verification (text message or authenticator app) and private links.
-// v5 (Kyle 2026-09-20): a texted code is the default; an authenticator app stays available.
+// v6 (Kyle 2026-09-20): a texted code is the default; an authenticator app stays available; two-step is optional but recommended.
 // TOTP secrets and one-time codes are shown only to the account owner, never logged or persisted here.
 const PHONE_RE = /^\+1[2-9]\d{2}[2-9]\d{6}$/;
 export function normalizePhone(raw) {
@@ -37,7 +37,7 @@ export async function openSecurity(supa, {onVerified = () => {}, required = fals
   async function refresh(){const {data,error}=await supa.auth.mfa.listFactors();if(error)throw error;
     const verified=(data?.all||[]).filter(x=>x.status==='verified'&&(x.factor_type==='totp'||x.factor_type==='phone'));
     const {data:aal,error:ae}=await supa.auth.mfa.getAuthenticatorAssuranceLevel();if(ae)throw ae;
-    status.textContent=verified.length ? (aal.currentLevel==='aal2'?'Two-step verification is active for this session.':'Confirm it\'s you to continue.') : 'Two-step verification is required for every Ledger account. Pick a method to continue.';
+    status.textContent=verified.length ? (aal.currentLevel==='aal2'?'Two-step verification is active for this session.':'Confirm it\'s you to continue.') : 'Two-step verification is off. We recommend turning it on: a texted code or an authenticator app.';
     factors.replaceChildren();
     for(const f of verified){const row=document.createElement('div');row.style.cssText='display:flex;gap:8px;align-items:center;margin:6px 0';
       const b=document.createElement('button');b.type='button';b.className='btn ghost';b.textContent=(f.factor_type==='phone'?'Text a code to '+last4(f.phone):(f.friendly_name||'Authenticator app'));b.onclick=()=>choose(f.id,f.factor_type);row.append(b);
@@ -88,4 +88,5 @@ export async function openSecurity(supa, {onVerified = () => {}, required = fals
   }
   try{await refresh();}catch(err){status.textContent='Security settings could not load.';note.textContent=friendly(err,'');}
 }
-export async function needsMfa(supa){const {data,error}=await supa.auth.mfa.getAuthenticatorAssuranceLevel();if(error)throw error;if(!data?.currentLevel)throw Error('Account security could not be verified. Please retry.');return data.currentLevel!=='aal2'||data.nextLevel!=='aal2';}
+export async function needsMfa(supa){const {data,error}=await supa.auth.mfa.getAuthenticatorAssuranceLevel();if(error)throw error;if(!data?.currentLevel)throw Error('Account security could not be verified. Please retry.');// Optional but recommended (2026-09-20): only an account WITH a verified factor must reach AAL2.
+return data.nextLevel==='aal2'&&data.currentLevel!=='aal2';}
