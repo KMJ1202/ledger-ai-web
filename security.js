@@ -1,76 +1,74 @@
-// Account security — two-step verification (text message or authenticator app) and private links.
-// v7 (Kyle 2026-09-20): texts only — a trusted mobile saved once at setup; authenticator apps are no longer offered (existing ones still verify).
-// TOTP secrets and one-time codes are shown only to the account owner, never logged or persisted here.
+// Account security — trusted-mobile two-step verification (texts only) and private links.
+// v8 (Kyle 2026-09-20 13:35): one mobile per account, captured once and locked; an on/off switch; every new
+// device enters a texted code once. Codes are Telnyx Verify codes checked by the two-step function — the
+// browser never sees or stores a code. Accounts that still hold an authenticator (the Apple review account)
+// keep the authenticator code path.
 const PHONE_RE = /^\+1[2-9]\d{2}[2-9]\d{6}$/;
 export function normalizePhone(raw) {
   let p = String(raw || "").replace(/[\s().-]/g, "");
   if (/^\d{10}$/.test(p)) p = "+1" + p; else if (/^1\d{10}$/.test(p)) p = "+" + p;
   return PHONE_RE.test(p) ? p : null;
 }
-const last4 = (phone) => "···" + String(phone || "").slice(-4);
-const friendly = (err, fallback) => {
-  const m = String(err?.message || err || "");
-  if (/rate limit|too many|over_sms_send_rate_limit|seconds/i.test(m)) return "A code was sent a moment ago. Wait a minute, then try again.";
-  if (/invalid|incorrect|expired|mismatch/i.test(m) && /code|otp|token|challenge/i.test(m)) return "That code didn't match or has expired. Send a new code and try again.";
-  if (/phone/i.test(m) && /invalid|format/i.test(m)) return "Enter a Canadian or US mobile number, like 587 555 0100.";
-  return m || fallback;
-};
-export async function markTwoStepPrompted(supa){try{await supa.auth.updateUser({data:{two_step_prompted_at:new Date().toISOString()}});}catch{}}
-// One-time offer after the business is set up: no method yet and never asked before → the setup dialog, once.
-export async function offerTwoStepOnce(supa){const {data:aal}=await supa.auth.mfa.getAuthenticatorAssuranceLevel();if(!aal||aal.nextLevel==='aal2')return;const {data:{user}}=await supa.auth.getUser();if(!user||user.user_metadata?.two_step_prompted_at)return;await openSecurity(supa,{setup:true});}
+async function twoStep(supa, action, body = {}) {
+  const { data, error } = await supa.functions.invoke("two-step", { body: { action, ...body } });
+  if (error) {
+    let d = null; try { d = await error.context?.json?.(); } catch {}
+    const e = new Error(d?.message || "Text-message verification is temporarily unavailable. Please try again in a minute."); e.code = d?.error || "verification_unavailable"; throw e;
+  }
+  if (data?.error) { const e = new Error(data.message || data.error); e.code = data.error; throw e; }
+  return data;
+}
+export async function twoStepStatus(supa) { return twoStep(supa, "status"); }
+// Old-style authenticator (kept only for accounts that still have one).
+async function totpNeeds(supa) { const { data } = await supa.auth.mfa.getAuthenticatorAssuranceLevel(); return !!data && data.nextLevel === "aal2" && data.currentLevel !== "aal2"; }
+export async function needsMfa(supa) {
+  const st = await twoStepStatus(supa);
+  if (st.enabled && !st.this_session_trusted) return true;
+  return totpNeeds(supa);
+}
+export async function markTwoStepPrompted(supa) { try { await twoStep(supa, "prompted"); } catch {} }
+// One-time offer after the business is set up: no trusted mobile yet and never asked before → the setup dialog, once.
+export async function offerTwoStepOnce(supa) {
+  const st = await twoStepStatus(supa);
+  if (st.has_phone || st.prompted) return;
+  await openSecurity(supa, { setup: true });
+}
 export async function openSecurity(supa, {onVerified = () => {}, required = false, setup = false} = {}) {
   document.getElementById('ledger-security')?.remove();
   const dialog=document.createElement('dialog');dialog.id='ledger-security';
   dialog.style.cssText='width:min(440px,90vw);max-height:90vh;overflow:auto;padding:24px;border-radius:20px;background:#101827;color:#fff;border:1px solid #536078';
-  dialog.innerHTML='<h2>'+(setup?'Protect your account':'Account security')+'</h2><p data-status>Loading security settings…</p><div data-factors></div>'
-    +'<div data-methods hidden><p class="note">Add your mobile number.</p><button class="btn primary" type="button" data-add-phone>Text me a code</button></div>'
-    +'<form data-phone hidden><label>Mobile number<input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="587 555 0100" required aria-label="Mobile number"></label><button class="btn primary" type="submit">Send code</button> <button class="btn ghost" type="button" data-phone-cancel>Back</button></form>'
-    +'<div data-enroll></div>'
-    +'<form data-verify hidden><label data-code-label>Code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required aria-label="Verification code"></label><button class="btn primary" type="submit">Verify</button> <button class="btn ghost" type="button" data-resend hidden>Send a new code</button></form>'
-    +'<p data-note role="status" style="min-height:1.2em"></p><button class="btn ghost" type="button" data-close>'+(setup?'Not now':'Close')+'</button>';
+  dialog.innerHTML='<h2>'+(setup?'Protect your account':'Account security')+'</h2><p data-status>Loading security settings…</p>'
+    +'<label data-switch hidden style="display:flex;align-items:center;gap:10px;margin:10px 0"><input type="checkbox" data-enabled style="width:22px;height:22px"> <span>Two-step verification by text message</span></label>'
+    +'<p data-phone-line hidden class="note"></p>'
+    +'<form data-phone hidden><label>Mobile number<input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="587 555 0100" required aria-label="Mobile number"></label><button class="btn primary" type="submit">Text me a code</button></form>'
+    +'<form data-verify hidden><label data-code-label>Code from the text message<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required aria-label="Verification code"></label><button class="btn primary" type="submit">Verify</button> <button class="btn ghost" type="button" data-resend>Send a new code</button></form>'
+    +'<form data-totp hidden><label>Authenticator code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required aria-label="Authenticator code"></label><button class="btn primary" type="submit">Verify</button></form>'
+    +'<p data-note role="status" style="min-height:1.2em"></p><button class="btn ghost" type="button" data-close>'+(setup?'Not now':(required?'Sign out':'Close'))+'</button>';
   document.body.appendChild(dialog);dialog.showModal();
-  const status=dialog.querySelector('[data-status]'),note=dialog.querySelector('[data-note]'),factors=dialog.querySelector('[data-factors]'),methods=dialog.querySelector('[data-methods]'),setupBox=dialog.querySelector('[data-enroll]'),form=dialog.querySelector('form[data-verify]'),phoneForm=dialog.querySelector('form[data-phone]'),codeLabel=dialog.querySelector('[data-code-label]'),resend=dialog.querySelector('[data-resend]');
-  let chosen=null, chosenType='totp', challengeId=null;
-  const close=()=>{dialog.close();dialog.remove();};dialog.querySelector('[data-close]').textContent=required?'Sign out':'Close';dialog.querySelector('[data-close]').onclick=async()=>{if(required){await supa.auth.signOut();location.reload();}else{if(setup)await markTwoStepPrompted(supa);close();}};if(required)dialog.addEventListener('cancel',e=>e.preventDefault());dialog.addEventListener('close',()=>dialog.remove());
-  // A texted code: the challenge sends the SMS; the code is then verified against that challenge.
-  async function sendCode(){note.textContent='';const {data,error}=await supa.auth.mfa.challenge({factorId:chosen});if(error)throw error;challengeId=data.id;note.textContent='Code sent by text. It expires in five minutes.';}
-  async function choose(id,type){chosen=id;chosenType=type;challengeId=null;form.hidden=false;form.elements.code.value='';codeLabel.firstChild.textContent=type==='phone'?'Code from the text message':'Authenticator code';resend.hidden=type!=='phone';
-    if(type==='phone'){try{await sendCode();}catch(e){note.textContent=friendly(e,'Could not send the code.');}}form.elements.code.focus();}
-  resend.onclick=async()=>{resend.disabled=true;try{await sendCode();}catch(e){note.textContent=friendly(e,'Could not send the code.');}finally{resend.disabled=false;}};
-  async function refresh(){const {data,error}=await supa.auth.mfa.listFactors();if(error)throw error;
-    const verified=(data?.all||[]).filter(x=>x.status==='verified'&&(x.factor_type==='totp'||x.factor_type==='phone'));
-    const {data:aal,error:ae}=await supa.auth.mfa.getAuthenticatorAssuranceLevel();if(ae)throw ae;
-    status.textContent=verified.length ? (aal.currentLevel==='aal2'?'Two-step verification is active for this session.':'Confirm it\'s you to continue.') : (setup?'One-time setup: add your mobile and Ledger will text you a code the first time you sign in on a new device. No authenticator app needed.':'Two-step verification is off. Add your mobile and Ledger will text you a code when you sign in on a new device.');
-    factors.replaceChildren();
-    for(const f of verified){const row=document.createElement('div');row.style.cssText='display:flex;gap:8px;align-items:center;margin:6px 0';
-      const b=document.createElement('button');b.type='button';b.className='btn ghost';b.textContent=(f.factor_type==='phone'?'Text a code to '+last4(f.phone):(f.friendly_name||'Authenticator app'));b.onclick=()=>choose(f.id,f.factor_type);row.append(b);
-      if(verified.length>1&&aal.currentLevel==='aal2'){const rm=document.createElement('button');rm.type='button';rm.className='btn ghost';rm.textContent='Remove';rm.title='Remove this method';rm.onclick=async()=>{if(!confirm('Remove this two-step method? You can add it again any time.'))return;rm.disabled=true;try{const {error}=await supa.auth.mfa.unenroll({factorId:f.id});if(error)throw error;await refresh();}catch(e){note.textContent=friendly(e,'Could not remove it.');rm.disabled=false;}};row.append(rm);}
-      factors.append(row);}
-    methods.hidden=!!(setup&&!verified.length);methods.querySelector('.note').textContent=verified.length?'Add another mobile number:':'Add your mobile number:';
-    if(setup&&!verified.length&&phoneForm.hidden){setup_open();}
-    // One verified phone factor and a session that still needs it: send the text right away.
-    if(aal.currentLevel!=='aal2'&&verified.length===1&&verified[0].factor_type==='phone'&&!chosen)await choose(verified[0].id,'phone');
+  const q=(sel)=>dialog.querySelector(sel);
+  const status=q('[data-status]'),note=q('[data-note]'),switchRow=q('[data-switch]'),enabledBox=q('[data-enabled]'),phoneLine=q('[data-phone-line]'),phoneForm=q('form[data-phone]'),form=q('form[data-verify]'),totpForm=q('form[data-totp]'),resend=q('[data-resend]');
+  let st=null, totpFactor=null, mode='';
+  const close=()=>{dialog.close();dialog.remove();};
+  q('[data-close]').onclick=async()=>{if(required){await supa.auth.signOut();location.reload();}else{if(setup&&!(st?.has_phone))await markTwoStepPrompted(supa);close();}};
+  if(required)dialog.addEventListener('cancel',e=>e.preventDefault());dialog.addEventListener('close',()=>dialog.remove());
+  const friendly=(err,fallback)=>String(err?.message||fallback||'Something went wrong.');
+  async function sendCode(phone){note.textContent='';const r=await twoStep(supa,'send',phone?{phone}:{});mode='verify';form.hidden=false;form.elements.code.value='';form.elements.code.focus();note.textContent='Code sent to '+r.phone_last4+'. It expires in five minutes.';}
+  async function refresh(){
+    st=await twoStepStatus(supa);
+    const totp=await totpNeeds(supa);
+    if(totp){const {data}=await supa.auth.mfa.listFactors();totpFactor=(data?.totp||[]).find(x=>x.status==='verified')?.id||null;}
+    switchRow.hidden=!st.has_phone;enabledBox.checked=!!st.enabled;enabledBox.disabled=!st.this_session_trusted&&!!st.enabled;
+    phoneLine.hidden=!st.has_phone;phoneLine.textContent=st.has_phone?('Trusted mobile: '+st.phone_last4+' · set once and locked. To change it, email supportteam@heyledger.ai from your account email.'):'';
+    if(st.enabled&&!st.this_session_trusted){status.textContent='Confirm it\'s you on this device.';phoneForm.hidden=true;if(mode!=='verify'){try{await sendCode();}catch(e){note.textContent=friendly(e);form.hidden=false;mode='verify';}}}
+    else if(!st.has_phone){status.textContent=setup?'One-time setup: add your mobile and Ledger will text you a code the first time you sign in on a new device. That\'s it — no authenticator app.':'Two-step verification is off. Add your mobile once and Ledger will text you a code when you sign in on a new device.';phoneForm.hidden=false;form.hidden=mode!=='verify';phoneForm.elements.phone.focus();}
+    else{status.textContent=st.enabled?'Two-step verification is on. New devices get a texted code.':'Two-step verification is off. Switch it on to protect your account.';phoneForm.hidden=true;form.hidden=true;mode='';}
+    totpForm.hidden=!(totp&&totpFactor);if(totp&&totpFactor){status.textContent='Enter the code from your authenticator app to continue.';}
   }
-  // Every abandoned "Add" leaves an unverified factor behind and each one counts
-  // toward GoTrue's enrolled-factor cap (audit 01.5). Clear those first — only
-  // rows whose status is unverified; a verified factor is never touched.
-  async function discardUnverified(){const {data,error}=await supa.auth.mfa.listFactors();if(error)return;for(const f of (data?.all||[]).filter(x=>x.status==='unverified'&&x.id)){await supa.auth.mfa.unenroll({factorId:f.id}).catch(()=>{});}}
-  const setup_open=()=>{note.textContent='';setupBox.replaceChildren();form.hidden=true;phoneForm.hidden=false;phoneForm.elements.phone.focus();};
-  dialog.querySelector('[data-add-phone]').onclick=setup_open;
-  dialog.querySelector('[data-phone-cancel]').onclick=()=>{phoneForm.hidden=true;};
-  phoneForm.onsubmit=async e=>{e.preventDefault();const button=phoneForm.querySelector('button[type=submit]');button.disabled=true;note.textContent='';try{
-      const phone=normalizePhone(phoneForm.elements.phone.value);if(!phone)throw Error('Enter a Canadian or US mobile number, like 587 555 0100.');
-      await discardUnverified();
-      const {data,error}=await supa.auth.mfa.enroll({factorType:'phone',phone,friendlyName:'Phone '+last4(phone)});if(error)throw error;
-      phoneForm.hidden=true;await choose(data.id,'phone');
-    }catch(err){note.textContent=friendly(err,'Could not start text-message verification.');}finally{button.disabled=false;}};
-  form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('button[type=submit]');button.disabled=true;note.textContent='';try{const code=form.elements.code.value.trim();if(!/^[0-9]{6}$/.test(code)||!chosen)throw Error(chosenType==='phone'?'Enter the six-digit code from the text message.':'Enter the six-digit code from your authenticator.');
-      let error;
-      if(chosenType==='phone'){if(!challengeId)await sendCode();({error}=await supa.auth.mfa.verify({factorId:chosen,challengeId,code}));}
-      else ({error}=await supa.auth.mfa.challengeAndVerify({factorId:chosen,code}));
-      form.elements.code.value='';if(error)throw error;
-      setupBox.replaceChildren();form.hidden=true;chosen=null;challengeId=null;if(setup)await markTwoStepPrompted(supa);await refresh();note.textContent='Verified. Two-step verification is on.';onVerified();if(required)close();
-    }catch(err){note.textContent=friendly(err,'Verification failed.');}finally{button.disabled=false;}};
+  enabledBox.onchange=async()=>{enabledBox.disabled=true;note.textContent='';try{const r=await twoStep(supa,enabledBox.checked?'enable':'disable');note.textContent=r.enabled?'Two-step verification is on.':'Two-step verification is off.';await refresh();}catch(e){note.textContent=friendly(e);enabledBox.checked=!enabledBox.checked;}finally{enabledBox.disabled=false;}};
+  phoneForm.onsubmit=async e=>{e.preventDefault();const b=phoneForm.querySelector('button');b.disabled=true;note.textContent='';try{const phone=normalizePhone(phoneForm.elements.phone.value);if(!phone)throw Error('Enter a Canadian or US mobile number, like 587 555 0100.');await sendCode(phone);phoneForm.hidden=true;}catch(err){note.textContent=friendly(err);}finally{b.disabled=false;}};
+  resend.onclick=async()=>{resend.disabled=true;try{await sendCode();}catch(e){note.textContent=friendly(e);}finally{resend.disabled=false;}};
+  form.onsubmit=async e=>{e.preventDefault();const b=form.querySelector('button[type=submit]');b.disabled=true;note.textContent='';try{const code=form.elements.code.value.trim();if(!/^[0-9]{6}$/.test(code))throw Error('Enter the six-digit code from the text message.');const r=await twoStep(supa,'verify',{code});form.elements.code.value='';mode='';form.hidden=true;note.textContent=r.setup?'Done. Two-step verification is on and this device is trusted.':'Verified. This device is trusted.';await refresh();onVerified();if(required||setup)close();}catch(err){note.textContent=friendly(err);}finally{b.disabled=false;}};
+  totpForm.onsubmit=async e=>{e.preventDefault();const b=totpForm.querySelector('button');b.disabled=true;note.textContent='';try{const code=totpForm.elements.code.value.trim();if(!/^[0-9]{6}$/.test(code)||!totpFactor)throw Error('Enter the six-digit code from your authenticator.');const {error}=await supa.auth.mfa.challengeAndVerify({factorId:totpFactor,code});totpForm.elements.code.value='';if(error)throw error;await refresh();onVerified();if(required)close();}catch(err){note.textContent=friendly(err,'Verification failed.');}finally{b.disabled=false;}};
   if(!required) {
     const section=document.createElement('section');section.style.cssText='margin-top:24px;border-top:1px solid #536078;padding-top:16px';
     const heading=document.createElement('h3');heading.textContent='Business private links';
@@ -90,7 +88,5 @@ export async function openSecurity(supa, {onVerified = () => {}, required = fals
     }offset=data.nextOffset;load.textContent=data.more?'Load more links':'Refresh links';load.onclick=()=>render(!data.more);if(!data.links.length&&reset)message.textContent='No private links for this business.';}catch(e){message.textContent=e.message;}finally{load.disabled=false;}}
     load.onclick=()=>render();
   }
-  try{await refresh();}catch(err){status.textContent='Security settings could not load.';note.textContent=friendly(err,'');}
+  try{await refresh();}catch(err){status.textContent='Security settings could not load.';note.textContent=friendly(err);}
 }
-export async function needsMfa(supa){const {data,error}=await supa.auth.mfa.getAuthenticatorAssuranceLevel();if(error)throw error;if(!data?.currentLevel)throw Error('Account security could not be verified. Please retry.');// Optional but recommended (2026-09-20): only an account WITH a verified factor must reach AAL2.
-return data.nextLevel==='aal2'&&data.currentLevel!=='aal2';}
