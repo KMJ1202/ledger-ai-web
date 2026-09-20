@@ -13,6 +13,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import vm from "node:vm";
 import { startMock } from "./onboarding-mock.mjs";
 
 // The app repo has no package.json, so Playwright comes from whatever npx put
@@ -29,6 +30,9 @@ async function loadPlaywright() {
   return import(pathToFileURL(found[0].f).href);
 }
 
+// The server text port the mock renders with; the finish-sheet checks compare the plan and the applied list against it.
+vm.runInThisContext(fs.readFileSync(new URL("../assets/onboarding-text.js", import.meta.url), "utf8"), { filename: "onboarding-text.js" });
+const PORT_TEXT = globalThis.LedgerOnboardingText;
 const SHOTS = path.resolve(process.env.SHOTS_DIR || path.join(os.tmpdir(), "onboarding-shots"));
 fs.mkdirSync(SHOTS, { recursive: true });
 const VIEWPORTS = [["phone", { width: 390, height: 844 }], ["desktop", { width: 1280, height: 800 }]];
@@ -294,8 +298,11 @@ async function walk(browser, name, vp, mock) {
   const chat = await page.$eval("#chatwrap", (n) => n.textContent);
   const firstMsg = await page.evaluate(() => [...document.querySelectorAll("#chatwrap .sys, #chatwrap [class*=sys]")].map((n) => n.textContent.trim()));
   ok(firstMsg.some((t) => t.includes(st.answers.business_type === "trades" ? "trades" : "")) && !/🎉/.test(chat), `${label("finish")}: first_message replaces the generic 🎉 line`);
-  ok(await page.$eval("#first-steps", (n) => /You said you miss calls/.test(n.textContent)), `${label("finish")}: first-day sheet shows the plan detail lines`);
-  ok(await page.$eval("#sheetwrap", (n) => { const a = n.querySelector(".obapplied"); return !!a && /Already set up from your answers/.test(a.textContent) && a.querySelectorAll("li").length === 2 && /Tax set to GST 5% for Alberta/.test(a.textContent) && /Hours saved/.test(a.textContent) && a.nextElementSibling?.id === "first-steps"; }), `${label("finish")}: "Already set up from your answers" lists what onboarding-complete applied, under the intro`);
+  // What onboarding-complete returned for exactly these answers (the mock renders both through the port).
+  const PLAN = PORT_TEXT.setupPlan(st.answers, st.ws), APPLIED = PORT_TEXT.applied(st.answers, st.ws);
+  const planDetails = PLAN.map((it) => it.detail).filter(Boolean);
+  ok(planDetails.length > 0 && await page.$eval("#first-steps", (n, details) => details.every((d) => n.textContent.includes(d)), planDetails) && /You said you want Ledger to answer what you miss/.test(await page.$eval("#first-steps", (n) => n.textContent)), `${label("finish")}: first-day sheet shows the plan detail lines`);
+  ok(await page.$eval("#sheetwrap", (n, want) => { const a = n.querySelector(".obapplied"); return !!a && /Already set up from your answers/.test(a.textContent) && JSON.stringify([...a.querySelectorAll("li")].map((li) => li.textContent)) === JSON.stringify(want) && /Tax set to GST 5% for Alberta/.test(a.textContent) && /Hours saved — Front Desk and bookings use them/.test(a.textContent) && a.nextElementSibling?.id === "first-steps"; }, APPLIED), `${label("finish")}: "Already set up from your answers" lists what onboarding-complete applied, under the intro`);
   ok(await page.$$eval("#sheetwrap .btn[data-plan]", (bs) => bs.length > 0 && bs.every((b) => b.className === "btn wide")), `${label("finish")}: plan steps use the sheet's own "btn wide" row style (base 9e35ebd)`);
   shots.finish = await shot(page, `${name}-9-finish-plan-sheet`);
   // Close the first-day sheet and the chat (Escape closes the top layer) to see the plan on Home.
