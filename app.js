@@ -90,7 +90,7 @@ async function loadVoiceState() {
 // happened on Kyle's Mac. On every open: ask the worker to look for a newer
 // build, and if the shell on the server points at a newer app.js than the one
 // running, refresh once. APP_BUILD must match the ?v= stamp in app.html.
-const APP_BUILD = 192;
+const APP_BUILD = 193;
 // A deploy during business hours used to reload every open tab the moment the
 // new worker took over — mid-invoice, mid-booking (audit 11.4). The reload now
 // waits while a sheet, a picker, a dialog or a typed question is on screen and
