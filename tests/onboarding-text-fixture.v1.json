@@ -1,0 +1,1536 @@
+{
+  "version": 1,
+  "generated_by": "eval/oracle.ts over supabase/functions (server modules, voice owner)",
+  "sets": {
+    "northside": {
+      "input": {
+        "id": "northside",
+        "name": "Northside Auto",
+        "currency_code": "CAD",
+        "timezone": "America/Edmonton",
+        "sections": {
+          "about": {
+            "business_type": "automotive",
+            "business_description": "Tires, brakes and alignments for cars and light trucks",
+            "business_stage": "growing",
+            "team_size": "small",
+            "region_code": "AB",
+            "timezone": "America/Edmonton"
+          },
+          "offer": {
+            "services": [
+              {
+                "name": "Seasonal tire swap",
+                "price": 85,
+                "duration_minutes": 45
+              },
+              {
+                "name": "Wheel alignment",
+                "price": 120,
+                "duration_minutes": 60
+              }
+            ],
+            "pricing_model": "flat",
+            "quotes_first": true
+          },
+          "customers": {
+            "customer_mix": "individuals",
+            "intake_channels": [
+              "phone",
+              "text",
+              "walkin"
+            ],
+            "job_location": "my_place",
+            "typical_job_length": "under_1h",
+            "repeat_business": "both"
+          },
+          "week": {
+            "business_hours": {
+              "mon": {
+                "open": "08:00",
+                "close": "17:00"
+              },
+              "tue": {
+                "open": "08:00",
+                "close": "17:00"
+              },
+              "wed": {
+                "open": "08:00",
+                "close": "17:00"
+              },
+              "thu": {
+                "open": "08:00",
+                "close": "17:00"
+              },
+              "fri": {
+                "open": "08:00",
+                "close": "17:00"
+              },
+              "sat": null,
+              "sun": null
+            },
+            "after_hours": "text_back",
+            "booking_lead": "next_day"
+          },
+          "money": {
+            "payment_methods": [
+              "card",
+              "etransfer"
+            ],
+            "payment_terms_days": 0,
+            "deposit": {
+              "type": "none",
+              "value": null
+            }
+          },
+          "team": {
+            "team_roles": [
+              "front_desk"
+            ],
+            "wants_front_desk": true,
+            "uses_quickbooks": false,
+            "uses_google_calendar": false
+          },
+          "ledger": {
+            "ai_tone": "friendly",
+            "goals": [
+              "more_bookings",
+              "fewer_missed_calls"
+            ],
+            "rules": [
+              "Always confirm the price before starting work"
+            ],
+            "autonomy": {
+              "reminders": true,
+              "review_replies": false,
+              "after_hours_texts": false
+            }
+          }
+        }
+      },
+      "answers": {
+        "business_type": "automotive",
+        "business_description": "Tires, brakes and alignments for cars and light trucks",
+        "team_size": "small",
+        "region_code": "AB",
+        "timezone": "America/Edmonton",
+        "pricing_model": "flat",
+        "customer_mix": "individuals",
+        "intake_channels": [
+          "phone",
+          "text",
+          "walkin"
+        ],
+        "job_location": "my_place",
+        "business_hours": {
+          "mon": {
+            "open": "08:00",
+            "close": "17:00"
+          },
+          "tue": {
+            "open": "08:00",
+            "close": "17:00"
+          },
+          "wed": {
+            "open": "08:00",
+            "close": "17:00"
+          },
+          "thu": {
+            "open": "08:00",
+            "close": "17:00"
+          },
+          "fri": {
+            "open": "08:00",
+            "close": "17:00"
+          },
+          "sat": null,
+          "sun": null
+        },
+        "ai_tone": "friendly",
+        "services": [
+          {
+            "id": "svc_1",
+            "name": "Seasonal tire swap",
+            "price": 85,
+            "duration_minutes": 45
+          },
+          {
+            "id": "svc_2",
+            "name": "Wheel alignment",
+            "price": 120,
+            "duration_minutes": 60
+          }
+        ],
+        "payment_terms_days": 0,
+        "business_stage": "growing",
+        "quotes_first": true,
+        "typical_job_length": "under_1h",
+        "repeat_business": "both",
+        "after_hours": "text_back",
+        "booking_lead": "next_day",
+        "payment_methods": [
+          "card",
+          "etransfer"
+        ],
+        "deposit": {
+          "type": "none",
+          "value": null
+        },
+        "team_roles": [
+          "front_desk"
+        ],
+        "wants_front_desk": true,
+        "uses_quickbooks": false,
+        "uses_google_calendar": false,
+        "goals": [
+          "more_bookings",
+          "fewer_missed_calls"
+        ],
+        "rules": [
+          "Always confirm the price before starting work"
+        ],
+        "autonomy": {
+          "reminders": true,
+          "review_replies": false,
+          "after_hours_texts": false
+        }
+      },
+      "sections": [
+        {
+          "id": "about",
+          "title": "About your business",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "offer",
+          "title": "What you offer",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "customers",
+          "title": "Your customers and how work comes in",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "week",
+          "title": "Your week",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "money",
+          "title": "Getting paid",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "team",
+          "title": "Your team and tools",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "ledger",
+          "title": "How Ledger should work for you",
+          "done": true,
+          "skipped": false
+        }
+      ],
+      "understanding": {
+        "about": "Got it — an automotive business. Vehicles are the unit of work, so bookings will ask which one.",
+        "offer": "Flat, per job — one price for the work, parts folded in or listed plainly.",
+        "customers": "Got it — customers come to you, so bookings won't ask for an address.",
+        "week": "After hours, Ledger can text back so nobody waits until morning. Hours saved — bookings, your booking page and your phone line follow them.",
+        "money": "No deposit — jobs book without one. Due on receipt — invoices will say so. You take card and e-transfer — I'll say so on invoices.",
+        "team": "Front Desk is on your list — it needs a Ledger number, and the setup plan shows the step.",
+        "ledger": "Noted, word for word. I'll follow these every time. Your goals: more bookings and fewer missed calls — the setup plan starts there."
+      },
+      "brief": "You run an automotive business in Alberta. You have a small team of 2–5. You're growing.\n\nIn your words: \"Tires, brakes and alignments for cars and light trucks\"\n\n2 services on your price list: Seasonal tire swap and Wheel alignment.\nYou charge flat, per job. You quote before you book.\n\nYour customers are mostly individuals. Work comes in by phone calls, texts and walk-ins.\nCustomers come to you. A typical job is under an hour. A mix of one-off and repeat work.\n\nHours: Mon–Fri 8 AM–5 PM · Sat/Sun closed. After hours, Ledger can text back. Bookings need a day's notice.\n\nYou take card and e-transfer. Your invoices are due on receipt. No deposit.\n\nYour team: a front desk. You use the built-in books. You want Ledger to answer what you miss.\n\nLedger will sound friendly. Your goals: more bookings and fewer missed calls.\n\nYour rules:\n\"Always confirm the price before starting work\"",
+      "first_message": "Northside Auto is set up. I know you're an automotive business, with customers coming to you, charging flat per job, mostly for individuals. Ask me anything, or tap a next step below.",
+      "setup_plan": [
+        {
+          "id": "phone_front_desk",
+          "action": "phone_front_desk",
+          "title": "Let Ledger answer missed calls and texts",
+          "detail": "You said you want Ledger to answer what you miss. Front Desk texts back, books and takes messages.",
+          "done": false,
+          "needs": "A Ledger business number."
+        },
+        {
+          "id": "booking_link",
+          "action": "booking_link",
+          "title": "Share your booking link",
+          "detail": "Customers pick a service and a time from a link you share.",
+          "done": false
+        },
+        {
+          "id": "google_business",
+          "action": "google_business",
+          "title": "Connect your Google Business Profile",
+          "detail": "Post updates and reply to reviews so new customers find you.",
+          "done": false
+        },
+        {
+          "id": "books_choice",
+          "action": "books_choice",
+          "title": "Choose your books",
+          "detail": "Built-in books are ready.",
+          "done": false
+        },
+        {
+          "id": "tax_review",
+          "action": "tax_review",
+          "title": "Review your tax setup",
+          "detail": "GST 5% is set as a starting point for Alberta — check it before your first invoice.",
+          "done": false
+        },
+        {
+          "id": "first_invoice",
+          "action": "first_invoice",
+          "title": "Send your first invoice",
+          "detail": "Create one real invoice and check it before sending.",
+          "done": false
+        },
+        {
+          "id": "first_booking",
+          "action": "first_booking",
+          "title": "Book your first appointment",
+          "detail": "Create one appointment and check the reminder and the calendar.",
+          "done": false
+        }
+      ],
+      "applied": [
+        "Tax set to GST 5% for Alberta",
+        "Times are read in America/Edmonton",
+        "Hours saved — Front Desk and bookings use them",
+        "2 services on your price list",
+        "Payment terms: due on receipt",
+        "Deposit policy: none",
+        "Where work happens: at your place",
+        "Watching for work by phone calls, texts and walk-ins",
+        "Ledger will sound friendly",
+        "2 of your rules and goals pinned for the copilot"
+      ]
+    },
+    "salon": {
+      "input": {
+        "id": "salon",
+        "name": "Maple Street Studio",
+        "currency_code": "CAD",
+        "timezone": "America/Toronto",
+        "skip": [
+          "week",
+          "team"
+        ],
+        "sections": {
+          "about": {
+            "business_type": "beauty",
+            "business_description": "Colour, cuts and blow-dries in a two-chair studio",
+            "business_stage": "established",
+            "team_size": "solo",
+            "region_code": "ON",
+            "timezone": "America/Toronto"
+          },
+          "offer": {
+            "services": [
+              {
+                "name": "Haircut",
+                "price": 45,
+                "duration_minutes": 45
+              },
+              {
+                "name": "Root colour",
+                "price": 95,
+                "duration_minutes": 90
+              },
+              {
+                "name": "Balayage",
+                "price": 220,
+                "duration_minutes": 180
+              }
+            ],
+            "pricing_model": "mix",
+            "hourly_rate": 70,
+            "quotes_first": false
+          },
+          "customers": {
+            "customer_mix": "individuals",
+            "intake_channels": [
+              "online",
+              "social",
+              "referral"
+            ],
+            "job_location": "my_place",
+            "typical_job_length": "1_3h",
+            "repeat_business": "recurring"
+          },
+          "money": {
+            "payment_methods": [
+              "card",
+              "cash"
+            ],
+            "payment_terms_days": 0,
+            "deposit": {
+              "type": "percent",
+              "value": 25
+            }
+          },
+          "ledger": {
+            "ai_tone": "professional",
+            "goals": [
+              "better_reviews",
+              "less_admin"
+            ],
+            "rules": [
+              "Colour appointments need a patch test 48 hours before",
+              "Cancellations under 24 hours are charged half the service"
+            ],
+            "autonomy": {
+              "reminders": true,
+              "review_replies": true,
+              "after_hours_texts": false
+            }
+          }
+        }
+      },
+      "answers": {
+        "business_type": "beauty",
+        "business_description": "Colour, cuts and blow-dries in a two-chair studio",
+        "team_size": "solo",
+        "region_code": "ON",
+        "timezone": "America/Toronto",
+        "pricing_model": "mix",
+        "customer_mix": "individuals",
+        "intake_channels": [
+          "online",
+          "social",
+          "referral"
+        ],
+        "job_location": "my_place",
+        "ai_tone": "professional",
+        "services": [
+          {
+            "id": "svc_1",
+            "name": "Haircut",
+            "price": 45,
+            "duration_minutes": 45
+          },
+          {
+            "id": "svc_2",
+            "name": "Root colour",
+            "price": 95,
+            "duration_minutes": 90
+          },
+          {
+            "id": "svc_3",
+            "name": "Balayage",
+            "price": 220,
+            "duration_minutes": 180
+          }
+        ],
+        "payment_terms_days": 0,
+        "business_stage": "established",
+        "hourly_rate": 70,
+        "quotes_first": false,
+        "typical_job_length": "1_3h",
+        "repeat_business": "recurring",
+        "payment_methods": [
+          "card",
+          "cash"
+        ],
+        "deposit": {
+          "type": "percent",
+          "value": 25
+        },
+        "goals": [
+          "better_reviews",
+          "less_admin"
+        ],
+        "rules": [
+          "Colour appointments need a patch test 48 hours before",
+          "Cancellations under 24 hours are charged half the service"
+        ],
+        "autonomy": {
+          "reminders": true,
+          "review_replies": true,
+          "after_hours_texts": false
+        }
+      },
+      "sections": [
+        {
+          "id": "about",
+          "title": "About your business",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "offer",
+          "title": "What you offer",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "customers",
+          "title": "Your customers and how work comes in",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "week",
+          "title": "Your week",
+          "done": false,
+          "skipped": true
+        },
+        {
+          "id": "money",
+          "title": "Getting paid",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "team",
+          "title": "Your team and tools",
+          "done": false,
+          "skipped": true
+        },
+        {
+          "id": "ledger",
+          "title": "How Ledger should work for you",
+          "done": true,
+          "skipped": false
+        }
+      ],
+      "understanding": {
+        "about": "Got it — beauty and personal care. Appointments for a named service, no vehicle questions.",
+        "offer": "A mix of flat and hourly at $70/h — I'll ask which when it's not obvious.",
+        "customers": "Got it — customers come to you, so bookings won't ask for an address.",
+        "week": "Skipped for now — you can come back to it any time from Settings.",
+        "money": "A 25% deposit — I'll mention it on quotes and bookings. Due on receipt — invoices will say so.",
+        "team": "Skipped for now — you can come back to it any time from Settings.",
+        "ledger": "Noted, word for word. I'll follow these every time. Your goals: better reviews and less admin — the setup plan starts there."
+      },
+      "brief": "You run a beauty and personal-care business in Ontario. It's just you. You're well established.\n\nIn your words: \"Colour, cuts and blow-dries in a two-chair studio\"\n\n3 services on your price list: Haircut, Root colour and Balayage.\nYou charge a mix of flat and hourly at $70/h. No quote step — straight to booking.\n\nYour customers are mostly individuals. Work comes in by online bookings, social media and referrals.\nCustomers come to you. A typical job runs 1–3 hours. Mostly repeat customers.\n\nYou take card and cash. Your invoices are due on receipt. You take a 25% deposit up front.\n\nLedger will sound professional. Your goals: better reviews and less admin.\n\nYour rules:\n\"Colour appointments need a patch test 48 hours before\"\n\"Cancellations under 24 hours are charged half the service\"",
+      "first_message": "Maple Street Studio is set up. I know you're a beauty and personal-care business, with customers coming to you, charging a mix of flat and hourly, mostly for individuals. Ask me anything, or tap a next step below.",
+      "setup_plan": [
+        {
+          "id": "booking_link",
+          "action": "booking_link",
+          "title": "Share your booking link",
+          "detail": "Customers pick a service and a time from a link you share.",
+          "done": false
+        },
+        {
+          "id": "reminders",
+          "action": "reminders",
+          "title": "Turn on appointment reminders",
+          "detail": "Ledger texts customers the day before so fewer people forget.",
+          "done": false,
+          "needs": "A Ledger business number."
+        },
+        {
+          "id": "google_business",
+          "action": "google_business",
+          "title": "Connect your Google Business Profile",
+          "detail": "Reply to reviews and post updates from Ledger.",
+          "done": false
+        },
+        {
+          "id": "books_choice",
+          "action": "books_choice",
+          "title": "Choose your books",
+          "detail": "Already on QuickBooks? Connect it. Otherwise the built-in books handle invoices, estimates and payment links.",
+          "done": false
+        },
+        {
+          "id": "hours",
+          "action": "hours",
+          "title": "Set your hours",
+          "detail": "Bookings, your booking page and your phone line all follow them.",
+          "done": false
+        },
+        {
+          "id": "tax_review",
+          "action": "tax_review",
+          "title": "Review your tax setup",
+          "detail": "HST 13% is set as a starting point for Ontario — check it before your first invoice.",
+          "done": false
+        },
+        {
+          "id": "first_invoice",
+          "action": "first_invoice",
+          "title": "Send your first invoice",
+          "detail": "Create one real invoice and check it before sending.",
+          "done": false
+        }
+      ],
+      "applied": [
+        "Tax set to HST 13% for Ontario",
+        "Times are read in America/Toronto",
+        "3 services on your price list",
+        "Payment terms: due on receipt",
+        "Deposit policy: 25% up front",
+        "Where work happens: at your place",
+        "Watching for work by online bookings, social media and referrals",
+        "Ledger will sound professional",
+        "3 of your rules and goals pinned for the copilot"
+      ]
+    },
+    "generic_min": {
+      "input": {
+        "id": "generic_min",
+        "name": "Riverbend Services",
+        "currency_code": "USD",
+        "timezone": "America/Chicago",
+        "skip": [
+          "offer",
+          "customers",
+          "week",
+          "money",
+          "team",
+          "ledger"
+        ],
+        "sections": {
+          "about": {
+            "business_type": "other"
+          }
+        }
+      },
+      "answers": {
+        "business_type": "other",
+        "timezone": "America/Chicago"
+      },
+      "sections": [
+        {
+          "id": "about",
+          "title": "About your business",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "offer",
+          "title": "What you offer",
+          "done": false,
+          "skipped": true
+        },
+        {
+          "id": "customers",
+          "title": "Your customers and how work comes in",
+          "done": false,
+          "skipped": true
+        },
+        {
+          "id": "week",
+          "title": "Your week",
+          "done": false,
+          "skipped": true
+        },
+        {
+          "id": "money",
+          "title": "Getting paid",
+          "done": false,
+          "skipped": true
+        },
+        {
+          "id": "team",
+          "title": "Your team and tools",
+          "done": false,
+          "skipped": true
+        },
+        {
+          "id": "ledger",
+          "title": "How Ledger should work for you",
+          "done": false,
+          "skipped": true
+        }
+      ],
+      "understanding": {
+        "about": "Got it — a service business. Jobs, appointments, customers and invoices, nothing assumed.",
+        "offer": "Skipped for now — you can come back to it any time from Settings.",
+        "customers": "Skipped for now — you can come back to it any time from Settings.",
+        "week": "Skipped for now — you can come back to it any time from Settings.",
+        "money": "Skipped for now — you can come back to it any time from Settings.",
+        "team": "Skipped for now — you can come back to it any time from Settings.",
+        "ledger": "Skipped for now — you can come back to it any time from Settings."
+      },
+      "brief": "You run a service business.",
+      "first_message": "Riverbend Services is set up. I know you're a service business. Ask me anything, or tap a next step below.",
+      "setup_plan": [
+        {
+          "id": "books_choice",
+          "action": "books_choice",
+          "title": "Choose your books",
+          "detail": "Already on QuickBooks? Connect it. Otherwise the built-in books handle invoices, estimates and payment links.",
+          "done": false
+        },
+        {
+          "id": "services_import",
+          "action": "services_import",
+          "title": "Add your services and prices",
+          "detail": "Your price list drives quotes, invoices and bookings.",
+          "done": false
+        },
+        {
+          "id": "hours",
+          "action": "hours",
+          "title": "Set your hours",
+          "detail": "Bookings, your booking page and your phone line all follow them.",
+          "done": false
+        },
+        {
+          "id": "tax_review",
+          "action": "tax_review",
+          "title": "Review your tax setup",
+          "detail": "Check registration, rates and exemptions before your first invoice.",
+          "done": false
+        },
+        {
+          "id": "first_invoice",
+          "action": "first_invoice",
+          "title": "Send your first invoice",
+          "detail": "Create one real invoice and check it before sending.",
+          "done": false
+        },
+        {
+          "id": "first_booking",
+          "action": "first_booking",
+          "title": "Book your first appointment",
+          "detail": "Create one appointment and check the reminder and the calendar.",
+          "done": false
+        }
+      ],
+      "applied": [
+        "Times are read in America/Chicago"
+      ]
+    },
+    "hvac_remote": {
+      "input": {
+        "id": "hvac_remote",
+        "name": "Prairie Comfort Heating",
+        "currency_code": "CAD",
+        "timezone": "America/Regina",
+        "skip": [
+          "ledger"
+        ],
+        "sections": {
+          "about": {
+            "business_type": "trades",
+            "business_description": "Furnace and AC repair across the city",
+            "business_stage": "starting",
+            "team_size": "large",
+            "region_code": "SK",
+            "timezone": "America/Regina"
+          },
+          "offer": {
+            "services": [
+              {
+                "name": "Service call and diagnosis",
+                "price": 130,
+                "duration_minutes": 60
+              },
+              {
+                "name": "Furnace tune-up",
+                "price": 150,
+                "duration_minutes": 90
+              }
+            ],
+            "pricing_model": "hourly",
+            "hourly_rate": 125,
+            "quotes_first": true
+          },
+          "customers": {
+            "customer_mix": "both",
+            "intake_channels": [
+              "phone",
+              "email"
+            ],
+            "job_location": "customer_place",
+            "service_area": "Regina and 60 km around",
+            "typical_job_length": "half_day",
+            "repeat_business": "one_off"
+          },
+          "week": {
+            "business_hours": {
+              "mon": {
+                "open": "07:00",
+                "close": "18:00"
+              },
+              "tue": {
+                "open": "07:00",
+                "close": "18:00"
+              },
+              "wed": {
+                "open": "07:00",
+                "close": "18:00"
+              },
+              "thu": {
+                "open": "07:00",
+                "close": "18:00"
+              },
+              "fri": {
+                "open": "07:00",
+                "close": "18:00"
+              },
+              "sat": {
+                "open": "09:00",
+                "close": "13:00"
+              },
+              "sun": null
+            },
+            "after_hours": "emergency",
+            "booking_lead": "two_plus_days"
+          },
+          "money": {
+            "payment_methods": [
+              "cheque",
+              "financing",
+              "online"
+            ],
+            "payment_terms_days": 30,
+            "deposit": {
+              "type": "fixed",
+              "value": 200
+            }
+          },
+          "team": {
+            "team_roles": [
+              "field_crew",
+              "admin"
+            ],
+            "wants_front_desk": false,
+            "uses_quickbooks": true,
+            "uses_google_calendar": true
+          }
+        }
+      },
+      "answers": {
+        "business_type": "trades",
+        "business_description": "Furnace and AC repair across the city",
+        "team_size": "large",
+        "region_code": "SK",
+        "timezone": "America/Regina",
+        "pricing_model": "hourly",
+        "customer_mix": "both",
+        "intake_channels": [
+          "phone",
+          "email"
+        ],
+        "job_location": "customer_place",
+        "service_area": "Regina and 60 km around",
+        "business_hours": {
+          "mon": {
+            "open": "07:00",
+            "close": "18:00"
+          },
+          "tue": {
+            "open": "07:00",
+            "close": "18:00"
+          },
+          "wed": {
+            "open": "07:00",
+            "close": "18:00"
+          },
+          "thu": {
+            "open": "07:00",
+            "close": "18:00"
+          },
+          "fri": {
+            "open": "07:00",
+            "close": "18:00"
+          },
+          "sat": {
+            "open": "09:00",
+            "close": "13:00"
+          },
+          "sun": null
+        },
+        "services": [
+          {
+            "id": "svc_1",
+            "name": "Service call and diagnosis",
+            "price": 130,
+            "duration_minutes": 60
+          },
+          {
+            "id": "svc_2",
+            "name": "Furnace tune-up",
+            "price": 150,
+            "duration_minutes": 90
+          }
+        ],
+        "payment_terms_days": 30,
+        "business_stage": "starting",
+        "hourly_rate": 125,
+        "quotes_first": true,
+        "typical_job_length": "half_day",
+        "repeat_business": "one_off",
+        "after_hours": "emergency",
+        "booking_lead": "two_plus_days",
+        "payment_methods": [
+          "cheque",
+          "financing",
+          "online"
+        ],
+        "deposit": {
+          "type": "fixed",
+          "value": 200
+        },
+        "team_roles": [
+          "field_crew",
+          "admin"
+        ],
+        "wants_front_desk": false,
+        "uses_quickbooks": true,
+        "uses_google_calendar": true
+      },
+      "sections": [
+        {
+          "id": "about",
+          "title": "About your business",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "offer",
+          "title": "What you offer",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "customers",
+          "title": "Your customers and how work comes in",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "week",
+          "title": "Your week",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "money",
+          "title": "Getting paid",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "team",
+          "title": "Your team and tools",
+          "done": true,
+          "skipped": false
+        },
+        {
+          "id": "ledger",
+          "title": "How Ledger should work for you",
+          "done": false,
+          "skipped": true
+        }
+      ],
+      "understanding": {
+        "about": "Got it — a trades business. Jobs at the customer's place, no vehicle questions.",
+        "offer": "Hourly plus parts at $125/h — your invoices will show hours × rate.",
+        "customers": "Got it — jobs happen at the customer's place, so bookings will ask for an address.",
+        "week": "Emergencies get through after hours — I'll flag those first. Hours saved — bookings, your booking page and your phone line follow them.",
+        "money": "A $200 deposit — I'll mention it on quotes and bookings. Due in 30 days — invoices will show the due date.",
+        "team": "No Front Desk for now — you can switch it on later. QuickBooks — connect it from the setup plan and your books stay there.",
+        "ledger": "Skipped for now — you can come back to it any time from Settings."
+      },
+      "brief": "You run a trades business in Saskatchewan. You have a team of 6 or more. You're just getting started.\n\nIn your words: \"Furnace and AC repair across the city\"\n\n2 services on your price list: Service call and diagnosis and Furnace tune-up.\nYou charge hourly plus parts at $125/h. You quote before you book.\n\nYour customers are a mix of individuals and businesses. Work comes in by phone calls and email.\nYou work at the customer's place. Service area: Regina and 60 km around. A typical job takes half a day. Mostly one-off jobs.\n\nHours: Mon–Fri 7 AM–6 PM · Sat 9 AM–1 PM · Sun closed. Emergencies get through after hours. Bookings need two or more days' notice.\n\nYou take cheque, financing and online payment. Your invoices are due in 30 days. You take a $200 deposit up front.\n\nYour team: field crew and admin help. Your books are in QuickBooks. You also use Google Calendar.",
+      "first_message": "Prairie Comfort Heating is set up. I know you're a trades business, working at the customer's place, charging hourly plus parts, for individuals and businesses. Ask me anything, or tap a next step below.",
+      "setup_plan": [
+        {
+          "id": "books_choice",
+          "action": "books_choice",
+          "title": "Choose your books",
+          "detail": "Connect QuickBooks.",
+          "done": false
+        },
+        {
+          "id": "phone_front_desk",
+          "action": "phone_front_desk",
+          "title": "Let Ledger answer missed calls and texts",
+          "detail": "Work comes in by phone. Front Desk texts back, books and takes messages.",
+          "done": false,
+          "needs": "A Ledger business number."
+        },
+        {
+          "id": "team_invite",
+          "action": "team_invite",
+          "title": "Add your team",
+          "detail": "Crew get free logins for jobs and time; teammates who run the business need a seat.",
+          "done": false
+        },
+        {
+          "id": "google_calendar",
+          "action": "google_calendar",
+          "title": "Connect Google Calendar",
+          "detail": "Ledger has its own calendar; connect Google so appointments show up there too.",
+          "done": false
+        },
+        {
+          "id": "tax_review",
+          "action": "tax_review",
+          "title": "Review your tax setup",
+          "detail": "GST 5% + PST 6% is set as a starting point for Saskatchewan — check it before your first invoice.",
+          "done": false
+        },
+        {
+          "id": "first_invoice",
+          "action": "first_invoice",
+          "title": "Send your first invoice",
+          "detail": "Create one real invoice and check it before sending.",
+          "done": false
+        },
+        {
+          "id": "first_booking",
+          "action": "first_booking",
+          "title": "Book your first appointment",
+          "detail": "Create one appointment at the customer's place and check the reminder and the calendar.",
+          "done": false
+        }
+      ],
+      "applied": [
+        "Tax set to GST 5% + PST 6% for Saskatchewan",
+        "Times are read in America/Regina",
+        "Hours saved — Front Desk and bookings use them",
+        "2 services on your price list",
+        "Payment terms: due in 30 days",
+        "Deposit policy: $200 up front",
+        "Where work happens: at the customer's place",
+        "Watching for work by phone calls and email"
+      ]
+    }
+  },
+  "suggestions": {
+    "services": {
+      "automotive": [
+        {
+          "name": "Oil change",
+          "price": 80,
+          "duration_minutes": 45
+        },
+        {
+          "name": "Seasonal tire swap",
+          "price": 60,
+          "duration_minutes": 45
+        },
+        {
+          "name": "Mount and balance (4 tires)",
+          "price": 120,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Flat repair",
+          "price": 35,
+          "duration_minutes": 30
+        },
+        {
+          "name": "Brake pads and rotors (per axle)",
+          "price": 350,
+          "duration_minutes": 120
+        },
+        {
+          "name": "Wheel alignment",
+          "price": 120,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Battery replacement",
+          "price": 190,
+          "duration_minutes": 30
+        },
+        {
+          "name": "Full detail",
+          "price": 200,
+          "duration_minutes": 180
+        }
+      ],
+      "trades": [
+        {
+          "name": "Service call and diagnosis",
+          "price": 130,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Furnace tune-up",
+          "price": 150,
+          "duration_minutes": 90
+        },
+        {
+          "name": "AC tune-up",
+          "price": 150,
+          "duration_minutes": 90
+        },
+        {
+          "name": "Hot water tank replacement",
+          "price": 1850,
+          "duration_minutes": 240
+        },
+        {
+          "name": "Drain cleaning",
+          "price": 200,
+          "duration_minutes": 90
+        },
+        {
+          "name": "Thermostat install",
+          "price": 250,
+          "duration_minutes": 60
+        },
+        {
+          "name": "After-hours emergency call",
+          "price": 250,
+          "duration_minutes": 60
+        }
+      ],
+      "beauty": [
+        {
+          "name": "Haircut",
+          "price": 45,
+          "duration_minutes": 45
+        },
+        {
+          "name": "Cut and blow-dry",
+          "price": 65,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Root colour",
+          "price": 95,
+          "duration_minutes": 90
+        },
+        {
+          "name": "Full highlights",
+          "price": 165,
+          "duration_minutes": 150
+        },
+        {
+          "name": "Balayage",
+          "price": 220,
+          "duration_minutes": 180
+        },
+        {
+          "name": "Beard trim",
+          "price": 25,
+          "duration_minutes": 20
+        },
+        {
+          "name": "Blow-dry",
+          "price": 40,
+          "duration_minutes": 40
+        },
+        {
+          "name": "Gel manicure",
+          "price": 55,
+          "duration_minutes": 60
+        }
+      ],
+      "health": [
+        {
+          "name": "Initial assessment",
+          "price": 120,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Follow-up visit",
+          "price": 85,
+          "duration_minutes": 45
+        },
+        {
+          "name": "60-minute massage",
+          "price": 110,
+          "duration_minutes": 60
+        },
+        {
+          "name": "90-minute massage",
+          "price": 150,
+          "duration_minutes": 90
+        },
+        {
+          "name": "Adjustment",
+          "price": 65,
+          "duration_minutes": 20
+        },
+        {
+          "name": "Extended visit",
+          "price": 130,
+          "duration_minutes": 60
+        }
+      ],
+      "home": [
+        {
+          "name": "Standard clean",
+          "price": 160,
+          "duration_minutes": 120
+        },
+        {
+          "name": "Deep clean",
+          "price": 280,
+          "duration_minutes": 240
+        },
+        {
+          "name": "Move-out clean",
+          "price": 350,
+          "duration_minutes": 300
+        },
+        {
+          "name": "Lawn cut",
+          "price": 45,
+          "duration_minutes": 30
+        },
+        {
+          "name": "Spring yard clean-up",
+          "price": 220,
+          "duration_minutes": 180
+        },
+        {
+          "name": "Gutter cleaning",
+          "price": 180,
+          "duration_minutes": 90
+        },
+        {
+          "name": "Handyman hour",
+          "price": 85,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Exterior window cleaning",
+          "price": 150,
+          "duration_minutes": 120
+        }
+      ],
+      "professional": [
+        {
+          "name": "Initial consultation",
+          "price": 150,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Hourly consulting",
+          "price": 175,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Monthly bookkeeping",
+          "price": 350,
+          "duration_minutes": null
+        },
+        {
+          "name": "Personal tax return",
+          "price": 180,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Half-day photo session",
+          "price": 650,
+          "duration_minutes": 240
+        },
+        {
+          "name": "Logo and brand package",
+          "price": 1200,
+          "duration_minutes": null
+        },
+        {
+          "name": "Document review",
+          "price": 220,
+          "duration_minutes": 90
+        }
+      ],
+      "fitness": [
+        {
+          "name": "Personal training session",
+          "price": 75,
+          "duration_minutes": 60
+        },
+        {
+          "name": "30-minute session",
+          "price": 45,
+          "duration_minutes": 30
+        },
+        {
+          "name": "10-session pack",
+          "price": 650,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Small group session",
+          "price": 30,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Nutrition consultation",
+          "price": 90,
+          "duration_minutes": 45
+        },
+        {
+          "name": "Monthly membership",
+          "price": 120,
+          "duration_minutes": null
+        },
+        {
+          "name": "Assessment and program",
+          "price": 110,
+          "duration_minutes": 60
+        }
+      ],
+      "pets": [
+        {
+          "name": "Full groom (small dog)",
+          "price": 75,
+          "duration_minutes": 90
+        },
+        {
+          "name": "Full groom (large dog)",
+          "price": 110,
+          "duration_minutes": 150
+        },
+        {
+          "name": "Bath and brush",
+          "price": 45,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Nail trim",
+          "price": 18,
+          "duration_minutes": 15
+        },
+        {
+          "name": "Teeth brushing add-on",
+          "price": 12,
+          "duration_minutes": 10
+        },
+        {
+          "name": "30-minute dog walk",
+          "price": 25,
+          "duration_minutes": 30
+        },
+        {
+          "name": "Overnight boarding",
+          "price": 55,
+          "duration_minutes": null
+        },
+        {
+          "name": "Puppy training session",
+          "price": 80,
+          "duration_minutes": 60
+        }
+      ],
+      "other": [
+        {
+          "name": "Consultation",
+          "price": 100,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Standard service",
+          "price": 150,
+          "duration_minutes": 90
+        },
+        {
+          "name": "Hourly work",
+          "price": 85,
+          "duration_minutes": 60
+        },
+        {
+          "name": "Small job",
+          "price": 75,
+          "duration_minutes": 45
+        },
+        {
+          "name": "Large job",
+          "price": 450,
+          "duration_minutes": 240
+        },
+        {
+          "name": "Follow-up visit",
+          "price": 60,
+          "duration_minutes": 30
+        }
+      ]
+    },
+    "descriptions": {
+      "automotive": "Tires, oil changes and brakes for cars and light trucks in <your town>",
+      "trades": "Residential heating, cooling and hot water — repairs, installs and 24-hour service in <your town>",
+      "beauty": "Cuts, colour and styling for women and men in <your town>",
+      "health": "Physiotherapy and massage for sports injuries and everyday pain in <your town>",
+      "home": "Weekly, deep and move-out cleaning for homes in <your town>",
+      "professional": "Bookkeeping and tax for small businesses in <your town>, in plain English",
+      "fitness": "One-on-one and small-group training in <your town>, for beginners and athletes",
+      "pets": "Dog grooming, baths and nail trims by appointment in <your town>",
+      "other": "What you do, who it is for and where, in one line"
+    },
+    "rules": {
+      "automotive": [
+        "Tire installs need the vehicle here for at least an hour",
+        "Quote parts and labour separately on every job",
+        "No same-day bookings after 3 PM"
+      ],
+      "trades": [
+        "Every job starts with a written quote the customer approves",
+        "Calls after 6 PM carry an after-hours fee",
+        "Payment is due when the job is done, not later"
+      ],
+      "beauty": [
+        "Colour appointments need a patch test 48 hours before",
+        "Cancellations under 24 hours are charged half the service",
+        "New clients book a consultation before colour work"
+      ],
+      "health": [
+        "First visits are 60 minutes and need the intake form first",
+        "Missed appointments without 24 hours notice are billed in full",
+        "Direct billing to insurance is available on request"
+      ],
+      "home": [
+        "Recurring cleans get 10% off the standard price",
+        "Pets stay in a separate room during the clean",
+        "Cancellations need 48 hours notice"
+      ],
+      "professional": [
+        "Every engagement starts with a signed engagement letter",
+        "Invoices are due in 15 days",
+        "Work outside the retainer is billed by the hour"
+      ],
+      "fitness": [
+        "Sessions cancelled under 12 hours before are charged",
+        "Packages expire 90 days after purchase",
+        "New clients start with an assessment session"
+      ],
+      "pets": [
+        "Vaccination records are needed before the first visit",
+        "Matted coats may need a shave-down at an extra charge",
+        "Pickup is within one hour of the finish text"
+      ],
+      "other": [
+        "Every job gets a written quote before work starts",
+        "Payment is due when the work is done",
+        "Cancellations need 24 hours notice"
+      ]
+    }
+  },
+  "constants": {
+    "UNDERSTANDING_MAX": 140,
+    "UNDERSTANDING_SKIPPED": "Skipped for now — you can come back to it any time from Settings.",
+    "CONFIRM_TITLE": "Here's what Ledger understands",
+    "REGION_NAME": {
+      "AB": "Alberta",
+      "BC": "British Columbia",
+      "MB": "Manitoba",
+      "NB": "New Brunswick",
+      "NL": "Newfoundland and Labrador",
+      "NS": "Nova Scotia",
+      "NT": "Northwest Territories",
+      "NU": "Nunavut",
+      "ON": "Ontario",
+      "PE": "Prince Edward Island",
+      "QC": "Quebec",
+      "SK": "Saskatchewan",
+      "YT": "Yukon"
+    },
+    "LABEL": {
+      "business_type": {
+        "automotive": "automotive",
+        "trades": "trades",
+        "beauty": "beauty and personal care",
+        "health": "health and wellness",
+        "home": "home and property services",
+        "professional": "professional services",
+        "fitness": "fitness and coaching",
+        "pets": "pet care",
+        "other": "service"
+      },
+      "business_stage": {
+        "starting": "just getting started",
+        "growing": "growing",
+        "established": "well established"
+      },
+      "team_size": {
+        "solo": "one-person",
+        "small": "small team of 2–5",
+        "large": "team of 6 or more"
+      },
+      "pricing_model": {
+        "flat": "flat, per job",
+        "hourly": "hourly plus parts",
+        "mix": "a mix of flat and hourly"
+      },
+      "customer_mix": {
+        "individuals": "mostly individuals",
+        "businesses": "mostly businesses",
+        "both": "a mix of individuals and businesses"
+      },
+      "intake_channels": {
+        "phone": "phone calls",
+        "text": "texts",
+        "online": "online bookings",
+        "walkin": "walk-ins",
+        "email": "email",
+        "social": "social media",
+        "referral": "referrals"
+      },
+      "job_location": {
+        "my_place": "at your place",
+        "customer_place": "at the customer's place",
+        "both": "at your place or the customer's",
+        "remote": "remotely"
+      },
+      "typical_job_length": {
+        "under_1h": "under an hour",
+        "1_3h": "1–3 hours",
+        "half_day": "half a day",
+        "full_day": "a full day",
+        "multi_day": "several days"
+      },
+      "repeat_business": {
+        "one_off": "mostly one-off jobs",
+        "recurring": "mostly repeat customers",
+        "both": "a mix of one-off and repeat work"
+      },
+      "after_hours": {
+        "voicemail": "calls go to voicemail",
+        "text_back": "Ledger can text back",
+        "emergency": "emergency calls get through",
+        "closed": "closed, nothing is answered"
+      },
+      "booking_lead": {
+        "same_day": "same-day bookings are fine",
+        "next_day": "bookings need a day's notice",
+        "two_plus_days": "bookings need two or more days' notice"
+      },
+      "payment_methods": {
+        "cash": "cash",
+        "card": "card",
+        "etransfer": "e-transfer",
+        "cheque": "cheque",
+        "financing": "financing",
+        "online": "online payment"
+      },
+      "payment_terms_days": {
+        "0": "due on receipt",
+        "7": "due in 7 days",
+        "15": "due in 15 days",
+        "30": "due in 30 days"
+      },
+      "team_roles": {
+        "field_crew": "field crew",
+        "front_desk": "a front desk",
+        "admin": "admin help",
+        "other_owners": "other owners"
+      },
+      "ai_tone": {
+        "friendly": "friendly",
+        "professional": "professional",
+        "brief": "brief and to the point"
+      },
+      "goals": {
+        "more_bookings": "more bookings",
+        "get_paid_faster": "get paid faster",
+        "fewer_missed_calls": "fewer missed calls",
+        "less_admin": "less admin",
+        "better_reviews": "better reviews",
+        "grow_team": "grow the team"
+      }
+    }
+  }
+}

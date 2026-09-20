@@ -96,17 +96,25 @@ const js = read("assets/getting-started.js");
 for (const k of ["done_h3", "done_p", "done_primary", "done_primary_href", "done_ghost", "load_fail", "wording_url"]) check(js.includes(COPY.preview[k]), `preview string ${k} in getting-started.js`, JSON.stringify(COPY.preview[k]));
 check(!/\bimport\b|\brequire\(/.test(js) && !/https?:\/\//.test(js), "getting-started.js has no imports and no absolute URLs");
 check(!/localStorage|sessionStorage|document\.cookie|indexedDB/.test(js), "getting-started.js keeps state in memory only");
-check(fs.statSync(path.join(ROOT, "assets/getting-started.js")).size <= 60 * 1024, "getting-started.js ≤ 60 KB");
+// The text port (server modules, classic script): same rules, and the page loads it before its own script.
+const port = read("assets/onboarding-text.js");
+check(page.includes('assets/onboarding-text.js') && page.indexOf('assets/onboarding-text.js') < page.indexOf('assets/getting-started.js'), "page links onboarding-text.js before getting-started.js");
+check(!/\bimport\b|\brequire\(/.test(port) && !/https?:\/\//.test(port), "onboarding-text.js has no imports and no absolute URLs");
+check(!/localStorage|sessionStorage|document\.cookie|indexedDB|fetch\(|XMLHttpRequest/.test(port), "onboarding-text.js touches no storage and no network");
+check(port.includes("globalThis.LedgerOnboardingText = "), "onboarding-text.js assigns globalThis.LedgerOnboardingText");
+check(js.includes("globalThis.LedgerOnboardingText"), "getting-started.js reads the port");
+const jsBytes = fs.statSync(path.join(ROOT, "assets/getting-started.js")).size + fs.statSync(path.join(ROOT, "assets/onboarding-text.js")).size;
+check(jsBytes <= 130000, "getting-started.js + onboarding-text.js ≤ 130,000 bytes", String(jsBytes));
 const cssRules = read("assets/getting-started.css").replace(/\/\*[\s\S]*?\*\//g, "");
 check(!/position:\s*fixed|100dvh/.test(cssRules) && /\.gs-preview \.obflow\{position:absolute/.test(cssRules), "getting-started.css: .obflow is absolute in the frame box, no fixed positioning / 100dvh");
 check(cssRules.split("\n").filter((l) => /^[^@\s}].*\{/.test(l)).every((l) => l.startsWith(".gs-preview") || l.startsWith("@")), "getting-started.css: every top-level rule is scoped under .gs-preview");
 
-// No time claims and no real names in anything new. (The JS's only "minutes" is inside a rule example ported
-// word for word from the server schema, so the script is checked with the schema tables removed.)
-const jsOwn = js.slice(0, js.indexOf("const SUGGESTED_SERVICES"));
-for (const [label, s] of [["page", text(page)], ["home block", text(homeBlock)], ["js (outside schema tables)", jsOwn], ["fixture", JSON.stringify(COPY)]]) {
+// No time claims and no real names in anything new. (The port's only "minutes" are inside a service name and a
+// rule example carried word for word from the server schema, so it is checked for names and "afternoon" only.)
+for (const [label, s] of [["page", text(page)], ["home block", text(homeBlock)], ["js", js], ["fixture", JSON.stringify(COPY)]]) {
   check(!/\b\d+\s*minutes?\b|in an afternoon|KMJ/i.test(s), `${label}: no time claims, no KMJ`);
 }
+check(!/in an afternoon|KMJ/i.test(port), "onboarding-text.js: no time claims, no KMJ");
 
 // (g) The app is frozen: app.js, app.html, sw.js are untouched since the base commit.
 let frozen = true, why = "";

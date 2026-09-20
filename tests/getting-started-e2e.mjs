@@ -9,14 +9,15 @@
 // localhost, no horizontal overflow, the phone menu shows "Getting started", every section's
 // title / step / questions / chip labels equal tests/onboarding-copy.v1.json, Skip / Back /
 // Continue / required type / Finish later → banner → Resume / confirm rows + Change / finish
-// panel / Start over, one step keyboard-only, focus on the step title after each change; the
-// confirm recap and the "What Ledger knows" card equal the owner brief that
-// tests/onboarding-mock.mjs brief() renders for the same fixed answers; #obunder holds one
-// understanding line after Continue and is cleared by Back and Change (app.js show()).
+// panel / Start over, one step keyboard-only, focus on the step title after each change. The
+// fixed walk answers are exactly the "northside" set of tests/onboarding-text-fixture.v1.json
+// (what the server modules render, saved by the foreman's oracle): the confirm recap equals that
+// set's brief word for word, every #obunder line equals its understanding for the section, and
+// the "What Ledger knows" card equals the port's brief for the sections answered so far; #obunder
+// holds one line after Continue and is cleared by Back and Change (app.js show()).
 // Env: SHOTS_DIR (default ./tests/getting-started-shots), PORT (default 4182), HEADED=1.
 import fs from "node:fs"; import os from "node:os"; import path from "node:path"; import { pathToFileURL } from "node:url";
-import { spawn } from "node:child_process"; import net from "node:net";
-import { brief as ownerBrief } from "./onboarding-mock.mjs";
+import { spawn } from "node:child_process"; import net from "node:net"; import vm from "node:vm";
 
 async function loadPlaywright() {
   try { return await import("playwright"); } catch {}
@@ -42,22 +43,24 @@ const SH = W.shared;
 const ORDER = ["about", "offer", "customers", "week", "money", "team", "ledger", "confirm"];
 const MEDIA_404 = /\/assets\/video\/app-onboarding-(about|offer|confirm|firstday)\.(mp4|jpg)$/;
 const VIEWPORTS = [["phone", { width: 390, height: 844 }], ["desktop", { width: 1280, height: 800 }]];
-// The fixed Northside Auto-style answers the walk gives, per section, as the server stores them
-// (chip values, not labels). The recap must equal the mock's brief() for exactly these.
-const HOURS = { mon: { open: "08:00", close: "17:00" }, tue: { open: "08:00", close: "17:00" }, wed: { open: "08:00", close: "17:00" }, thu: { open: "08:00", close: "17:00" }, fri: { open: "08:00", close: "17:00" }, sat: null, sun: null };
-const ANSWERS = {
-  about: { business_type: "automotive", business_description: "Tire shop with two bays", business_stage: "growing", team_size: "small", region_code: "AB", timezone: "America/Edmonton" },
-  offer: { services: [{ name: "Oil change" }, { name: "Mount and balance (4 tires)" }], pricing_model: "hourly", hourly_rate: 120, quotes_first: true },
-  customers: { job_location: "my_place", customer_mix: "individuals", intake_channels: ["phone", "text"], typical_job_length: "under_1h", repeat_business: "recurring" },
-  week: { business_hours: HOURS, after_hours: "text_back", booking_lead: "next_day" },
-  money: { payment_methods: ["card", "etransfer"], payment_terms_days: 7, deposit: { type: "percent", value: 25 } },
-  team: { wants_front_desk: true, team_roles: ["field_crew"] },
-  ledger: { rules: ["Tire installs need the vehicle here for at least an hour"], ai_tone: "friendly", goals: ["more_bookings", "get_paid_faster"] },
+// The truth: the server modules' output for the fixed answer sets (see the fixture's generated_by),
+// and the page's port of those modules, loaded the way the page loads it.
+const FX = JSON.parse(fs.readFileSync(path.join(ROOT, "tests/onboarding-text-fixture.v1.json"), "utf8"));
+vm.runInThisContext(fs.readFileSync(path.join(ROOT, "assets/onboarding-text.js"), "utf8"), { filename: "onboarding-text.js" });
+const PORT_TEXT = globalThis.LedgerOnboardingText;
+// The fixed answers the walk gives are exactly the fixture's northside set (chip values, not
+// labels), as the server stores them: the price of the "Seasonal tire swap" example is changed
+// to 85, the rule is typed. NS.input.sections is what the set was saved with; NS.answers is the
+// server's normalized view (services carry ids) that the brief is rendered from.
+const NS = FX.sets.northside;
+const ANSWERS = NS.input.sections;
+const WS = { name: NS.input.name, currency_code: NS.input.currency_code, timezone: NS.input.timezone };
+// The brief for the sections answered so far: the normalized view restricted to those sections'
+// keys (services keep the ids the server hands out), rendered by the port.
+const expectBrief = (...sections) => {
+  const keys = new Set(sections.flatMap((id) => Object.keys(ANSWERS[id])));
+  return PORT_TEXT.brief(Object.fromEntries(Object.entries(NS.answers).filter(([k]) => keys.has(k))), WS);
 };
-const expectBrief = (...sections) => ownerBrief({ answers: Object.assign({}, ...sections.map((id) => ANSWERS[id])), currency_symbol: "$", name: "" });
-// The schema's understanding line for the About answers above (UNDERSTANDING.business_type.automotive;
-// the next line in priority order would push it past UNDERSTANDING_MAX = 140, so it stands alone).
-const UNDER_ABOUT = "Got it — an automotive business. Vehicles are the unit of work, so bookings will ask which one.";
 
 let checks = 0, failures = 0;
 const check = (ok, name, detail) => { checks++; if (ok) console.log("PASS", name); else { failures++; console.log("FAIL", name, detail !== undefined ? `— ${typeof detail === "string" ? detail : JSON.stringify(detail)}` : ""); } };
@@ -203,6 +206,7 @@ for (const [name, vp] of VIEWPORTS) {
   await page.click(`[data-q="business_type"] .chip:has-text("${auto.label}")`);
   check(await page.getAttribute(`[data-q="business_type"] .chip[data-v="${auto.value}"]`, "aria-pressed") === "true" && await page.locator('[data-q="business_type"] .chip[aria-pressed="true"]').count() === 1, `${name}: business type is single-select with aria-pressed`);
   check((await page.getAttribute("#ob-business_description", "placeholder") || "").length > 0, `${name}: description placeholder follows the type`, await page.getAttribute("#ob-business_description", "placeholder"));
+  check(await page.getAttribute("#ob-business_description", "placeholder") === FX.suggestions.descriptions.automotive, `${name}: the placeholder is the server's description suggestion for automotive (fixture)`, await page.getAttribute("#ob-business_description", "placeholder"));
   await page.fill("#ob-business_description", ANSWERS.about.business_description);
   await pick("business_stage", ANSWERS.about.business_stage);
   await pick("team_size", ANSWERS.about.team_size);
@@ -214,24 +218,35 @@ for (const [name, vp] of VIEWPORTS) {
   await shotFrame("offer");
   check(await focused() === "h1#obtitle", `${name}: focus moves to the step title after Continue`, await focused());
   const under = await underLine("after Continue from About");
-  check(under === UNDER_ABOUT, `${name}: the line is the schema's understanding for the type (one string, capped at 140)`, under);
+  check(under === NS.understanding.about, `${name}: the line is the server's understanding for About (fixture northside, one string, capped at 140)`, { got: under, want: NS.understanding.about });
   check(await page.evaluate(() => document.querySelector(".obprog i").style.width) === `${Math.round(100 / 7)}%`, `${name}: progress bar ${Math.round(100 / 7)}% wide on step 2`);
 
   // ---- Offer: services editor with per-type examples ----
   const ex = await page.locator("[data-ex]").allTextContents();
   check(ex.length === 8 && ex.every((t) => /·\s*\$\d+/.test(t)), `${name}: eight example services for the type with "$" prices`, ex);
-  await page.click("[data-ex] >> nth=0"); await page.click("[data-ex] >> nth=2");
+  const exWant = FX.suggestions.services.automotive.map((s) => `${s.name} · $${s.price}`);
+  check(ex.map(norm).join("|") === exWant.join("|"), `${name}: the example services are the server's suggestions for automotive (fixture)`, { got: ex.map(norm), want: exWant });
+  // The set's two services are examples 1 and 5; the tire swap's example price (60) is changed to the set's 85.
+  const exIdx = ANSWERS.offer.services.map((s) => FX.suggestions.services.automotive.findIndex((x) => x.name === s.name));
+  check(exIdx.every((i) => i >= 0), `${name}: the set's services are among the example chips`, exIdx);
+  for (const i of exIdx) await page.click(`[data-ex] >> nth=${i}`);
   const rows = await page.locator("[data-svced] .svcrow").count();
   check(rows >= 2, `${name}: picked examples become service rows`, rows);
-  await pick("pricing_model", ANSWERS.offer.pricing_model);
+  const rowVals = await page.locator("[data-svced] .svcrow").evaluateAll((els) => els.map((el) => [el.querySelector("[data-sn]").value, el.querySelector("[data-sp]").value, el.querySelector("[data-sd]").value]));
+  check(rowVals[0][0] === ANSWERS.offer.services[0].name && rowVals[0][1] === "60" && rowVals[0][2] === "45" && rowVals[1][0] === ANSWERS.offer.services[1].name && rowVals[1][1] === "120" && rowVals[1][2] === "60", `${name}: the rows carry the examples' names, prices and minutes`, rowVals);
+  await page.fill('[data-svced] .svcrow[data-i="0"] [data-sp]', String(ANSWERS.offer.services[0].price));
+  // Hourly first (the rate reveals), then the set's flat pricing (it hides again and no rate is sent).
+  await pick("pricing_model", "hourly");
   check(await page.locator('[data-q="hourly_rate"]').isVisible(), `${name}: hourly rate reveals for hourly pricing`);
   check(norm(await page.locator('[data-q="hourly_rate"] label.fld').textContent()) === SEC.offer.questions.find((q) => q.key === "hourly_rate").question, `${name}: hourly rate question text`);
-  await page.fill("#ob-hourly_rate", String(ANSWERS.offer.hourly_rate));
+  await pick("pricing_model", ANSWERS.offer.pricing_model);
+  check(await page.locator('[data-q="hourly_rate"]').isHidden(), `${name}: hourly rate hides again for flat pricing`);
   await pick("quotes_first", String(ANSWERS.offer.quotes_first));
   await shotFrame("offer-filled");
   await page.click("#obnext"); await page.waitForTimeout(250);
   await expectSection("customers", "Customers");
-  await underLine("after Continue from What you offer");
+  const underOffer = await underLine("after Continue from What you offer");
+  check(underOffer === NS.understanding.offer, `${name}: the line is the server's understanding for What you offer (fixture northside)`, { got: underOffer, want: NS.understanding.offer });
   await shotFrame("customers");
 
   // ---- Skip / Back ----
@@ -248,19 +263,28 @@ for (const [name, vp] of VIEWPORTS) {
   await pick("typical_job_length", C.typical_job_length); await pick("repeat_business", C.repeat_business);
   await page.click("#obnext"); await page.waitForTimeout(250);
   await expectSection("week", "Your week");
-  await underLine("after Continue from Customers");
+  const underCust = await underLine("after Continue from Customers");
+  check(underCust === NS.understanding.customers, `${name}: the line is the server's understanding for Customers (fixture northside)`, { got: underCust, want: NS.understanding.customers });
+  // The set's week is the editor's default (Mon–Fri 8–5, Sat/Sun closed): assert it, leave it.
+  const hoursNow = await page.locator("[data-hrsed] .hourrow").evaluateAll((els) => Object.fromEntries(els.map((el) => [el.dataset.hday, el.querySelector("[data-hon]").checked ? { open: el.querySelector("[data-hopen]").value, close: el.querySelector("[data-hclose]").value } : null])));
+  check(JSON.stringify(hoursNow) === JSON.stringify(ANSWERS.week.business_hours), `${name}: the default week equals the set's business_hours`, hoursNow);
   await pick("after_hours", ANSWERS.week.after_hours); await pick("booking_lead", ANSWERS.week.booking_lead);
   await page.click("#obnext"); await page.waitForTimeout(250);
   await expectSection("money", "Getting paid");
-  await underLine("after Continue from Your week");
+  const underWeek = await underLine("after Continue from Your week");
+  check(underWeek === NS.understanding.week, `${name}: the line is the server's understanding for Your week (fixture northside)`, { got: underWeek, want: NS.understanding.week });
   await pick("payment_methods", ...ANSWERS.money.payment_methods); await pick("payment_terms_days", String(ANSWERS.money.payment_terms_days));
-  await pick("deposit_type", ANSWERS.money.deposit.type);
+  // Percent first (the value reveals), then the set's "no deposit" (it hides again, value dropped).
+  await pick("deposit_type", "percent");
   check(await page.locator('[data-q="deposit_value"]').isVisible(), `${name}: deposit value reveals for a percent deposit`);
-  await page.fill("#ob-deposit_value", String(ANSWERS.money.deposit.value));
+  await page.fill("#ob-deposit_value", "25");
   await shotFrame("money-deposit");
+  await pick("deposit_type", ANSWERS.money.deposit.type);
+  check(await page.locator('[data-q="deposit_value"]').isHidden(), `${name}: deposit value hides again for no deposit`);
   await page.click("#obnext"); await page.waitForTimeout(250);
   await expectSection("team", "Your team and tools");
-  await underLine("after Continue from Getting paid");
+  const underMoney = await underLine("after Continue from Getting paid");
+  check(underMoney === NS.understanding.money, `${name}: the line is the server's understanding for Getting paid (fixture northside)`, { got: underMoney, want: NS.understanding.money });
 
   // ---- Finish later → banner with real counts → hide → Finish setup resumes ----
   await page.click("#oblater"); await page.waitForTimeout(300);
@@ -274,12 +298,13 @@ for (const [name, vp] of VIEWPORTS) {
   check(knows.startsWith(SH.knows_title.toUpperCase()) && await page.locator(".gs-home .panel.obknows").count() === 1, `${name}: Later shows the "${SH.knows_title}" card`, knows);
   const knowsBrief = await briefText(".gs-home");
   const knowsWant = expectBrief("about", "offer", "customers", "week", "money");
-  check(knowsBrief === knowsWant && !knows.includes(SH.knows_empty), `${name}: the card shows the owner brief of what was answered so far (= mock brief() for those answers)`, { got: knowsBrief, want: knowsWant });
+  check(knowsBrief === knowsWant && !knows.includes(SH.knows_empty), `${name}: the card shows the owner brief of what was answered so far (= the port's brief for those answers)`, { got: knowsBrief, want: knowsWant });
+  check(knowsBrief.startsWith(NS.brief.split("\n\n").slice(0, 6).join("\n\n")) && !/Your team|Ledger will sound|Your rules/.test(knowsBrief), `${name}: the card holds the fixture brief's first six groups and nothing from the unanswered sections`, knowsBrief);
   check(await T("#knowfinish") === SH.finish_setup && await T("#knowupdate") === SH.update, `${name}: card buttons "${SH.finish_setup}" + "${SH.update}"`);
   await shotFrame("knows");
   await page.click("#knowupdate"); await page.waitForTimeout(250);
   await expectSection("about", "Update answers reopens About");
-  check(await page.locator('[data-q="business_type"] .chip[aria-pressed="true"]').count() === 1 && await page.inputValue("#ob-business_description") === "Tire shop with two bays", `${name}: reopened About still holds the answers`);
+  check(await page.locator('[data-q="business_type"] .chip[aria-pressed="true"]').count() === 1 && await page.inputValue("#ob-business_description") === ANSWERS.about.business_description, `${name}: reopened About still holds the answers`);
   await page.click("#oblater"); await page.waitForTimeout(250);
   await page.click("#biztypehide"); await page.waitForTimeout(250);
   await page.click("#knowfinish"); await page.waitForTimeout(250);
@@ -290,6 +315,7 @@ for (const [name, vp] of VIEWPORTS) {
   await expectSection("team", "Resume from the banner");
   await underCleared("after Resume");
   await pick("wants_front_desk", String(ANSWERS.team.wants_front_desk));
+  await pick("uses_quickbooks", String(ANSWERS.team.uses_quickbooks)); await pick("uses_google_calendar", String(ANSWERS.team.uses_google_calendar));
 
   // ---- Keyboard only: pick a chip and continue with Tab / Space / Enter ----
   await page.focus(`[data-q="team_roles"] .chip[data-v="${ANSWERS.team.team_roles[0]}"]`);
@@ -301,13 +327,18 @@ for (const [name, vp] of VIEWPORTS) {
   await page.keyboard.press("Enter"); await page.waitForTimeout(250);
   await expectSection("ledger", "How Ledger should work for you (keyboard)");
   check(await focused() === "h1#obtitle", `${name}: focus on the title after keyboard Continue`, await focused());
-  await underLine("after keyboard Continue from Your team and tools");
+  const underTeam = await underLine("after keyboard Continue from Your team and tools");
+  check(underTeam === NS.understanding.team, `${name}: the line is the server's understanding for Your team and tools (fixture northside)`, { got: underTeam, want: NS.understanding.team });
   const rex = await page.locator("[data-rex]").allTextContents();
   check(rex.length === 3, `${name}: three rule examples for the type`, rex);
+  check(rex.map(norm).join("|") === FX.suggestions.rules.automotive.join("|"), `${name}: the rule examples are the server's suggestions for automotive (fixture)`, rex);
   await page.click("[data-rex] >> nth=0");
   check((await page.locator("[data-rulesbox] input").evaluateAll((els) => els.map((e) => e.value))).includes(norm(rex[0])), `${name}: picked rule example becomes a rule row`, await page.locator("[data-rulesbox] input").evaluateAll((els) => els.map((e) => e.value)));
-  check(norm(rex[0]) === ANSWERS.ledger.rules[0], `${name}: the first rule example is the fixed answer set's rule`, rex[0]);
+  // The set's rule is the owner's own words, not an example: type it over the picked one.
+  await page.fill('[data-rulesbox] [data-rule="0"]', ANSWERS.ledger.rules[0]);
+  check((await page.locator("[data-rulesbox] input").evaluateAll((els) => els.map((e) => e.value).filter(Boolean))).join("|") === ANSWERS.ledger.rules.join("|"), `${name}: the rule row holds the set's rule`, ANSWERS.ledger.rules);
   await pick("ai_tone", ANSWERS.ledger.ai_tone); await pick("goals", ...ANSWERS.ledger.goals);
+  await pick("autonomy", ...Object.entries(ANSWERS.ledger.autonomy).filter(([, on]) => on).map(([k]) => k));
   await shotFrame("ledger-rule");
   await page.keyboard.press("Tab");
   await page.click("#obnext"); await page.waitForTimeout(300);
@@ -317,11 +348,14 @@ for (const [name, vp] of VIEWPORTS) {
   const rowsText = (await page.locator(".obrow").allInnerTexts()).map(norm);
   const expectRows = { about: SH.row_done, offer: SH.row_done, customers: SH.row_done, week: SH.row_done, money: SH.row_done, team: SH.row_done, ledger: SH.row_done };
   check(rowsText.length === 7 && ORDER.slice(0, 7).every((id, i) => rowsText[i].startsWith(SEC[id].title) && rowsText[i].includes(expectRows[id]) && rowsText[i].endsWith(SH.change)), `${name}: confirm lists seven rows with status + Change`, rowsText);
-  await underLine("after Continue from How Ledger should work for you (confirm screen)");
+  const underLedger = await underLine("after Continue from How Ledger should work for you (confirm screen)");
+  check(underLedger === NS.understanding.ledger, `${name}: the line is the server's understanding for How Ledger should work for you (fixture northside)`, { got: underLedger, want: NS.understanding.ledger });
   const recap = await briefText("#obqs");
-  const recapWant = expectBrief(...ORDER.slice(0, 7));
-  check(recap === recapWant, `${name}: confirm recap equals the owner brief the mock's brief() renders for the fixed answers`, { got: recap, want: recapWant });
-  check(await page.locator("#obqs .obbrief p").count() === 6 && recap.split("\n\n").length === 6, `${name}: recap is six paragraphs, one per group, rendered like obBriefHtml()`, await page.locator("#obqs .obbrief p").count());
+  const recapWant = NS.brief;
+  check(recap === recapWant, `${name}: confirm recap equals the fixture brief for northside word for word (what the server renders)`, { got: recap, want: recapWant });
+  check(expectBrief(...ORDER.slice(0, 7)) === NS.brief, `${name}: the port renders the fixture brief for the full set (the card expectation above is built the same way)`);
+  const groups = NS.brief.split("\n\n").length;
+  check(await page.locator("#obqs .obbrief p").count() === groups && recap.split("\n\n").length === groups, `${name}: recap is ${groups} paragraphs, one per group, rendered like obBriefHtml()`, await page.locator("#obqs .obbrief p").count());
   check(!/Northside|KMJ|Got it|I'll/.test(recap), `${name}: recap holds only answered facts in the owner voice (no name, no understanding lines)`);
   await shotFrame("confirm");
   await page.click('[data-change="week"]'); await page.waitForTimeout(250);

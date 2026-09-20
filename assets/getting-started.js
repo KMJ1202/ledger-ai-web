@@ -1,12 +1,15 @@
-/* Try-it preview for /features/getting-started/ (2026-09-19): the app's sign-up
-   onboarding (onboardingFlow() in app.js) in a phone frame with no account — same
-   markup, classes, question logic and wording (fetched from /assets/onboarding-copy.v1.json);
-   the server's save / summary / complete are an in-memory stand-in. Nothing typed leaves
-   the page; no storage; no analytics; no dependencies. */
+/* Try-it preview for /features/getting-started/ (2026-09-19).
+   The app's sign-up onboarding (onboardingFlow() in app.js) in a phone frame
+   with no account: same markup, classes, question logic and wording (fetched
+   from /assets/onboarding-copy.v1.json); the server's save / summary / complete
+   are an in-memory stand-in whose every line of text comes from the port of the
+   server modules in /assets/onboarding-text.js. Nothing typed leaves the page;
+   no storage; no analytics; no dependencies. */
 (() => {
 "use strict";
 const screen = document.querySelector("[data-gs-root]");
 if (!screen) return;
+// Drawn at the app's 390×847 viewport, scaled into the screen like the clips.
 const mount = document.createElement("div"); mount.className = "gs-stage"; mount.append(...screen.childNodes); screen.append(mount);
 const fit = () => screen.style.setProperty("--gs-scale", screen.clientWidth / 390);
 fit(); new ResizeObserver(fit).observe(screen);
@@ -14,19 +17,40 @@ const esc = (s) => { const d = document.createElement("div"); d.textContent = s 
 const obFill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
 const currency = "$";
 
-// app.js has a placeholder per type, but the server's suggested description wins once a type is picked.
-const placeholderForType = () => "What you do, in one line";
+// ---- Tables from app.js (values only; every label comes from the wording file) ----
+const BUSINESS_TYPES = [
+  ["automotive", "e.g. Mobile tire shop in south Calgary — passenger and light truck"],
+  ["trades", "e.g. Residential HVAC — furnaces, AC and hot water tanks, 24-hour service"],
+  ["beauty", "e.g. Hair salon — colour, cuts and extensions, four stylists"],
+  ["health", "e.g. Physiotherapy clinic — sports injuries and post-surgery rehab"],
+  ["home", "e.g. Residential cleaning — weekly and move-out cleans, Calgary NW"],
+  ["professional", "e.g. Bookkeeping for small trades businesses — monthly packages"],
+  ["fitness", "e.g. Personal training studio — one-on-one and small group"],
+  ["pets", "e.g. Dog grooming — full grooms, baths and nail trims, by appointment"],
+  ["other", "What you do, in one line"],
+];
+const placeholderForType = (t) => (BUSINESS_TYPES.find(([v]) => v === t) || BUSINESS_TYPES[BUSINESS_TYPES.length - 1])[1];
 const REGIONS = [["", "Choose…"], ["AB", "Alberta"], ["BC", "British Columbia"], ["MB", "Manitoba"], ["NB", "New Brunswick"], ["NL", "Newfoundland and Labrador"],
   ["NS", "Nova Scotia"], ["NT", "Northwest Territories"], ["NU", "Nunavut"], ["ON", "Ontario"], ["PE", "Prince Edward Island"], ["QC", "Quebec"], ["SK", "Saskatchewan"], ["YT", "Yukon"], ["US", "United States"]];
+const SHOP_TZ_FALLBACK = ["America/St_Johns", "America/Halifax", "America/Toronto", "America/Winnipeg", "America/Regina", "America/Edmonton", "America/Vancouver", "America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu", "UTC"];
 const HOUR_DAYS = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]];
 const OB_STEPS = 7;
+// The question logic that is not wording (OB_Q in app.js): reveals, single vs multi,
+// limits and how a chip value is typed on the wire.
 const OB_META = {
-  business_description: { max: 240 }, quotes_first: { bool: true }, intake_channels: { multi: true }, payment_methods: { multi: true }, payment_terms_days: { numeric: true },
+  business_description: { max: 240 },
   hourly_rate: { when: (a) => a.pricing_model === "hourly" || a.pricing_model === "mix" },
+  quotes_first: { bool: true },
+  intake_channels: { multi: true },
   service_area: { max: 200, when: (a) => a.job_location === "customer_place" || a.job_location === "both" },
+  payment_methods: { multi: true },
+  payment_terms_days: { numeric: true },
   team_roles: { multi: true, when: (a) => a.team_size !== "solo" },
-  wants_front_desk: { bool: true }, uses_quickbooks: { bool: true }, uses_google_calendar: { bool: true }, goals: { multi: true, max: 3 }, autonomy: { multi: true },
+  wants_front_desk: { bool: true }, uses_quickbooks: { bool: true }, uses_google_calendar: { bool: true },
+  goals: { multi: true, max: 3 },
+  autonomy: { multi: true },
 };
+// Filled from the wording file on load (OB_SCREEN: each step's question keys, in order).
 let OB_ORDER = [], OB_TITLE = {}, OB_STEP = {}, OB_SCREEN = {}, OB_Q = {}, OB_COPY = {};
 function adoptWording(w) {
   OB_ORDER = w.sections.map((s) => s.id);
@@ -44,6 +68,7 @@ const blankService = () => ({ name: "", price: "", duration_minutes: "" });
 function shopTimezoneOptions(current) {
   let zones = [];
   try { zones = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : []; } catch { zones = []; }
+  if (!zones.length) zones = SHOP_TZ_FALLBACK;
   const device = obDeviceZone();
   const all = [...new Set([current || "", device, ...zones].filter(Boolean))];
   const label = (z) => {
@@ -61,6 +86,7 @@ function regionSelect(id, current) {
   return `<select id="${esc(id)}" class="cmpinput">${REGIONS.map(([v, l]) => `<option value="${v}"${(current || "") === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
 }
 
+// ---- Shared business-profile editors (app.js) ----
 function chipsField(key, q, picked) {
   const val = picked[key];
   const on = (v) => q.multi ? (Array.isArray(val) && val.includes(v)) : val === v;
@@ -167,14 +193,21 @@ function hoursEditor(initial) {
   };
 }
 
-const obVisibleQuestions = (section, a = {}) => (OB_SCREEN[section] || []).filter((k) => !OB_Q[k].when || OB_Q[k].when(a));
+// ---- Pure helpers (app.js) ----
+function obVisibleQuestions(section, answers) {
+  const a = answers || {};
+  return (OB_SCREEN[section] || []).filter((k) => !OB_Q[k].when || OB_Q[k].when(a));
+}
 function obNextSection(current, serverNext) {
   if (serverNext && OB_ORDER.includes(serverNext)) return serverNext;
   const i = OB_ORDER.indexOf(current);
   return OB_ORDER[Math.min(i + 1, OB_ORDER.length - 1)];
 }
 const obCanSkip = (section) => OB_ORDER.includes(section) && section !== "about" && section !== "confirm";
-const obPrevSection = (current) => OB_ORDER[OB_ORDER.indexOf(current) - 1] || null;
+function obPrevSection(current) {
+  const i = OB_ORDER.indexOf(current);
+  return i > 0 ? OB_ORDER[i - 1] : null;
+}
 function obValues(section, picked, editors = {}) {
   const v = {};
   for (const k of OB_SCREEN[section] || []) {
@@ -213,7 +246,7 @@ function obPayload(section, values, prev, touched, visible) {
   for (const k of OB_SCREEN[section] || []) {
     const v = values[k];
     if (!visible.includes(k)) { if (had(k)) out[k] = null; continue; }
-    if (k === "services") { if (has(v)) out.services = v; continue; }
+    if (k === "services") { if (Array.isArray(v) && v.length) out.services = v; continue; }
     if (k === "business_hours") { if (v !== undefined) out.business_hours = v; continue; }
     if (k === "timezone" || k === "region_code") { if (v && v !== (prev?.[k] || "")) out[k] = v; continue; }
     if (v === undefined || v === "" || (Array.isArray(v) && !v.length)) { if (seen.has(k) && had(k)) out[k] = null; continue; }
@@ -238,10 +271,14 @@ function obSeed(section, answers) {
   return p;
 }
 const obStepLabel = (section) => section === "confirm" ? OB_COPY.confirm_step : OB_STEP[section];
-const obProgressPct = (section) => section === "confirm" ? 100 : Math.round((OB_ORDER.indexOf(section) / OB_STEPS) * 100);
+function obProgressPct(section) {
+  const i = OB_ORDER.indexOf(section);
+  return section === "confirm" ? 100 : Math.round((i / OB_STEPS) * 100);
+}
 const obBriefHtml = (brief) => String(brief || "").split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean)
   .map((g) => `<p>${g.split("\n").map((l) => esc(l.trim())).filter(Boolean).join("<br>")}</p>`).join("");
 
+// ---- Screen markup (app.js) ----
 function obQuestionHtml(key, ctx) {
   const q = OB_Q[key], picked = ctx.picked, id = `ob-${key}`;
   const help = q.help ? `<p class="note qhelp">${esc(q.help)}</p>` : "";
@@ -299,38 +336,80 @@ function obConfirmHtml(summary, sections) {
     <div class="obrows">${rows}</div>`;
 }
 
+// ---- The server, in memory: workspace-profile's onboarding actions (onboarding-app-CONTRACT.md)
+// run against a fresh workspace the way the foreman's oracle ran the real modules — the workspace
+// row as bootstrap leaves it, the price list, the onboarding row — with every line of text from
+// the port in /assets/onboarding-text.js (validateSection, understandingFor, the owner brief, the
+// setup plan, the applied list). Nothing here invents wording. ----
+const T = globalThis.LedgerOnboardingText;
 const SRV = {
-  answers: {}, status: "not_started", current_section: "about", sections: [], svcSeq: 0,
-  reset() { this.answers = {}; this.status = "not_started"; this.current_section = "about"; this.svcSeq = 0;
-    this.sections = OB_ORDER.slice(0, 7).map((id) => ({ id, title: OB_TITLE[id], done: false, skipped: false })); },
-  snapshot() { return this.sections.map((s) => ({ ...s })); },
-  doneCount() { return this.sections.filter((s) => s.done).length; },
-  get() { return { status: this.status, current_section: this.current_section, done_count: this.doneCount(), total: OB_STEPS, sections: this.snapshot(), answers: { ...this.answers },
-    currency: "CAD", suggestions: { services: SUGGESTED_SERVICES, descriptions: SUGGESTED_DESCRIPTIONS, rules: SUGGESTED_RULES } }; },
+  ws: null, services: [], row: null, svcSeq: 0,
+  reset() {
+    // The example business. The recap never shows the name; the first message does.
+    this.ws = { name: "Northside Auto", currency_code: "CAD", ai_call_me: null, plan: null, phone_number: null, books_default_terms_days: 0, timezone: obDeviceZone() };
+    this.services = []; this.row = null; this.svcSeq = 0;
+  },
+  view() { return T.onboarding.answersOf(this.ws, this.services, this.row); },
+  // onboarding-get, plus the done_count / total the app's banner reads off the profile.
+  get() {
+    return { ...T.onboarding.onboardingSummary(this.row), schema_version: T.schema.SCHEMA_VERSION, currency: this.ws.currency_code,
+      sections: T.onboarding.sectionsOf(this.row), answers: this.view(), suggestions: T.suggestions,
+      started_at: this.row?.started_at ?? null, completed_at: this.row?.completed_at ?? null };
+  },
+  // onboarding-save. A validation failure is the server's 400: its message is what the app shows.
   save(section, answers, skip) {
-    const sent = Object.keys(answers).length;
-    for (const [k, v] of Object.entries(answers)) {
-      if (v === null) { delete this.answers[k]; continue; }
-      if (k === "remove_service_ids") continue;
-      if (k === "services") { this.answers.services = v.map((s) => ({ ...s, id: s.id || `svc-${++this.svcSeq}` })); continue; }
-      this.answers[k] = v;
+    const sent = answers && typeof answers === "object" && !Array.isArray(answers) ? answers : {};
+    // team_roles is empty for a one-person business; the size may arrive in the same save.
+    const teamSize = typeof sent.team_size === "string" ? sent.team_size : (this.ws.team_size ?? null);
+    const v = T.schema.validateSection(section, sent, { team_size: teamSize });
+    if (!v.ok) { const e = new Error(v.error); e.status = 400; throw e; }
+    const { profile, answers: jsonAnswers } = T.schema.splitByStore(v.answers);
+    // applyShopProfile, mirrored: columns land on the workspace, services on the price list, terms
+    // on the books column. Ids count up like the oracle's (svc_1, svc_2, …) and are never reused.
+    for (const [k, val] of Object.entries(profile)) {
+      if (k === "services") {
+        for (const s of val) {
+          const existing = s.id ? this.services.find((x) => x.id === s.id) : null;
+          if (existing) Object.assign(existing, { name: s.name, price: s.price, duration_minutes: s.duration_minutes ?? null });
+          else this.services.push({ id: `svc_${++this.svcSeq}`, name: s.name, price: s.price, duration_minutes: s.duration_minutes ?? null });
+        }
+      } else if (k === "remove_service_ids") this.services = this.services.filter((s) => !val.includes(s.id));
+      else if (k === "payment_terms_days") this.ws.books_default_terms_days = val;
+      else this.ws[k] = val;
     }
-    const s = this.sections.find((x) => x.id === section);
-    if (s) { if (skip && !sent) { s.skipped = true; s.done = false; } else { s.done = true; s.skipped = false; } }
-    this.status = "in_progress";
-    const next = obNextSection(section);
-    this.current_section = next;
-    return { saved: true, section, sections: this.snapshot(), next_section: next, status: this.status, understanding: skip && !sent ? "" : understandingFor(section, answers) };
+    const now = new Date().toISOString();
+    const answered = Object.keys(v.answers).length > 0;
+    const next = T.schema.nextSection(section);
+    this.row = { ...T.onboarding.rowAfterSave(this.row, section, next, answered, skip, now), answers: T.onboarding.mergeAnswers(this.row?.answers, jsonAnswers) };
+    const understanding = answered ? T.understanding(section, v.answers, { currency_code: this.ws.currency_code }) : T.understanding(section, {}, {});
+    return { saved: true, status: this.row.status, section, next_section: next, understanding, sections: T.onboarding.sectionsOf(this.row) };
   },
-  summary() { return { brief: ownerBrief(this.answers) }; },
+  // onboarding-summary: the recap (owner voice), the first message and the plan, from the answers so far.
+  summary() {
+    const view = this.view();
+    return { status: T.onboarding.statusOf(this.row), brief: T.brief(view, this.ws), first_message: T.firstMessage(view, this.ws), setup_plan: T.setupPlan(view, this.ws) };
+  },
+  // onboarding-complete: needs a type (409), then the same three plus what was applied.
   complete() {
-    if (!this.answers.business_type) { const e = new Error(OB_COPY.note_409); e.status = 409; throw e; }
-    this.status = "complete"; this.current_section = "confirm";
-    return { status: "complete" };
+    if (!this.ws.business_type) { const e = new Error(OB_COPY.note_409); e.status = 409; throw e; }
+    const view = this.view();
+    const out = { status: "complete", brief: T.brief(view, this.ws), first_message: T.firstMessage(view, this.ws), setup_plan: T.setupPlan(view, this.ws), applied: T.applied(view, this.ws) };
+    const now = new Date().toISOString();
+    this.row = { schema_version: T.schema.SCHEMA_VERSION, status: "complete", current_section: T.schema.CONFIRM_SECTION,
+      sections_done: this.row?.sections_done ?? [], sections_skipped: this.row?.sections_skipped ?? [], answers: this.row?.answers ?? {},
+      started_at: this.row?.started_at ?? now, completed_at: now, updated_at: now };
+    return out;
   },
-  skipAll() { if (this.status !== "complete" && this.status !== "not_started") this.status = "skipped"; },
+  // onboarding-skip ("Finish later"): every answer kept, status skipped, cursor where it was.
+  skipAll() {
+    const now = new Date().toISOString();
+    this.row = { schema_version: T.schema.SCHEMA_VERSION, status: "skipped", current_section: T.onboarding.currentSectionOf(this.row),
+      sections_done: this.row?.sections_done ?? [], sections_skipped: this.row?.sections_skipped ?? [], answers: this.row?.answers ?? {},
+      started_at: this.row?.started_at ?? now, updated_at: now };
+    return { status: "skipped" };
+  },
 };
-
+// Back/forward keep what was typed; "Start over" builds a new instance. ----
 function onboardingFlow(opts = {}) {
   mount.querySelector("#obflow")?.remove();
   const F = { get: null, answers: {}, picked: {}, touched: {}, editors: {}, section: null, status: "not_started", suggestions: {}, sections: null, saving: false, summary: null };
@@ -377,6 +456,8 @@ function onboardingFlow(opts = {}) {
     if (f) { try { f.focus({ preventScroll: true }); } catch {} }
     try { (f || box).scrollIntoView({ block: coarse && f ? "center" : "nearest", behavior: motion() }); } catch {}
   };
+  // Focus moves to the step title on each step change (CONTRACT §4), not the first
+  // control — but not on page load, where nobody asked for the preview yet.
   let quiet = !!opts.quiet;
   const focusTitle = () => { if (quiet) { quiet = false; return; } try { q("#obtitle").focus({ preventScroll: true }); } catch {} };
   const applyVisibility = (section) => {
@@ -392,6 +473,7 @@ function onboardingFlow(opts = {}) {
     return shown;
   };
 
+  // ---- one screen ----
   function show(section, extra = {}) {
     F.section = section;
     const i = OB_ORDER.indexOf(section);
@@ -474,6 +556,7 @@ function onboardingFlow(opts = {}) {
     });
   }
 
+  // ---- save & move ----
   function next() {
     const section = F.section;
     if (F.saving) return;
@@ -491,7 +574,14 @@ function onboardingFlow(opts = {}) {
   }
   function save(section, answers, skipping) {
     F.saving = true; busy(true); note("");
-    const r = SRV.save(section, answers, skipping);
+    let r;
+    try { r = SRV.save(section, answers, skipping); }
+    catch (e) {
+      // The server's 400 (validateSection): its sentence, and Retry, as in app.js.
+      F.saving = false; busy(false, OB_COPY.continue);
+      note(e.message || OB_COPY.note_retry, { label: OB_COPY.retry, run: () => save(section, answers, skipping) });
+      return;
+    }
     F.saving = false;
     for (const [k, v] of Object.entries(answers)) { if (v === null) delete F.answers[k]; else if (k !== "remove_service_ids") F.answers[k] = v; }
     if (r.sections) F.sections = r.sections;
@@ -501,6 +591,7 @@ function onboardingFlow(opts = {}) {
     if (section === "offer" && answers.services) { F.answers.services = SRV.get().answers.services; if (F.editors.offer) F.editors.offer.services = null; }
     show(obNextSection(section, r.next_section), { under: skipping ? "" : String(r.understanding || "").trim() });
   }
+  // ---- confirm & finish ----
   function showConfirm() {
     q("#obqs").innerHTML = `<p class="note" role="status">${esc(OB_COPY.summary_loading)}</p>`;
     q("#obnext").disabled = true;
@@ -523,12 +614,14 @@ function onboardingFlow(opts = {}) {
     close();
     if (opts.onDone) opts.onDone("complete");
   }
+  // "Finish later": keep every answer, back to Home (the banner).
   function later() {
     if (F.saving) return;
     close();
-    SRV.skipAll();
+    if (F.status !== "complete" && F.status !== "not_started") SRV.skipAll();
     if (opts.onDone) opts.onDone(null);
   }
+  // ---- wiring ----
   q("#obnext").onclick = () => next();
   q("#obskip").onclick = () => skip();
   q("#obback").onclick = () => { const p = obPrevSection(F.section); if (p && !F.saving) show(p); };
@@ -538,6 +631,7 @@ function onboardingFlow(opts = {}) {
     const t = e.target;
     if (t.tagName === "INPUT" && !["checkbox", "radio", "time"].includes(t.type)) { e.preventDefault(); next(); }
   });
+  // ---- load ----
   F.get = SRV.get();
   F.answers = F.get.answers || {};
   F.status = F.get.status;
@@ -548,6 +642,10 @@ function onboardingFlow(opts = {}) {
   show(start);
 }
 
+// ---- Outside the flow: Home with the app's resume banner (drawBusinessTypeBanner) after
+// "Finish later"; once hidden, Settings → Your business's "What Ledger knows" card
+// (whatLedgerKnows): brief so far or knows_empty, "Finish setup" while part-way, and
+// "Update answers" / "Set up Ledger". ----
 function homeScreen() {
   const ob = SRV.get();
   const home = document.createElement("div");
@@ -579,6 +677,7 @@ function homeScreen() {
   mount.appendChild(home);
   requestAnimationFrame(() => { try { home.querySelector("button")?.focus({ preventScroll: true }); } catch {} });
 }
+// After "Looks right — finish" (CONTRACT §4).
 function finishPanel() {
   const p = document.createElement("div");
   p.className = "gs-panel";
@@ -592,6 +691,7 @@ function finishPanel() {
 }
 const afterFlow = (r) => { if (r === "complete") finishPanel(); else homeScreen(); };
 
+// ---- Boot: the one network request the preview makes ----
 fetch("/assets/onboarding-copy.v1.json", { cache: "no-cache" })
   .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
   .then((w) => {
@@ -603,190 +703,4 @@ fetch("/assets/onboarding-copy.v1.json", { cache: "no-cache" })
   })
   .catch(() => { mount.innerHTML = `<p class="note err gs-fail" role="alert">Couldn't load the preview. Refresh to try again.</p>`; });
 
-const svc = (name, price, duration_minutes) => ({ name, price, duration_minutes });
-const mapValues = (o, f) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, f(v)]));
-const SUGGESTED_SERVICES = mapValues({
-  automotive: [["Oil change", 80, 45], ["Seasonal tire swap", 60, 45], ["Mount and balance (4 tires)", 120, 60], ["Flat repair", 35, 30], ["Brake pads and rotors (per axle)", 350, 120], ["Wheel alignment", 120, 60], ["Battery replacement", 190, 30], ["Full detail", 200, 180]],
-  trades: [["Service call and diagnosis", 130, 60], ["Furnace tune-up", 150, 90], ["AC tune-up", 150, 90], ["Hot water tank replacement", 1850, 240], ["Drain cleaning", 200, 90], ["Thermostat install", 250, 60], ["After-hours emergency call", 250, 60]],
-  beauty: [["Haircut", 45, 45], ["Cut and blow-dry", 65, 60], ["Root colour", 95, 90], ["Full highlights", 165, 150], ["Balayage", 220, 180], ["Beard trim", 25, 20], ["Blow-dry", 40, 40], ["Gel manicure", 55, 60]],
-  health: [["Initial assessment", 120, 60], ["Follow-up visit", 85, 45], ["60-minute massage", 110, 60], ["90-minute massage", 150, 90], ["Adjustment", 65, 20], ["Extended visit", 130, 60]],
-  home: [["Standard clean", 160, 120], ["Deep clean", 280, 240], ["Move-out clean", 350, 300], ["Lawn cut", 45, 30], ["Spring yard clean-up", 220, 180], ["Gutter cleaning", 180, 90], ["Handyman hour", 85, 60], ["Exterior window cleaning", 150, 120]],
-  professional: [["Initial consultation", 150, 60], ["Hourly consulting", 175, 60], ["Monthly bookkeeping", 350, null], ["Personal tax return", 180, 60], ["Half-day photo session", 650, 240], ["Logo and brand package", 1200, null], ["Document review", 220, 90]],
-  fitness: [["Personal training session", 75, 60], ["30-minute session", 45, 30], ["10-session pack", 650, 60], ["Small group session", 30, 60], ["Nutrition consultation", 90, 45], ["Monthly membership", 120, null], ["Assessment and program", 110, 60]],
-  pets: [["Full groom (small dog)", 75, 90], ["Full groom (large dog)", 110, 150], ["Bath and brush", 45, 60], ["Nail trim", 18, 15], ["Teeth brushing add-on", 12, 10], ["30-minute dog walk", 25, 30], ["Overnight boarding", 55, null], ["Puppy training session", 80, 60]],
-  other: [["Consultation", 100, 60], ["Standard service", 150, 90], ["Hourly work", 85, 60], ["Small job", 75, 45], ["Large job", 450, 240], ["Follow-up visit", 60, 30]],
-}, (v) => v.map((s) => svc(...s)));
-const SUGGESTED_DESCRIPTIONS = {
-  automotive: "Tires, oil changes and brakes for cars and light trucks in <your town>",
-  trades: "Residential heating, cooling and hot water — repairs, installs and 24-hour service in <your town>",
-  beauty: "Cuts, colour and styling for women and men in <your town>",
-  health: "Physiotherapy and massage for sports injuries and everyday pain in <your town>",
-  home: "Weekly, deep and move-out cleaning for homes in <your town>",
-  professional: "Bookkeeping and tax for small businesses in <your town>, in plain English",
-  fitness: "One-on-one and small-group training in <your town>, for beginners and athletes",
-  pets: "Dog grooming, baths and nail trims by appointment in <your town>",
-  other: "What you do, who it is for and where, in one line",
-};
-const SUGGESTED_RULES = {
-  automotive: ["Tire installs need the vehicle here for at least an hour", "Quote parts and labour separately on every job", "No same-day bookings after 3 PM"],
-  trades: ["Every job starts with a written quote the customer approves", "Calls after 6 PM carry an after-hours fee", "Payment is due when the job is done, not later"],
-  beauty: ["Colour appointments need a patch test 48 hours before", "Cancellations under 24 hours are charged half the service", "New clients book a consultation before colour work"],
-  health: ["First visits are 60 minutes and need the intake form first", "Missed appointments without 24 hours notice are billed in full", "Direct billing to insurance is available on request"],
-  home: ["Recurring cleans get 10% off the standard price", "Pets stay in a separate room during the clean", "Cancellations need 48 hours notice"],
-  professional: ["Every engagement starts with a signed engagement letter", "Invoices are due in 15 days", "Work outside the retainer is billed by the hour"],
-  fitness: ["Sessions cancelled under 12 hours before are charged", "Packages expire 90 days after purchase", "New clients start with an assessment session"],
-  pets: ["Vaccination records are needed before the first visit", "Matted coats may need a shave-down at an extra charge", "Pickup is within one hour of the finish text"],
-  other: ["Every job gets a written quote before work starts", "Payment is due when the work is done", "Cancellations need 24 hours notice"],
-};
-// The schema's LABEL entries the understanding lines use (the rest served the server-voice brief only).
-const LABEL = {
-  intake_channels: { phone: "phone calls", text: "texts", online: "online bookings", walkin: "walk-ins", email: "email", social: "social media", referral: "referrals" },
-  payment_methods: { cash: "cash", card: "card", etransfer: "e-transfer", cheque: "cheque", financing: "financing", online: "online payment" },
-  team_roles: { field_crew: "field crew", front_desk: "a front desk", admin: "admin help", other_owners: "other owners" },
-  goals: { more_bookings: "more bookings", get_paid_faster: "get paid faster", fewer_missed_calls: "fewer missed calls", less_admin: "less admin", better_reviews: "better reviews", grow_team: "grow the team" },
-};
-const REGION_NAME = Object.fromEntries(REGIONS.filter(([v]) => v && v !== "US"));
-const gst = { name: "GST", rate: 0.05 }, hst = (rate) => ({ name: "HST", rate }), pst = (second_name, second_rate) => ({ ...gst, second_name, second_rate });
-const REGION_TAX = { AB: gst, NT: gst, NU: gst, YT: gst, BC: pst("PST", 0.07), SK: pst("PST", 0.06), MB: pst("RST", 0.07), QC: pst("QST", 0.09975), ON: hst(0.13), NB: hst(0.15), NL: hst(0.15), PE: hst(0.15), NS: hst(0.14) };
-const regionName = (code) => REGION_NAME[String(code ?? "").toUpperCase()] ?? String(code ?? "");
-const pct = (r) => `${Math.round(r * 10000) / 100}%`;
-const describeTax = (tax) => `${tax.name} ${pct(tax.rate)}${tax.second_name ? ` + ${tax.second_name} ${pct(tax.second_rate ?? 0)}` : ""}`;
-const money = (n) => `$${Number(n) % 1 ? Number(n).toFixed(2) : Number(n)}`;
-const joinWords = (items) => items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
-const labelList = (key, values) => joinWords(values.map((v) => LABEL[key]?.[v] ?? v));
-const UNDERSTANDING_MAX = 140;
-const has = (v) => Array.isArray(v) && v.length > 0;
-const UNDERSTANDING = {
-  business_type: {
-    automotive: "Got it — an automotive business. Vehicles are the unit of work, so bookings will ask which one.",
-    trades: "Got it — a trades business. Jobs at the customer's place, no vehicle questions.",
-    beauty: "Got it — beauty and personal care. Appointments for a named service, no vehicle questions.",
-    health: "Got it — a health and wellness practice. Appointments for a named service, discreet by default.",
-    home: "Got it — home and property services. Jobs at the customer's place, often recurring.",
-    professional: "Got it — professional services. Appointments, engagements and projects, billed flat or hourly.",
-    fitness: "Got it — fitness and coaching. Sessions, classes and memberships.",
-    pets: "Got it — pet care. Appointments for a named pet and service.",
-    other: "Got it — a service business. Jobs, appointments, customers and invoices, nothing assumed.",
-  },
-  business_stage: { starting: "Just getting started — I'll keep setup light and skip anything you don't need yet.", growing: "Growing — I'll point you at the steps that bring in more work.", established: "Well established — I'll fit around how you already run things." },
-  team_size: { solo: "Just you — I'll keep admin to a minimum.", small: "A team of 2–5 — I'll keep you in the loop on every job.", large: "A team of 6 or more — crews, dispatch and oversight are in play." },
-  region_code: (v) => { const tax = REGION_TAX[v]; return tax ? `${regionName(v)} — ${describeTax(tax)} is set as a starting point; review it before your first invoice.` : `${v} — no tax rate is set; add yours in Books settings before your first invoice.`; },
-  timezone: (v) => `Times are read in ${String(v).replace(/_/g, " ")} — hours, bookings and reminders all use it.`,
-  business_description: () => "Noted, in your words. I'll describe you to customers from this.",
-  services: (v) => { const n = Array.isArray(v) ? v.length : 0; return n ? `${n} service${n === 1 ? "" : "s"} saved — quotes, invoices and bookings use these names and prices.` : ""; },
-  pricing_model: (v, all) => {
-    const rate = typeof all.hourly_rate === "number" ? all.hourly_rate : null;
-    if (v === "hourly") return rate != null ? `Hourly plus parts at ${money(rate)}/h — your invoices will show hours × rate.` : "Hourly plus parts — your invoices will show hours × rate.";
-    if (v === "mix") return rate != null ? `A mix of flat and hourly at ${money(rate)}/h — I'll ask which when it's not obvious.` : "A mix of flat and hourly — I'll ask which when it's not obvious.";
-    return "Flat, per job — one price for the work, parts folded in or listed plainly.";
-  },
-  hourly_rate: (v, all) => all.pricing_model || typeof v !== "number" ? "" : `${money(v)}/h noted — hourly lines will use it.`,
-  quotes_first: (v) => v === true ? "You quote first — I'll draft the quote before a job is booked as work." : v === false ? "No quote step — jobs go straight to booking and invoice." : "",
-  job_location: { customer_place: "Got it — jobs happen at the customer's place, so bookings will ask for an address.", my_place: "Got it — customers come to you, so bookings won't ask for an address.", both: "Got it — some jobs at your place, some at theirs; bookings will ask where.", remote: "Got it — the work is remote, so bookings won't ask for an address." },
-  customer_mix: { individuals: "Mostly individuals — plain invoices, payment links and quick turnarounds.", businesses: "Mostly businesses — PO numbers, terms and statements are in play.", both: "Individuals and businesses — I'll read which one each job is." },
-  intake_channels: (v) => has(v) ? `Work comes in by ${labelList("intake_channels", v)} — I'll watch those first.` : "",
-  service_area: () => "Service area noted — I'll say where you work when customers ask.",
-  typical_job_length: { under_1h: "Quick jobs, under an hour — bookings will be short slots.", "1_3h": "Jobs run 1–3 hours — bookings will leave room for that.", half_day: "Half-day jobs — I'll book each one as one block.", full_day: "Full-day jobs — one job takes the day.", multi_day: "Multi-day jobs — I'll treat each one as a project, not a slot." },
-  repeat_business: { one_off: "Mostly one-off jobs — every customer is a fresh start.", recurring: "Mostly repeat customers — I'll suggest rebooking and reminders.", both: "One-off and repeat — I'll notice who comes back." },
-  business_hours: (v) => v ? "Hours saved — bookings, your booking page and your phone line follow them." : "Hours cleared — bookings stay open until you set them.",
-  after_hours: { voicemail: "After hours, calls go to voicemail — I'll pick them up in the morning.", text_back: "After hours, Ledger can text back so nobody waits until morning.", emergency: "Emergencies get through after hours — I'll flag those first.", closed: "Closed after hours — nothing gets booked or answered until you're open." },
-  booking_lead: { same_day: "Same-day bookings are fine — I'll offer today's open slots.", next_day: "Bookings need a day's notice — I'll offer tomorrow onward.", two_plus_days: "Bookings need two days or more — I'll offer from the day after tomorrow." },
-  payment_methods: (v) => has(v) ? `You take ${labelList("payment_methods", v)} — I'll say so on invoices.` : "",
-  payment_terms_days: (v) => Number(v) === 0 ? "Due on receipt — invoices will say so." : `Due in ${v} days — invoices will show the due date.`,
-  deposit: (v) => {
-    const d = v;
-    if (!d || d.type === "none") return d ? "No deposit — jobs book without one." : "";
-    if (d.type === "percent" && d.value != null) return `A ${d.value}% deposit — I'll mention it on quotes and bookings.`;
-    if (d.type === "fixed" && d.value != null) return `A ${money(d.value)} deposit — I'll mention it on quotes and bookings.`;
-    return "A deposit up front — I'll mention it on quotes and bookings.";
-  },
-  team_roles: (v) => has(v) ? `Your team: ${labelList("team_roles", v)} — I'll route work with that in mind.` : "",
-  wants_front_desk: (v) => v === true ? "Front Desk is on your list — it needs a Ledger number, and the setup plan shows the step." : v === false ? "No Front Desk for now — you can switch it on later." : "",
-  uses_quickbooks: (v) => v === true ? "QuickBooks — connect it from the setup plan and your books stay there." : v === false ? "Built-in books — invoices, estimates and payment links are ready." : "",
-  uses_google_calendar: (v) => v === true ? "Google Calendar — connect it and appointments show up there too." : v === false ? "Ledger's own calendar it is — nothing to connect." : "",
-  rules: (v) => has(v) ? "Noted, word for word. I'll follow these every time." : "",
-  ai_tone: { friendly: "Friendly it is — warm and plain, like a good front desk.", professional: "Professional — polite, precise, no chit-chat.", brief: "Brief — short answers, no filler." },
-  goals: (v) => has(v) ? `Your goals: ${labelList("goals", v)} — the setup plan starts there.` : "",
-  autonomy: (v) => v ? "Preferences saved — nothing runs on its own until you switch it on." : "",
-};
-const UNDERSTANDING_PRIORITY = {
-  about: ["business_type", "business_stage", "region_code", "team_size", "business_description", "timezone"],
-  offer: ["pricing_model", "services", "quotes_first", "hourly_rate"],
-  customers: ["job_location", "intake_channels", "customer_mix", "typical_job_length", "repeat_business", "service_area"],
-  week: ["after_hours", "business_hours", "booking_lead"],
-  money: ["deposit", "payment_terms_days", "payment_methods"],
-  team: ["wants_front_desk", "uses_quickbooks", "team_roles", "uses_google_calendar"],
-  ledger: ["rules", "goals", "ai_tone", "autonomy"],
-};
-const UNDERSTANDING_SKIPPED = "Skipped for now — you can come back to it any time from Settings.";
-const UNDERSTANDING_SAVED = "Saved.";
-function understandingLineFor(key, value, all) {
-  const entry = UNDERSTANDING[key];
-  if (!entry || value == null) return "";
-  return typeof entry === "function" ? entry(value, all) : entry[String(value)] ?? "";
-}
-function understandingFor(section, answers) {
-  const keys = UNDERSTANDING_PRIORITY[section] ?? [];
-  const lines = keys.filter((k) => k in answers).map((k) => understandingLineFor(k, answers[k], answers)).filter(Boolean);
-  if (!lines.length) return Object.keys(answers).length ? UNDERSTANDING_SAVED : UNDERSTANDING_SKIPPED;
-  let out = lines[0];
-  for (const next of lines.slice(1)) { if (`${out} ${next}`.length <= UNDERSTANDING_MAX) out = `${out} ${next}`; else break; }
-  return clip(out, UNDERSTANDING_MAX);
-}
-const WORD = {
-  business_type: { automotive: "an automotive shop", trades: "a trades business", beauty: "a beauty business", health: "a health practice", home: "a home services business", professional: "a professional services business", fitness: "a fitness business", pets: "a pet business", other: "your business" },
-  job_location: { my_place: "at your place", customer_place: "at the customer's place", both: "at your place and the customer's", remote: "remotely" },
-  after_hours: { voicemail: "voicemail", text_back: "a text back", emergency: "an emergency line", closed: "closed" },
-  ai_tone: { friendly: "friendly", professional: "professional", brief: "brief" },
-  team_size: { solo: "just you", small: "a small team", large: "a bigger team" },
-  business_stage: { starting: "just starting out", growing: "growing", established: "established" },
-  customer_mix: { individuals: "individuals", businesses: "businesses", both: "individuals and businesses" },
-  intake_channels: { phone: "phone", text: "text", online: "online booking", walkin: "walk-ins", email: "email", social: "social media", referral: "referrals" },
-  typical_job_length: { under_1h: "under an hour", "1_3h": "one to three hours", half_day: "half a day", full_day: "a full day", multi_day: "several days" },
-  repeat_business: { one_off: "mostly one-off jobs", recurring: "mostly repeat customers", both: "a mix of one-off and repeat" },
-  booking_lead: { same_day: "same day", next_day: "next day", two_plus_days: "two or more days out" },
-  payment_methods: LABEL.payment_methods,
-  team_roles: { field_crew: "field crew", front_desk: "front desk", admin: "admin", other_owners: "other owners" },
-  goals: { more_bookings: "more bookings", get_paid_faster: "getting paid faster", fewer_missed_calls: "fewer missed calls", less_admin: "less admin", better_reviews: "better reviews", grow_team: "growing the team" },
-};
-const DAYL = Object.fromEntries(HOUR_DAYS.map(([k, l]) => [k, l.slice(0, 3)]));
-const pretty = (t) => { const [h, m] = t.split(":").map(Number); const s = h >= 12 ? "PM" : "AM", h12 = h % 12 || 12; return m ? `${h12}:${String(m).padStart(2, "0")} ${s}` : `${h12} ${s}`; };
-function describeHours(h) {
-  if (!h || !HOUR_DAYS.some(([d]) => h[d])) return "";
-  const groups = [];
-  for (const [d] of HOUR_DAYS) { const t = h[d] ? `${pretty(h[d].open)}–${pretty(h[d].close)}` : "closed"; const last = groups[groups.length - 1]; if (last && last.text === t) last.days.push(d); else groups.push({ days: [d], text: t }); }
-  return groups.map((g) => `${g.days.length > 2 ? `${DAYL[g.days[0]]}–${DAYL[g.days[g.days.length - 1]]}` : g.days.map((d) => DAYL[d]).join("/")} ${g.text}`).join(" · ");
-}
-const list = (arr, map) => (arr || []).map((v) => map[v] || v).join(", ").replace(/, ([^,]*)$/, " and $1");
-function ownerBrief(a) {
-  const g1 = [], g2 = [], g3 = [], g4 = [], g5 = [], g6 = [];
-  if (a.business_type) g1.push(`You run ${a.team_size === "solo" ? "a one-person " : ""}${WORD.business_type[a.business_type].replace(/^(a|an|your) /, "")}${a.region_code ? ` in ${a.region_code}` : ""}.`);
-  if (a.business_description) g1.push(a.business_description);
-  if (a.business_stage) g1.push(`You're ${WORD.business_stage[a.business_stage]}.`);
-  if (a.team_size && a.team_size !== "solo") g1.push(`You have ${WORD.team_size[a.team_size]}${a.team_roles?.length ? `: ${list(a.team_roles, WORD.team_roles)}` : ""}.`);
-  if (a.services?.length) g2.push(`You offer ${a.services.slice(0, 4).map((s) => s.name).join(", ")}${a.services.length > 4 ? ` and ${a.services.length - 4} more` : ""}.`);
-  const rate = a.hourly_rate != null ? ` at ${money(a.hourly_rate)}/h` : "";
-  if (a.pricing_model) g2.push(a.pricing_model === "flat" ? "You charge flat, per job." : a.pricing_model === "hourly" ? `You charge by the hour${rate}.` : `You charge flat where you can and by the hour${rate} otherwise.`);
-  if (a.quotes_first === true) g2.push("You quote before starting work."); else if (a.quotes_first === false) g2.push("You rarely quote first.");
-  if (a.customer_mix) g3.push(`Your customers are ${WORD.customer_mix[a.customer_mix]}${a.intake_channels?.length ? `, reaching you by ${list(a.intake_channels, WORD.intake_channels)}` : ""}.`);
-  if (a.job_location) g3.push(`Work happens ${WORD.job_location[a.job_location]}${a.service_area && (a.job_location === "customer_place" || a.job_location === "both") ? ` — ${a.service_area}` : ""}.`);
-  if (a.typical_job_length) g3.push(`A typical job takes ${WORD.typical_job_length[a.typical_job_length]}${a.repeat_business ? `, ${WORD.repeat_business[a.repeat_business]}` : ""}.`);
-  const hrs = describeHours(a.business_hours); if (hrs) g4.push(`You're open ${hrs}.`);
-  if (a.after_hours) g4.push(a.after_hours === "closed" ? "After hours you're closed." : `After hours, customers get ${WORD.after_hours[a.after_hours]}.`);
-  if (a.booking_lead) g4.push(`Bookings usually land ${WORD.booking_lead[a.booking_lead]}.`);
-  if (a.payment_methods?.length) g5.push(`You take ${list(a.payment_methods, WORD.payment_methods)}.`);
-  if (a.payment_terms_days != null) g5.push(Number(a.payment_terms_days) === 0 ? "Invoices are due on receipt." : `Invoices are due in ${a.payment_terms_days} days.`);
-  if (a.deposit?.type === "percent" && a.deposit.value != null) g5.push(`You ask for a ${a.deposit.value}% deposit.`);
-  if (a.deposit?.type === "fixed" && a.deposit.value != null) g5.push(`You ask for a ${money(a.deposit.value)} deposit.`);
-  if (a.deposit?.type === "none") g5.push("No deposit.");
-  if (a.ai_tone) g6.push(`Ledger sounds ${WORD.ai_tone[a.ai_tone]} with your customers.`);
-  if (a.goals?.length) g6.push(`You want ${list(a.goals, WORD.goals)}.`);
-  if (a.rules?.length) g6.push(`Your rules:\n${a.rules.map((r) => `“${r}”`).join("\n")}`);
-  return [g1, g2, g3, g4, g5, g6].filter((g) => g.length).map((g) => g.join("\n")).join("\n\n");
-}
-function clip(text, max) {
-  if (text.length <= max) return text;
-  const cut = text.slice(0, max - 1), at = cut.lastIndexOf(" ");
-  return `${(at > max / 2 ? cut.slice(0, at) : cut).replace(/[\s,;:—-]+$/, "")}…`;
-}
 })();
