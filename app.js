@@ -1664,6 +1664,23 @@ const BUSINESS_TYPES = [
   ["other", "Something else", "What you do, in one line"],
 ];
 const TYPE_LABEL = Object.fromEntries(BUSINESS_TYPES.map(([v, l]) => [v, l]));
+// Services scope (2026-09-20, Kyle 1202): a tire shop is not an auto repair
+// shop. Labels are copied verbatim from _shared/services_scope.ts; the server
+// is the vocabulary's owner and refuses anything else.
+const SHOP_SUBTYPES = [["tire_shop", "Tire shop"], ["tire_mechanical", "Tire & mechanical"], ["auto_repair", "Auto repair"]];
+const SUBTYPE_LABEL = Object.fromEntries(SHOP_SUBTYPES);
+const SUBTYPE_DEFAULTS = {
+  tire_shop: ["tires", "seasonal", "flat_repair", "balancing", "rotation", "tpms", "rims"],
+  tire_mechanical: ["tires", "seasonal", "flat_repair", "balancing", "rotation", "tpms", "rims", "alignment", "brakes", "oil", "mechanical", "inspection"],
+  auto_repair: ["mechanical", "brakes", "oil", "alignment", "inspection", "tires", "flat_repair", "balancing", "rotation", "tpms"],
+};
+const SERVICE_OPTIONS = [["tires", "Tire sales & installation"], ["seasonal", "Seasonal changeovers"], ["flat_repair", "Flat repairs"], ["balancing", "Wheel balancing"],
+  ["rotation", "Tire rotations"], ["tpms", "TPMS sensors"], ["rims", "Rims & wheels"], ["mobile", "Mobile service (we come to you)"], ["alignment", "Wheel alignment"],
+  ["brakes", "Brakes"], ["oil", "Oil changes & fluids"], ["mechanical", "Mechanical repair & diagnostics"], ["inspection", "Vehicle inspections"], ["detailing", "Detailing"]];
+const SCOPE_Q = {
+  business_subtype: { q: "What kind of shop?", opts: SHOP_SUBTYPES, hint: "Ledger only ever talks about what you offer — a tire shop is never sold as a garage." },
+  services_offered: { q: "What you offer", multi: true, opts: SERVICE_OPTIONS, hint: "Tap everything you do. Anything unticked is off limits for the AI, the phone line and your Google posts." },
+};
 const SHOP_MORE = [
   { key: "pricing_model", q: "How do you charge?", opts: [["flat", "Flat price per job"], ["hourly", "Hourly + parts"], ["mix", "A mix"]] },
   { key: "customer_mix", q: "Who do you serve?", opts: [["individuals", "Mostly individuals"], ["businesses", "Mostly businesses"], ["both", "Both"]] },
@@ -1676,7 +1693,7 @@ const REGIONS = [["", "Choose…"], ["AB", "Alberta"], ["BC", "British Columbia"
 function shopSummary(sp) {
   if (!sp?.completed) return "Tell Ledger what you do — two minutes";
   const n = (sp.services || []).length;
-  return [TYPE_LABEL[sp.business_type] || "Business", sp.business_description ? sp.business_description.slice(0, 60) : "",
+  return [[TYPE_LABEL[sp.business_type] || "Business", sp.business_type === "automotive" ? SUBTYPE_LABEL[sp.business_subtype] : ""].filter(Boolean).join(" · "), sp.business_description ? sp.business_description.slice(0, 60) : "",
     n ? `${n} service${n === 1 ? "" : "s"}` : "", sp.hours_text || ""].filter(Boolean).join(" · ");
 }
 const blankService = () => ({ name: "", price: "", duration_minutes: "" });
@@ -1841,12 +1858,18 @@ function shopProfileSheet(onDone, opts = {}) {
   const picked = { intake_channels: [...(cur.intake_channels || [])] };
   for (const q of SHOP_MORE) if (!q.multi && cur[q.key]) picked[q.key] = cur[q.key];
   if (cur.business_type) picked.business_type = cur.business_type;
+  if (cur.business_subtype) picked.business_subtype = cur.business_subtype;
+  if (Array.isArray(cur.services_offered) && cur.services_offered.length) picked.services_offered = [...cur.services_offered];
   const svc = servicesEditor(cur.services);
   const hrs = hoursEditor(cur.business_hours);
   const first = !!opts.firstRun;
   sheet(`<h2>${first ? `Welcome — tell Ledger about ${esc(opts.bizName || "your business")}` : "Your business"}</h2>
     <p class="sh-sub">Tell Ledger what you do, then review your services, prices, taxes and hours before using them with customers. Phone features need a paid plan and activation; the trial includes a sample walkthrough.</p>
     ${chipsField("business_type", { q: "What kind of business?", opts: BUSINESS_TYPES.map(([v, l]) => [v, l]) }, picked)}
+    <div id="shopscope"${picked.business_type === "automotive" ? "" : " hidden"}>
+      ${chipsField("business_subtype", SCOPE_Q.business_subtype, picked)}
+      ${chipsField("services_offered", SCOPE_Q.services_offered, picked)}
+    </div>
     <div class="cmpsect">
       <label class="fld" for="shopdesc">In one line, what do you do?</label>
       <input id="shopdesc" class="cmpinput" maxlength="240" value="${esc(cur.business_description || "")}" placeholder="${esc(placeholderForType(picked.business_type))}">
@@ -1884,9 +1907,19 @@ function shopProfileSheet(onDone, opts = {}) {
     <div class="note" id="shopnote" style="margin-top:9px"></div>`, (sh) => {
     const note = sh.querySelector("#shopnote"), btn = sh.querySelector("#shopsave");
     svc.wire(sh); hrs.wire(sh);
+    const paintScope = () => {
+      const on = (v) => Array.isArray(picked.services_offered) && picked.services_offered.includes(v);
+      sh.querySelectorAll('[data-q="services_offered"] .chip').forEach((c) => { c.classList.toggle("on", on(c.dataset.v)); c.setAttribute("aria-pressed", on(c.dataset.v) ? "true" : "false"); });
+    };
     wireChips(sh, picked, (key, v) => {
       note.textContent = "";
-      if (key === "business_type") { const d = sh.querySelector("#shopdesc"); if (d) d.placeholder = placeholderForType(v); }
+      if (key === "business_type") {
+        const d = sh.querySelector("#shopdesc"); if (d) d.placeholder = placeholderForType(v);
+        sh.querySelector("#shopscope").hidden = v !== "automotive";
+      }
+      // Picking a kind of shop pre-ticks its usual services; the owner then
+      // adds or removes. Nothing is assumed for a shop that has not picked.
+      if (key === "business_subtype") { picked.services_offered = [...(SUBTYPE_DEFAULTS[v] || [])]; paintScope(); }
     });
     const skip = sh.querySelector("#shopskip");
     if (skip) skip.onclick = () => { closeSheet(); if (onDone) onDone(false); };
@@ -1903,6 +1936,8 @@ function shopProfileSheet(onDone, opts = {}) {
       try {
         const r = await api("/workspace-profile", {
           action: "shop-profile-save", ...picked,
+          business_subtype: picked.business_type === "automotive" ? (picked.business_subtype || null) : null,
+          services_offered: picked.business_type === "automotive" ? (picked.services_offered || null) : null,
           business_description: sh.querySelector("#shopdesc").value.trim(),
           service_area: sh.querySelector("#shoparea").value.trim(),
           business_hours,
