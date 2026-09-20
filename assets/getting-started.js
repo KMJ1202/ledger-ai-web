@@ -1,13 +1,17 @@
 /* Try-it preview for /features/getting-started/ (2026-09-19).
-   The app's sign-up onboarding (onboardingFlow() in app.js) in a phone-sized
-   frame with no account: same markup, classes, question logic and wording
-   (fetched from /assets/onboarding-copy.v1.json); the server's save / summary /
-   complete are an in-memory stand-in that answers like the real one. Nothing
-   typed leaves the page; no storage; no analytics; no dependencies. */
+   The app's sign-up onboarding (onboardingFlow() in app.js) in a phone frame
+   with no account: same markup, classes, question logic and wording (fetched
+   from /assets/onboarding-copy.v1.json); the server's save / summary / complete
+   are an in-memory stand-in that answers like the real one. Nothing typed
+   leaves the page; no storage; no analytics; no dependencies. */
 (() => {
 "use strict";
-const mount = document.querySelector("[data-gs-root]");
-if (!mount) return;
+const screen = document.querySelector("[data-gs-root]");
+if (!screen) return;
+// Drawn at the app's 390×847 viewport, scaled into the screen like the clips.
+const mount = document.createElement("div"); mount.className = "gs-stage"; mount.append(...screen.childNodes); screen.append(mount);
+const fit = () => screen.style.setProperty("--gs-scale", screen.clientWidth / 390);
+fit(); new ResizeObserver(fit).observe(screen);
 const esc = (s) => { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;"); };
 const obFill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
 const currency = "$";
@@ -30,17 +34,8 @@ const REGIONS = [["", "Choose…"], ["AB", "Alberta"], ["BC", "British Columbia"
 const SHOP_TZ_FALLBACK = ["America/St_Johns", "America/Halifax", "America/Toronto", "America/Winnipeg", "America/Regina", "America/Edmonton", "America/Vancouver", "America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu", "UTC"];
 const HOUR_DAYS = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]];
 const OB_STEPS = 7;
-const OB_SCREEN = {
-  about: ["business_type", "business_description", "business_stage", "team_size", "region_code", "timezone"],
-  offer: ["services", "pricing_model", "hourly_rate", "quotes_first"],
-  customers: ["customer_mix", "intake_channels", "job_location", "service_area", "typical_job_length", "repeat_business"],
-  week: ["business_hours", "after_hours", "booking_lead"],
-  money: ["payment_methods", "payment_terms_days", "deposit"],
-  team: ["team_roles", "wants_front_desk", "uses_quickbooks", "uses_google_calendar"],
-  ledger: ["ai_tone", "goals", "rules", "autonomy"],
-};
-// The question logic that is not wording (OB_Q in app.js): reveals, single vs
-// multi, limits and how a chip value is typed on the wire.
+// The question logic that is not wording (OB_Q in app.js): reveals, single vs multi,
+// limits and how a chip value is typed on the wire.
 const OB_META = {
   business_description: { max: 240 },
   hourly_rate: { when: (a) => a.pricing_model === "hourly" || a.pricing_model === "mix" },
@@ -54,12 +49,12 @@ const OB_META = {
   goals: { multi: true, max: 3 },
   autonomy: { multi: true },
 };
-// Filled from the wording file on load.
-let OB_ORDER = [], OB_TITLE = {}, OB_STEP = {}, OB_Q = {}, OB_COPY = {};
+// Filled from the wording file on load (OB_SCREEN: each step's question keys, in order).
+let OB_ORDER = [], OB_TITLE = {}, OB_STEP = {}, OB_SCREEN = {}, OB_Q = {}, OB_COPY = {};
 function adoptWording(w) {
   OB_ORDER = w.sections.map((s) => s.id);
-  OB_TITLE = Object.fromEntries(w.sections.map((s) => [s.id, s.title]));
-  OB_STEP = Object.fromEntries(w.sections.map((s) => [s.id, s.step]));
+  OB_SCREEN = Object.fromEntries(w.sections.filter((s) => s.questions?.length).map((s) => [s.id, s.questions.map((q) => q.key)]));
+  for (const s of w.sections) { OB_TITLE[s.id] = s.title; OB_STEP[s.id] = s.step; }
   OB_COPY = w.shared;
   for (const s of w.sections) for (const q of s.questions || []) {
     OB_Q[q.key] = { kind: q.kind, q: q.question, help: q.help, placeholder: q.placeholder, examples: q.examples, add: q.add,
@@ -340,11 +335,10 @@ function obConfirmHtml(summary, sections) {
     <div class="obrows">${rows}</div>`;
 }
 
-// ---- The server, in memory. Answers the way workspace-profile's onboarding
-// actions do (onboarding-app-CONTRACT.md): a save marks the section done, or
-// skipped when skip is true and nothing is sent; done_count counts done
-// sections only; understanding is one line for the keys just saved; the
-// summary carries only what was answered; complete needs a business type. ----
+// ---- The server, in memory, answering like workspace-profile's onboarding actions
+// (onboarding-app-CONTRACT.md): save marks the section done (skipped when skip is true,
+// nothing sent); done_count counts done sections; understanding is one line for the
+// keys just saved; summary carries only answers; complete needs a type. ----
 const SRV = {
   answers: {}, status: "not_started", current_section: "about", sections: [], svcSeq: 0,
   reset() { this.answers = {}; this.status = "not_started"; this.current_section = "about"; this.svcSeq = 0;
@@ -383,9 +377,8 @@ const SRV = {
   skipAll() { if (this.status !== "complete" && this.status !== "not_started") this.status = "skipped"; },
 };
 
-// ---- The flow itself (onboardingFlow() in app.js, minus the account) ----
-// Answers live in F until the visitor leaves the screen; Back/forward keep
-// what was typed. One instance per preview; "Start over" builds a new one.
+// ---- The flow (onboardingFlow() in app.js, minus the account). Answers live in F;
+// Back/forward keep what was typed; "Start over" builds a new instance. ----
 function onboardingFlow(opts = {}) {
   mount.querySelector("#obflow")?.remove();
   const F = { get: null, answers: {}, picked: {}, touched: {}, editors: {}, section: null, status: "not_started", suggestions: {}, sections: null, saving: false, summary: null };
@@ -432,9 +425,8 @@ function onboardingFlow(opts = {}) {
     if (f) { try { f.focus({ preventScroll: true }); } catch {} }
     try { (f || box).scrollIntoView({ block: coarse && f ? "center" : "nearest", behavior: motion() }); } catch {}
   };
-  // The page version moves focus to the step title on every step change
-  // (CONTRACT §4) instead of the first control — but not on page load, where
-  // nobody asked for the preview yet.
+  // Focus moves to the step title on each step change (CONTRACT §4), not the first
+  // control — but not on page load, where nobody asked for the preview yet.
   let quiet = !!opts.quiet;
   const focusTitle = () => { if (quiet) { quiet = false; return; } try { q("#obtitle").focus({ preventScroll: true }); } catch {} };
   const applyVisibility = (section) => {
@@ -612,14 +604,17 @@ function onboardingFlow(opts = {}) {
   show(start);
 }
 
-// ---- What the frame shows outside the flow ----
-// Home with the app's resume banner (drawBusinessTypeBanner in app.js) after
-// "Finish later"; the What-Ledger-knows card's button once the banner is hidden.
+// ---- Outside the flow: Home with the app's resume banner (drawBusinessTypeBanner) after
+// "Finish later"; once hidden, Settings → Your business's "What Ledger knows" card
+// (whatLedgerKnows): brief so far or knows_empty, "Finish setup" while part-way, and
+// "Update answers" / "Set up Ledger". ----
 function homeScreen() {
   const ob = SRV.get();
   const home = document.createElement("div");
   home.className = "gs-home";
   const paint = (banner) => {
+    const brief = banner ? "" : obBriefHtml(SRV.summary().brief);
+    const partWay = ob.status === "in_progress" || (ob.status === "skipped" && Number(ob.done_count) > 0);
     home.innerHTML = banner ? `<div class="hbanner" id="biztypebanner" style="margin-bottom:10px;flex-wrap:wrap">
 <span class="ic">&#9889;</span>
 <span class="m" style="flex:1 1 200px;min-width:min(100%,200px)"><b>${esc(obFill(OB_COPY.banner_title, { done: Number(ob.done_count) || 0, total: Number(ob.total) || OB_STEPS }))}</b>
@@ -627,10 +622,18 @@ function homeScreen() {
 <span style="display:flex;gap:8px;flex:0 0 auto;margin-left:auto">
 <button class="retry" id="biztypego">${esc(OB_COPY.resume)}</button>
 <button class="retry" id="biztypehide" aria-label="Hide this for now">${esc(OB_COPY.banner_later)}</button></span></div>`
-  : `<p class="note">${esc(OB_COPY.knows_empty)}</p><div style="margin-top:12px"><button class="btn primary" id="knowfinish" style="width:100%">${esc(OB_COPY.finish_setup)}</button></div>`;
+  : `<div class="eyebrow">${esc(OB_COPY.knows_title)}</div>
+<div class="panel obknows" id="knowslot" style="margin-top:8px">${brief ? `<div class="obbrief">${brief}</div>` : `<p class="note">${esc(OB_COPY.knows_empty)}</p>`}
+      <div class="rowbtns" style="margin-top:10px">
+        ${partWay ? `<button class="btn primary" id="knowfinish">${esc(OB_COPY.finish_setup)}</button>` : ""}
+        <button class="btn ghost" id="knowupdate">${esc(brief ? OB_COPY.update : OB_COPY.set_up)}</button>
+      </div></div>`;
     const go = () => { home.remove(); onboardingFlow({ section: ob.current_section, onDone: afterFlow }); };
     if (banner) { home.querySelector("#biztypego").onclick = go; home.querySelector("#biztypehide").onclick = () => paint(false); }
-    else home.querySelector("#knowfinish").onclick = go;
+    else {
+      home.querySelector("#knowupdate").onclick = () => { home.remove(); onboardingFlow({ section: "about", onDone: afterFlow }); };
+      const fin = home.querySelector("#knowfinish"); if (fin) fin.onclick = go;
+    }
   };
   paint(true);
   mount.appendChild(home);
@@ -663,92 +666,18 @@ fetch("/assets/onboarding-copy.v1.json", { cache: "no-cache" })
   .catch(() => { mount.innerHTML = `<p class="note err gs-fail" role="alert">Couldn't load the preview. Refresh to try again.</p>`; });
 
 // ---- Ported verbatim from _shared/onboarding_schema.ts (server-owned text) ----
-// Rows are { name, price, duration_minutes } exactly as in the schema.
+// Rows are { name, price, duration_minutes } as in the schema.
 const svc = (name, price, duration_minutes) => ({ name, price, duration_minutes });
 const SUGGESTED_SERVICES = {
-  automotive: [
-    svc("Oil change", 80, 45),
-    svc("Seasonal tire swap", 60, 45),
-    svc("Mount and balance (4 tires)", 120, 60),
-    svc("Flat repair", 35, 30),
-    svc("Brake pads and rotors (per axle)", 350, 120),
-    svc("Wheel alignment", 120, 60),
-    svc("Battery replacement", 190, 30),
-    svc("Full detail", 200, 180),
-  ],
-  trades: [
-    svc("Service call and diagnosis", 130, 60),
-    svc("Furnace tune-up", 150, 90),
-    svc("AC tune-up", 150, 90),
-    svc("Hot water tank replacement", 1850, 240),
-    svc("Drain cleaning", 200, 90),
-    svc("Thermostat install", 250, 60),
-    svc("After-hours emergency call", 250, 60),
-  ],
-  beauty: [
-    svc("Haircut", 45, 45),
-    svc("Cut and blow-dry", 65, 60),
-    svc("Root colour", 95, 90),
-    svc("Full highlights", 165, 150),
-    svc("Balayage", 220, 180),
-    svc("Beard trim", 25, 20),
-    svc("Blow-dry", 40, 40),
-    svc("Gel manicure", 55, 60),
-  ],
-  health: [
-    svc("Initial assessment", 120, 60),
-    svc("Follow-up visit", 85, 45),
-    svc("60-minute massage", 110, 60),
-    svc("90-minute massage", 150, 90),
-    svc("Adjustment", 65, 20),
-    svc("Extended visit", 130, 60),
-  ],
-  home: [
-    svc("Standard clean", 160, 120),
-    svc("Deep clean", 280, 240),
-    svc("Move-out clean", 350, 300),
-    svc("Lawn cut", 45, 30),
-    svc("Spring yard clean-up", 220, 180),
-    svc("Gutter cleaning", 180, 90),
-    svc("Handyman hour", 85, 60),
-    svc("Exterior window cleaning", 150, 120),
-  ],
-  professional: [
-    svc("Initial consultation", 150, 60),
-    svc("Hourly consulting", 175, 60),
-    svc("Monthly bookkeeping", 350, null),
-    svc("Personal tax return", 180, 60),
-    svc("Half-day photo session", 650, 240),
-    svc("Logo and brand package", 1200, null),
-    svc("Document review", 220, 90),
-  ],
-  fitness: [
-    svc("Personal training session", 75, 60),
-    svc("30-minute session", 45, 30),
-    svc("10-session pack", 650, 60),
-    svc("Small group session", 30, 60),
-    svc("Nutrition consultation", 90, 45),
-    svc("Monthly membership", 120, null),
-    svc("Assessment and program", 110, 60),
-  ],
-  pets: [
-    svc("Full groom (small dog)", 75, 90),
-    svc("Full groom (large dog)", 110, 150),
-    svc("Bath and brush", 45, 60),
-    svc("Nail trim", 18, 15),
-    svc("Teeth brushing add-on", 12, 10),
-    svc("30-minute dog walk", 25, 30),
-    svc("Overnight boarding", 55, null),
-    svc("Puppy training session", 80, 60),
-  ],
-  other: [
-    svc("Consultation", 100, 60),
-    svc("Standard service", 150, 90),
-    svc("Hourly work", 85, 60),
-    svc("Small job", 75, 45),
-    svc("Large job", 450, 240),
-    svc("Follow-up visit", 60, 30),
-  ],
+  automotive: [svc("Oil change", 80, 45), svc("Seasonal tire swap", 60, 45), svc("Mount and balance (4 tires)", 120, 60), svc("Flat repair", 35, 30), svc("Brake pads and rotors (per axle)", 350, 120), svc("Wheel alignment", 120, 60), svc("Battery replacement", 190, 30), svc("Full detail", 200, 180)],
+  trades: [svc("Service call and diagnosis", 130, 60), svc("Furnace tune-up", 150, 90), svc("AC tune-up", 150, 90), svc("Hot water tank replacement", 1850, 240), svc("Drain cleaning", 200, 90), svc("Thermostat install", 250, 60), svc("After-hours emergency call", 250, 60)],
+  beauty: [svc("Haircut", 45, 45), svc("Cut and blow-dry", 65, 60), svc("Root colour", 95, 90), svc("Full highlights", 165, 150), svc("Balayage", 220, 180), svc("Beard trim", 25, 20), svc("Blow-dry", 40, 40), svc("Gel manicure", 55, 60)],
+  health: [svc("Initial assessment", 120, 60), svc("Follow-up visit", 85, 45), svc("60-minute massage", 110, 60), svc("90-minute massage", 150, 90), svc("Adjustment", 65, 20), svc("Extended visit", 130, 60)],
+  home: [svc("Standard clean", 160, 120), svc("Deep clean", 280, 240), svc("Move-out clean", 350, 300), svc("Lawn cut", 45, 30), svc("Spring yard clean-up", 220, 180), svc("Gutter cleaning", 180, 90), svc("Handyman hour", 85, 60), svc("Exterior window cleaning", 150, 120)],
+  professional: [svc("Initial consultation", 150, 60), svc("Hourly consulting", 175, 60), svc("Monthly bookkeeping", 350, null), svc("Personal tax return", 180, 60), svc("Half-day photo session", 650, 240), svc("Logo and brand package", 1200, null), svc("Document review", 220, 90)],
+  fitness: [svc("Personal training session", 75, 60), svc("30-minute session", 45, 30), svc("10-session pack", 650, 60), svc("Small group session", 30, 60), svc("Nutrition consultation", 90, 45), svc("Monthly membership", 120, null), svc("Assessment and program", 110, 60)],
+  pets: [svc("Full groom (small dog)", 75, 90), svc("Full groom (large dog)", 110, 150), svc("Bath and brush", 45, 60), svc("Nail trim", 18, 15), svc("Teeth brushing add-on", 12, 10), svc("30-minute dog walk", 25, 30), svc("Overnight boarding", 55, null), svc("Puppy training session", 80, 60)],
+  other: [svc("Consultation", 100, 60), svc("Standard service", 150, 90), svc("Hourly work", 85, 60), svc("Small job", 75, 45), svc("Large job", 450, 240), svc("Follow-up visit", 60, 30)],
 };
 const SUGGESTED_DESCRIPTIONS = {
   automotive: "Tires, oil changes and brakes for cars and light trucks in <your town>",
@@ -790,10 +719,7 @@ const LABEL = {
   ai_tone: { friendly: "friendly", professional: "professional", brief: "brief and to the point" },
   goals: { more_bookings: "more bookings", get_paid_faster: "get paid faster", fewer_missed_calls: "fewer missed calls", less_admin: "less admin", better_reviews: "better reviews", grow_team: "grow the team" },
 };
-const REGION_NAME = {
-  AB: "Alberta", BC: "British Columbia", MB: "Manitoba", NB: "New Brunswick", NL: "Newfoundland and Labrador", NS: "Nova Scotia", NT: "Northwest Territories",
-  NU: "Nunavut", ON: "Ontario", PE: "Prince Edward Island", QC: "Quebec", SK: "Saskatchewan", YT: "Yukon",
-};
+const REGION_NAME = Object.fromEntries(REGIONS.filter(([v]) => v && v !== "US")); // the schema's 13 provinces and territories
 const REGION_TAX = {
   AB: { name: "GST", rate: 0.05 }, NT: { name: "GST", rate: 0.05 }, NU: { name: "GST", rate: 0.05 }, YT: { name: "GST", rate: 0.05 },
   BC: { name: "GST", rate: 0.05, second_name: "PST", second_rate: 0.07 },
@@ -805,7 +731,7 @@ const REGION_TAX = {
 const regionName = (code) => REGION_NAME[String(code ?? "").toUpperCase()] ?? String(code ?? "");
 const pct = (r) => `${Math.round(r * 10000) / 100}%`;
 const describeTax = (tax) => `${tax.name} ${pct(tax.rate)}${tax.second_name ? ` + ${tax.second_name} ${pct(tax.second_rate ?? 0)}` : ""}`;
-// Currency is "$" in the preview (the mock's choice), so money() is the schema's with the symbol fixed.
+// Currency is "$" (the mock's choice); money() is the schema's with the symbol fixed.
 const money = (n) => Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`;
 function joinWords(items) {
   if (items.length <= 1) return items.join("");
@@ -938,7 +864,7 @@ function understandingFor(section, answers) {
   for (const next of lines.slice(1)) { if (`${out} ${next}`.length <= UNDERSTANDING_MAX) out = `${out} ${next}`; else break; }
   return clip(out, UNDERSTANDING_MAX);
 }
-// Every line for one section, in priority order — the confirm recap shows them all.
+// Every line for one section, in priority order (the confirm recap shows them all).
 function understandingLines(section, answers) {
   return (UNDERSTANDING_PRIORITY[section] ?? []).filter((k) => k in answers).map((k) => understandingLineFor(k, answers[k], answers)).filter(Boolean);
 }

@@ -4,12 +4,16 @@
    "Sign-up onboarding flow" block), copied value for value and scoped under
    .gs-preview so the app markup renders the same inside a phone-sized box.
    The only edits: .obflow position:fixed;inset:0 -> absolute inside the frame,
-   .obcol height:100dvh -> 100%, and the >=700px desktop-column media query ->
-   a container query on the frame (which is phone-sized, so it never fires). */
-.gs-preview{display:block;margin-top:38px;color:var(--text);
+   .obcol height:100dvh -> 100%, the >=700px desktop-column media query ->
+   a container query on the 390px stage (phone-sized, so it never fires),
+   and line-height:normal on the root so the site body's 1.6 does not leak in
+   (app.html's body sets none). */
+.gs-preview{display:block;margin-top:38px;color:var(--text);line-height:normal;
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",Segoe UI,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;text-align:left}
 .gs-preview .gs-frame{margin-top:0}
-.gs-preview .gs-screen{container:gsframe / inline-size;background:var(--bg)}
+.gs-preview .gs-screen{background:var(--bg)}
+/* The app's 390×847 viewport, scaled to the screen (--gs-scale = screen width / 390, set by the script) the way the clips are. */
+.gs-preview .gs-stage{container:gsframe / inline-size;position:absolute;left:0;top:0;width:390px;height:847px;transform-origin:0 0;transform:scale(var(--gs-scale,1))}
 .gs-preview .gs-loading{position:absolute;left:18px;top:18px;margin:0}
 .gs-preview .gs-home{position:absolute;inset:0;overflow:auto;padding:calc(10px + env(safe-area-inset-top)) 18px 10px;background:var(--bg)}
 .gs-preview .gs-panel{position:absolute;inset:0;overflow:auto;padding:calc(10px + env(safe-area-inset-top)) 18px 10px;background:var(--bg);display:flex;flex-direction:column;justify-content:center}
@@ -17,7 +21,6 @@
 .gs-preview .gs-panel p{font-size:15px;line-height:1.55;color:var(--dim);margin:0 0 18px}
 .gs-preview .gs-panel .btn{display:block;width:100%;text-align:center;text-decoration:none}
 .gs-preview .gs-panel .btn + .btn{margin-top:10px}
-.gs-preview .gs-home .btn.ghost{display:block;width:100%}
 .gs-preview .gs-fail{position:absolute;left:18px;right:18px;top:18px;margin:0}
 /* On a phone (≤430px) the frame runs edge to edge with no chrome, so the screen is the
    app at its real width; the screen keeps the 390/847 aspect. Wider than that the
@@ -45,6 +48,10 @@
 .gs-preview .btn{border:0;border-radius:15px;padding:14px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;letter-spacing:.2px}
 .gs-preview .btn.primary{background:linear-gradient(120deg,#3b82f6,#a855f7);color:#fff;box-shadow:0 10px 26px rgba(99,102,241,.32)}
 .gs-preview .btn.ghost{background:var(--glass);color:var(--text);border:1px solid var(--line)}
+.gs-preview .rowbtns{display:flex;gap:10px}
+.gs-preview .rowbtns .btn{flex:1}
+.gs-preview .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:1.8px;font-weight:800;color:var(--cyan);text-transform:uppercase}
+.gs-preview .panel{background:linear-gradient(160deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:20px;padding:17px;box-shadow:0 10px 26px rgba(0,0,0,.36)}
 .gs-preview .btn:disabled{opacity:.45}
 .gs-preview input,.gs-preview select,.gs-preview textarea{background:rgba(255,255,255,.045);border:1px solid var(--line);border-radius:15px;color:var(--text);font-size:16px;padding:14px;outline:none;font-family:inherit;width:100%;}
 .gs-preview input::placeholder,.gs-preview textarea::placeholder{color:var(--dim2)}
