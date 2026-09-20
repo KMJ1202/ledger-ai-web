@@ -1,5 +1,5 @@
 // Account security — two-step verification (text message or authenticator app) and private links.
-// v6 (Kyle 2026-09-20): a texted code is the default; an authenticator app stays available; two-step is optional but recommended.
+// v7 (Kyle 2026-09-20): texts only — a trusted mobile saved once at setup; authenticator apps are no longer offered (existing ones still verify).
 // TOTP secrets and one-time codes are shown only to the account owner, never logged or persisted here.
 const PHONE_RE = /^\+1[2-9]\d{2}[2-9]\d{6}$/;
 export function normalizePhone(raw) {
@@ -15,20 +15,23 @@ const friendly = (err, fallback) => {
   if (/phone/i.test(m) && /invalid|format/i.test(m)) return "Enter a Canadian or US mobile number, like 587 555 0100.";
   return m || fallback;
 };
-export async function openSecurity(supa, {onVerified = () => {}, required = false} = {}) {
+export async function markTwoStepPrompted(supa){try{await supa.auth.updateUser({data:{two_step_prompted_at:new Date().toISOString()}});}catch{}}
+// One-time offer after the business is set up: no method yet and never asked before → the setup dialog, once.
+export async function offerTwoStepOnce(supa){const {data:aal}=await supa.auth.mfa.getAuthenticatorAssuranceLevel();if(!aal||aal.nextLevel==='aal2')return;const {data:{user}}=await supa.auth.getUser();if(!user||user.user_metadata?.two_step_prompted_at)return;await openSecurity(supa,{setup:true});}
+export async function openSecurity(supa, {onVerified = () => {}, required = false, setup = false} = {}) {
   document.getElementById('ledger-security')?.remove();
   const dialog=document.createElement('dialog');dialog.id='ledger-security';
   dialog.style.cssText='width:min(440px,90vw);max-height:90vh;overflow:auto;padding:24px;border-radius:20px;background:#101827;color:#fff;border:1px solid #536078';
-  dialog.innerHTML='<h2>Account security</h2><p data-status>Loading security settings…</p><div data-factors></div>'
-    +'<div data-methods hidden><p class="note">Choose how to confirm it\'s you.</p><button class="btn primary" type="button" data-add-phone>Text me a code</button> <button class="btn ghost" type="button" data-add>Use an authenticator app</button></div>'
+  dialog.innerHTML='<h2>'+(setup?'Protect your account':'Account security')+'</h2><p data-status>Loading security settings…</p><div data-factors></div>'
+    +'<div data-methods hidden><p class="note">Add your mobile number.</p><button class="btn primary" type="button" data-add-phone>Text me a code</button></div>'
     +'<form data-phone hidden><label>Mobile number<input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="587 555 0100" required aria-label="Mobile number"></label><button class="btn primary" type="submit">Send code</button> <button class="btn ghost" type="button" data-phone-cancel>Back</button></form>'
     +'<div data-enroll></div>'
     +'<form data-verify hidden><label data-code-label>Code<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required aria-label="Verification code"></label><button class="btn primary" type="submit">Verify</button> <button class="btn ghost" type="button" data-resend hidden>Send a new code</button></form>'
-    +'<p data-note role="status" style="min-height:1.2em"></p><button class="btn ghost" type="button" data-close>Close</button>';
+    +'<p data-note role="status" style="min-height:1.2em"></p><button class="btn ghost" type="button" data-close>'+(setup?'Not now':'Close')+'</button>';
   document.body.appendChild(dialog);dialog.showModal();
-  const status=dialog.querySelector('[data-status]'),note=dialog.querySelector('[data-note]'),factors=dialog.querySelector('[data-factors]'),methods=dialog.querySelector('[data-methods]'),setup=dialog.querySelector('[data-enroll]'),form=dialog.querySelector('form[data-verify]'),phoneForm=dialog.querySelector('form[data-phone]'),codeLabel=dialog.querySelector('[data-code-label]'),resend=dialog.querySelector('[data-resend]');
+  const status=dialog.querySelector('[data-status]'),note=dialog.querySelector('[data-note]'),factors=dialog.querySelector('[data-factors]'),methods=dialog.querySelector('[data-methods]'),setupBox=dialog.querySelector('[data-enroll]'),form=dialog.querySelector('form[data-verify]'),phoneForm=dialog.querySelector('form[data-phone]'),codeLabel=dialog.querySelector('[data-code-label]'),resend=dialog.querySelector('[data-resend]');
   let chosen=null, chosenType='totp', challengeId=null;
-  const close=()=>{dialog.close();dialog.remove();};dialog.querySelector('[data-close]').textContent=required?'Sign out':'Close';dialog.querySelector('[data-close]').onclick=async()=>{if(required){await supa.auth.signOut();location.reload();}else close();};if(required)dialog.addEventListener('cancel',e=>e.preventDefault());dialog.addEventListener('close',()=>dialog.remove());
+  const close=()=>{dialog.close();dialog.remove();};dialog.querySelector('[data-close]').textContent=required?'Sign out':'Close';dialog.querySelector('[data-close]').onclick=async()=>{if(required){await supa.auth.signOut();location.reload();}else{if(setup)await markTwoStepPrompted(supa);close();}};if(required)dialog.addEventListener('cancel',e=>e.preventDefault());dialog.addEventListener('close',()=>dialog.remove());
   // A texted code: the challenge sends the SMS; the code is then verified against that challenge.
   async function sendCode(){note.textContent='';const {data,error}=await supa.auth.mfa.challenge({factorId:chosen});if(error)throw error;challengeId=data.id;note.textContent='Code sent by text. It expires in five minutes.';}
   async function choose(id,type){chosen=id;chosenType=type;challengeId=null;form.hidden=false;form.elements.code.value='';codeLabel.firstChild.textContent=type==='phone'?'Code from the text message':'Authenticator code';resend.hidden=type!=='phone';
@@ -37,13 +40,14 @@ export async function openSecurity(supa, {onVerified = () => {}, required = fals
   async function refresh(){const {data,error}=await supa.auth.mfa.listFactors();if(error)throw error;
     const verified=(data?.all||[]).filter(x=>x.status==='verified'&&(x.factor_type==='totp'||x.factor_type==='phone'));
     const {data:aal,error:ae}=await supa.auth.mfa.getAuthenticatorAssuranceLevel();if(ae)throw ae;
-    status.textContent=verified.length ? (aal.currentLevel==='aal2'?'Two-step verification is active for this session.':'Confirm it\'s you to continue.') : 'Two-step verification is off. We recommend turning it on: a texted code or an authenticator app.';
+    status.textContent=verified.length ? (aal.currentLevel==='aal2'?'Two-step verification is active for this session.':'Confirm it\'s you to continue.') : (setup?'One-time setup: add your mobile and Ledger will text you a code the first time you sign in on a new device. No authenticator app needed.':'Two-step verification is off. Add your mobile and Ledger will text you a code when you sign in on a new device.');
     factors.replaceChildren();
     for(const f of verified){const row=document.createElement('div');row.style.cssText='display:flex;gap:8px;align-items:center;margin:6px 0';
       const b=document.createElement('button');b.type='button';b.className='btn ghost';b.textContent=(f.factor_type==='phone'?'Text a code to '+last4(f.phone):(f.friendly_name||'Authenticator app'));b.onclick=()=>choose(f.id,f.factor_type);row.append(b);
       if(verified.length>1&&aal.currentLevel==='aal2'){const rm=document.createElement('button');rm.type='button';rm.className='btn ghost';rm.textContent='Remove';rm.title='Remove this method';rm.onclick=async()=>{if(!confirm('Remove this two-step method? You can add it again any time.'))return;rm.disabled=true;try{const {error}=await supa.auth.mfa.unenroll({factorId:f.id});if(error)throw error;await refresh();}catch(e){note.textContent=friendly(e,'Could not remove it.');rm.disabled=false;}};row.append(rm);}
       factors.append(row);}
-    methods.hidden=false;methods.querySelector('.note').textContent=verified.length?'Add another way to confirm it\'s you:':'Choose how to confirm it\'s you.';
+    methods.hidden=!!(setup&&!verified.length);methods.querySelector('.note').textContent=verified.length?'Add another mobile number:':'Add your mobile number:';
+    if(setup&&!verified.length&&phoneForm.hidden){setup_open();}
     // One verified phone factor and a session that still needs it: send the text right away.
     if(aal.currentLevel!=='aal2'&&verified.length===1&&verified[0].factor_type==='phone'&&!chosen)await choose(verified[0].id,'phone');
   }
@@ -51,7 +55,8 @@ export async function openSecurity(supa, {onVerified = () => {}, required = fals
   // toward GoTrue's enrolled-factor cap (audit 01.5). Clear those first — only
   // rows whose status is unverified; a verified factor is never touched.
   async function discardUnverified(){const {data,error}=await supa.auth.mfa.listFactors();if(error)return;for(const f of (data?.all||[]).filter(x=>x.status==='unverified'&&x.id)){await supa.auth.mfa.unenroll({factorId:f.id}).catch(()=>{});}}
-  dialog.querySelector('[data-add-phone]').onclick=()=>{note.textContent='';setup.replaceChildren();form.hidden=true;phoneForm.hidden=false;phoneForm.elements.phone.focus();};
+  const setup_open=()=>{note.textContent='';setupBox.replaceChildren();form.hidden=true;phoneForm.hidden=false;phoneForm.elements.phone.focus();};
+  dialog.querySelector('[data-add-phone]').onclick=setup_open;
   dialog.querySelector('[data-phone-cancel]').onclick=()=>{phoneForm.hidden=true;};
   phoneForm.onsubmit=async e=>{e.preventDefault();const button=phoneForm.querySelector('button[type=submit]');button.disabled=true;note.textContent='';try{
       const phone=normalizePhone(phoneForm.elements.phone.value);if(!phone)throw Error('Enter a Canadian or US mobile number, like 587 555 0100.');
@@ -59,13 +64,12 @@ export async function openSecurity(supa, {onVerified = () => {}, required = fals
       const {data,error}=await supa.auth.mfa.enroll({factorType:'phone',phone,friendlyName:'Phone '+last4(phone)});if(error)throw error;
       phoneForm.hidden=true;await choose(data.id,'phone');
     }catch(err){note.textContent=friendly(err,'Could not start text-message verification.');}finally{button.disabled=false;}};
-  dialog.querySelector('[data-add]').onclick=async e=>{e.target.disabled=true;note.textContent='';phoneForm.hidden=true;try{await discardUnverified();const {data,error}=await supa.auth.mfa.enroll({factorType:'totp',friendlyName:'Authenticator '+new Date().toLocaleDateString()+' '+new Date().toLocaleTimeString()});if(error)throw error;setup.replaceChildren();const p=document.createElement('p');p.textContent='Scan this code with your authenticator app, or type the key below, then enter the six-digit code it shows.';const img=document.createElement('img');img.src=data.totp.qr_code;img.alt='Authenticator setup QR code';img.width=180;img.height=180;img.style.background='#fff';img.style.borderRadius='8px';const key=document.createElement('p');key.style.cssText='font-family:ui-monospace,monospace;word-break:break-all';key.textContent=data.totp.secret;setup.append(p,img,key);await choose(data.id,'totp');}catch(err){note.textContent=friendly(err,'Could not add an authenticator.');}finally{e.target.disabled=false;}};
   form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('button[type=submit]');button.disabled=true;note.textContent='';try{const code=form.elements.code.value.trim();if(!/^[0-9]{6}$/.test(code)||!chosen)throw Error(chosenType==='phone'?'Enter the six-digit code from the text message.':'Enter the six-digit code from your authenticator.');
       let error;
       if(chosenType==='phone'){if(!challengeId)await sendCode();({error}=await supa.auth.mfa.verify({factorId:chosen,challengeId,code}));}
       else ({error}=await supa.auth.mfa.challengeAndVerify({factorId:chosen,code}));
       form.elements.code.value='';if(error)throw error;
-      setup.replaceChildren();form.hidden=true;chosen=null;challengeId=null;await refresh();note.textContent='Verified. Two-step verification is on.';onVerified();if(required)close();
+      setupBox.replaceChildren();form.hidden=true;chosen=null;challengeId=null;if(setup)await markTwoStepPrompted(supa);await refresh();note.textContent='Verified. Two-step verification is on.';onVerified();if(required)close();
     }catch(err){note.textContent=friendly(err,'Verification failed.');}finally{button.disabled=false;}};
   if(!required) {
     const section=document.createElement('section');section.style.cssText='margin-top:24px;border-top:1px solid #536078;padding-top:16px';
