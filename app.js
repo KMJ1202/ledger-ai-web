@@ -1,6 +1,6 @@
 import { pendingOffer, saveOffer, clearOffer, bindOffer } from "./login-offers.js?v=1";
 import { createAccountBoundary } from "./account-boundary.js?v=3";
-import { openSecurity, needsMfa, offerTwoStepOnce } from "./security.js?v=8";
+import { openSecurity, needsMfa, offerTwoStepOnce } from "./security.js?v=9";
 // Ledger AI — web/PWA client.
 // audit-20260914 web: calendar guard, outage bubble, CSV screens, copy sweep (build 170)
 // One file, no build step: GitHub Pages serves it straight. Every screen talks to the
